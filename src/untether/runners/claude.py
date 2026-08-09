@@ -10,13 +10,19 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import pty
 import re
 import shutil
 import signal
 import subprocess as subprocess_module
+import sys
 import time
-import tty
+
+if sys.platform == "win32":  # pragma: no cover
+    pty = None  # type: ignore[assignment]
+    tty = None  # type: ignore[assignment]
+else:
+    import pty
+    import tty
 from collections import OrderedDict
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field

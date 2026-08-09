@@ -264,7 +264,7 @@ def make_cfg(
     *,
     engine_id: str = DEFAULT_ENGINE_ID,
     forward_coalesce_s: float = 0.0,
-    media_group_debounce_s: float = 0.0,
+    prompt_batch_debounce_s: float = 0.0,
 ) -> TelegramBridgeConfig:
     if runner is None:
         runner = ScriptRunner([Return(answer="ok")], engine=engine_id)
@@ -284,5 +284,5 @@ def make_cfg(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=forward_coalesce_s,
-        media_group_debounce_s=media_group_debounce_s,
+        prompt_batch_debounce_s=prompt_batch_debounce_s,
     )

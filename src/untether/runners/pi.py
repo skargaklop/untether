@@ -91,6 +91,7 @@ class PiStreamState:
     # meta. Prevents us from re-emitting supplementary StartedEvents on every
     # subsequent message_end when the default-config model path is in use.
     jsonl_model_emitted: bool = False
+    shorten_session_id: bool = True
 
 
 def _looks_like_session_path(token: str) -> bool:
@@ -125,7 +126,8 @@ def _maybe_promote_session_id(state: PiStreamState, session_id: str | None) -> N
     if state.resume.value and not _looks_like_session_path(state.resume.value):
         return
     old_value = state.resume.value
-    state.resume = ResumeToken(engine=ENGINE, value=_short_session_id(session_id))
+    value = _short_session_id(session_id) if state.shorten_session_id else session_id
+    state.resume = ResumeToken(engine=ENGINE, value=value)
     state.allow_id_promotion = False
     logger.info("pi.session.promoted", old=old_value, new=state.resume.value)
 

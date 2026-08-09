@@ -25,7 +25,7 @@ from untether.progress import ProgressTracker
 from untether.router import AutoRouter, RunnerEntry
 from untether.runner_bridge import ExecBridgeConfig, RunningTask
 from untether.runners.mock import Return, ScriptRunner, Sleep, Wait
-from untether.scheduler import ThreadScheduler
+from untether.scheduler import CancelQueuedStatus, ThreadScheduler
 from untether.settings import TelegramFilesSettings, TelegramTopicsSettings
 from untether.telegram.api_models import Chat, File, ForumTopic, Message, Update, User
 from untether.telegram.bridge import (
@@ -658,7 +658,8 @@ async def test_handle_cancel_cancels_queued_job() -> None:
 
     assert transport.edit_calls
     assert "cancelled" in transport.edit_calls[0]["message"].text.lower()
-    assert await scheduler.cancel_queued(123, progress_ref.message_id) is None
+    second = await scheduler.cancel_queued(123, progress_ref.message_id)
+    assert second.status is CancelQueuedStatus.NOT_FOUND
 
 
 @pytest.mark.anyio
@@ -797,6 +798,7 @@ async def test_handle_file_put_writes_file(tmp_path: Path) -> None:
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         files=TelegramFilesSettings(enabled=True),
     )
@@ -862,6 +864,7 @@ async def test_handle_file_get_sends_document_for_allowed_user(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         files=TelegramFilesSettings(
             enabled=True,
@@ -1282,6 +1285,7 @@ async def test_topic_command_recreates_stale_topic(tmp_path: Path) -> None:
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         topics=TelegramTopicsSettings(enabled=True, scope="main"),
     )
@@ -1746,6 +1750,7 @@ async def test_run_main_loop_routes_reply_to_running_resume() -> None:
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
     )
 
@@ -1821,6 +1826,7 @@ async def test_run_main_loop_ignores_duplicate_message_id_for_replies() -> None:
             final_notify=True,
         ),
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
     )
 
@@ -1871,6 +1877,7 @@ async def test_run_main_loop_ignores_duplicate_update_id() -> None:
             final_notify=True,
         ),
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
     )
 
@@ -1948,6 +1955,7 @@ async def test_run_main_loop_persists_topic_sessions_in_project_scope(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         topics=TelegramTopicsSettings(
             enabled=True,
@@ -2033,6 +2041,7 @@ async def test_run_main_loop_auto_resumes_topic_default_engine(
             final_notify=True,
         ),
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         topics=TelegramTopicsSettings(
             enabled=True,
@@ -2100,6 +2109,7 @@ async def test_run_main_loop_auto_resumes_chat_sessions(tmp_path: Path) -> None:
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         session_mode="chat",
     )
@@ -2135,6 +2145,7 @@ async def test_run_main_loop_auto_resumes_chat_sessions(tmp_path: Path) -> None:
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         session_mode="chat",
     )
@@ -2206,6 +2217,7 @@ async def test_run_main_loop_prompt_upload_uses_caption_directives(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         files=TelegramFilesSettings(
             enabled=True,
@@ -2271,6 +2283,7 @@ async def test_run_main_loop_voice_transcript_preserves_directive(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         voice_transcription=True,
     )
@@ -2344,6 +2357,7 @@ async def test_run_main_loop_voice_shows_transcription_echo(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         voice_transcription=True,
         voice_show_transcription=True,
@@ -2418,6 +2432,7 @@ async def test_run_main_loop_voice_hides_transcription_when_disabled(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         voice_transcription=True,
         voice_show_transcription=False,
@@ -2495,6 +2510,7 @@ async def test_run_main_loop_debounces_forwarded_messages_preserves_directives()
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=DEBOUNCE_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
     )
 
@@ -2565,6 +2581,7 @@ async def test_run_main_loop_ignores_forwarded_without_prompt() -> None:
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
     )
 
@@ -2635,6 +2652,7 @@ async def test_run_main_loop_forwarded_document_still_uploads(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         files=TelegramFilesSettings(
             enabled=True,
@@ -2727,6 +2745,7 @@ async def test_run_main_loop_prompt_upload_auto_resumes_chat_sessions(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         session_mode="chat",
         files=TelegramFilesSettings(
@@ -2780,6 +2799,7 @@ async def test_run_main_loop_prompt_upload_auto_resumes_chat_sessions(
         startup_msg="",
         exec_cfg=exec_cfg2,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         session_mode="chat",
         files=TelegramFilesSettings(
@@ -2866,6 +2886,7 @@ async def test_run_main_loop_command_updates_chat_session_resume(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         session_mode="chat",
         show_resume_line=False,
@@ -2908,6 +2929,7 @@ async def test_run_main_loop_command_updates_chat_session_resume(
         startup_msg="",
         exec_cfg=exec_cfg2,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         session_mode="chat",
         show_resume_line=False,
@@ -2974,6 +2996,7 @@ async def test_run_main_loop_hides_resume_line_when_disabled(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         session_mode="chat",
         show_resume_line=False,
@@ -3029,6 +3052,7 @@ async def test_run_main_loop_hides_resume_line_without_context(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         session_mode="chat",
         show_resume_line=False,
@@ -3097,6 +3121,7 @@ async def test_run_main_loop_applies_chat_bound_context(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         session_mode="chat",
         show_resume_line=False,
@@ -3152,6 +3177,7 @@ async def test_run_main_loop_chat_sessions_isolate_group_senders(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         session_mode="chat",
     )
@@ -3183,6 +3209,7 @@ async def test_run_main_loop_chat_sessions_isolate_group_senders(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         session_mode="chat",
     )
@@ -3232,6 +3259,7 @@ async def test_run_main_loop_new_clears_chat_sessions(tmp_path: Path) -> None:
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         session_mode="chat",
     )
@@ -3282,6 +3310,7 @@ async def test_run_main_loop_new_clears_topic_sessions(tmp_path: Path) -> None:
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         topics=TelegramTopicsSettings(enabled=True, scope="main"),
     )
@@ -3328,6 +3357,7 @@ async def test_run_main_loop_replies_in_same_thread() -> None:
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
     )
 
@@ -3403,6 +3433,7 @@ async def test_run_main_loop_batches_media_group_upload(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=BATCH_MEDIA_GROUP_DEBOUNCE_S,
         files=TelegramFilesSettings(enabled=True, auto_put=True),
     )
@@ -3511,6 +3542,7 @@ async def test_run_main_loop_handles_command_plugins(monkeypatch) -> None:
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
     )
 
@@ -3598,6 +3630,7 @@ async def test_run_main_loop_command_uses_project_default_engine(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
     )
 
@@ -3684,6 +3717,7 @@ async def test_run_main_loop_command_defaults_to_chat_project(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
     )
 
@@ -3754,6 +3788,7 @@ async def test_run_main_loop_refreshes_command_ids(monkeypatch) -> None:
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
     )
 
@@ -3816,6 +3851,7 @@ async def test_run_main_loop_mentions_only_skips_voice_and_files(
         startup_msg="",
         exec_cfg=exec_cfg,
         forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
         media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
         voice_transcription=True,
         files=TelegramFilesSettings(enabled=True, auto_put=True),

@@ -175,6 +175,14 @@ class TelegramTransportSettings(BaseModel):
     show_resume_line: bool = True
     forward_coalesce_s: float = Field(default=1.0, ge=0)
     media_group_debounce_s: float = Field(default=1.0, ge=0)
+    # Prompt batching: consecutive qualifying text messages from the same
+    # sender in the same chat/topic/thread are joined into one agent prompt.
+    # Enabled by default; set ``prompt_batch_enabled = false`` to opt out.
+    prompt_batch_enabled: bool = True
+    prompt_batch_debounce_s: float = Field(default=0.75, ge=0)
+    prompt_batch_max_messages: StrictInt = 8
+    prompt_batch_max_chars: StrictInt = 120_000
+    prompt_batch_separator: Literal["newline", "blank_line"] = "blank_line"
     topics: TelegramTopicsSettings = Field(default_factory=TelegramTopicsSettings)
     files: TelegramFilesSettings = Field(default_factory=TelegramFilesSettings)
 

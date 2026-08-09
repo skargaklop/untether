@@ -568,6 +568,7 @@ class MarkdownPresenter:
         elapsed_s: float,
         label: str = "working",
         now: float | None = None,
+        steerable: bool = True,
     ) -> RenderedMessage:
         parts = self._formatter.render_progress_parts(
             state, elapsed_s=elapsed_s, label=label, now=now

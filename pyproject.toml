@@ -60,6 +60,9 @@ opencode = "untether.runners.opencode:BACKEND"
 pi = "untether.runners.pi:BACKEND"
 gemini = "untether.runners.gemini:BACKEND"
 amp = "untether.runners.amp:BACKEND"
+omp = "untether.runners.omp:BACKEND"
+grok = "untether.runners.grok:BACKEND"
+agy = "untether.runners.agy:BACKEND"
 
 [project.entry-points."untether.transport_backends"]
 telegram = "untether.telegram.backend:BACKEND"
@@ -102,7 +105,7 @@ docs = [
 ]
 
 [tool.pytest.ini_options]
-addopts = ["--cov=untether", "--cov-branch", "--cov-report=term-missing", "--cov-fail-under=80"]
+addopts = ["--cov=untether", "--cov-branch", "--cov-report=term-missing", "--cov-fail-under=81"]
 testpaths = ["tests"]
 markers = [
     "cancel_enforcement: opts a test out of the autouse #593 cancel-enforcement neutraliser",

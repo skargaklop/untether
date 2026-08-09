@@ -1,7 +1,15 @@
 from __future__ import annotations
 
 import contextlib
-import fcntl
+import sys
+
+if sys.platform == "win32":  # pragma: no cover
+    import msvcrt
+
+    fcntl = None  # type: ignore[assignment]
+else:
+    import fcntl
+
 import hashlib
 import json
 import os
@@ -17,6 +25,29 @@ logger = get_logger(__name__)
 class LockInfo:
     pid: int | None
     token_fingerprint: str | None
+
+
+def _lock_file(fd: int) -> None:
+    """Platform-specific non-blocking exclusive lock on ``fd``."""
+    if sys.platform == "win32":
+        try:
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        except (PermissionError, OSError) as exc:
+            raise BlockingIOError(str(exc)) from exc
+    else:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _unlock_file(fd: int) -> None:
+    """Platform-specific unlock on ``fd``."""
+    if sys.platform == "win32":
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        except OSError:
+            pass
+    else:
+        fcntl.flock(fd, fcntl.LOCK_UN)
 
 
 class LockError(RuntimeError):
@@ -55,7 +86,7 @@ class LockHandle:
         # A leftover lock file with no live flock is harmless — the next
         # acquire just re-locks it.
         try:
-            fcntl.flock(self.fd, fcntl.LOCK_UN)
+            _unlock_file(self.fd)
         except OSError as exc:
             logger.warning(
                 "lock.release.failed",
@@ -94,11 +125,15 @@ def acquire_lock(
         # diagnostics. The fd is non-inheritable by default (PEP 446) — keep
         # it that way (see LockHandle docstring).
         fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+    except PermissionError:
+        # Windows: mandatory locking prevents opening the locked file for
+        # writing — treat as lock contention.
+        raise LockError(path=lock_path, state="running") from None
     except OSError as exc:
         raise LockError(path=lock_path, state=str(exc)) from exc
 
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _lock_file(fd)
     except BlockingIOError:
         # Another live process holds the lock. The kernel guarantees this is a
         # real, running holder — no PID inference needed.

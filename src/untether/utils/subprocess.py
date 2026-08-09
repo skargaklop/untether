@@ -4,18 +4,24 @@ import contextlib
 import os
 import shutil
 import signal
+import subprocess
 import sys
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import Any
 
 import anyio
+from anyio import BrokenResourceError, ClosedResourceError
 from anyio.abc import Process
 
 from ..logging import get_logger
 from .proc_diag import find_descendants, pid_starttime
 
 logger = get_logger(__name__)
+
+#: Default per-stream close timeout (seconds). Shutdown must never hang on
+#: a wedged pipe; each stream close is individually bounded by this value.
+DEFAULT_SHUTDOWN_TIMEOUT_S: float = 5.0
 
 
 def wrap_with_env_i(cmd: Sequence[str], env: Mapping[str, str]) -> list[str]:
@@ -90,6 +96,59 @@ def kill_process(proc: Process) -> None:
         fallback=proc.kill,
         log_event="subprocess.kill.failed",
     )
+
+
+async def kill_process_tree(proc: Process) -> None:
+    """Kill the process and all its descendants.
+
+    On Windows uses ``taskkill /T /F`` which walks the OS process tree by
+    parent-PID. On POSIX delegates to :func:`kill_process` which already
+    uses ``os.killpg`` for process-group kills.
+    """
+    if proc.pid is None or proc.returncode is not None:
+        return
+    if os.name == "nt":
+        try:
+            await anyio.run_process(
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        except FileNotFoundError:
+            kill_process(proc)
+        return
+    kill_process(proc)
+
+
+async def close_process_streams(
+    proc: Any,
+    *,
+    timeout: float = DEFAULT_SHUTDOWN_TIMEOUT_S,  # noqa: ASYNC109
+) -> None:
+    """Explicitly close the stdio pipe transports of *proc*.
+
+    On Windows + ProactorEventLoop, asyncio pipe transports that are never
+    explicitly closed are GC'd at interpreter teardown; ``__del__`` issues a
+    ``ResourceWarning`` whose ``__repr__`` touches ``fileno()`` on a closed
+    pipe, producing the "Exception ignored … ValueError: I/O operation on
+    closed pipe" noise. This helper closes stdin first (it owns the write
+    transport), then stdout/stderr, so the transports are properly
+    disposed before teardown.
+
+    The function is error-tolerant, bounded, idempotent, and never raises.
+    """
+    streams: list[Any] = []
+    for attr in ("stdin", "stdout", "stderr"):
+        stream = getattr(proc, attr, None)
+        if stream is not None:
+            streams.append(stream)
+    for stream in streams:
+        with (
+            anyio.move_on_after(timeout),
+            suppress(OSError, ValueError, ClosedResourceError, BrokenResourceError),
+        ):
+            await stream.aclose()
 
 
 def _signal_process(
@@ -370,11 +429,17 @@ async def manage_subprocess(
         _incr_live_engine_subprocesses(-1)
         if proc.returncode is None:
             with anyio.CancelScope(shield=True):
-                terminate_process(proc)
-                timed_out = await wait_for_process(proc, timeout=10.0)
-                if timed_out:
-                    kill_process(proc)
+                if os.name == "nt":
+                    # On Windows, terminate() only kills the direct child.
+                    # Kill the entire tree immediately via taskkill /T /F.
+                    await kill_process_tree(proc)
                     await proc.wait()
+                else:
+                    terminate_process(proc)
+                    timed_out = await wait_for_process(proc, timeout=10.0)
+                    if timed_out:
+                        kill_process(proc)
+                        await proc.wait()
         # #590: the leader is dead — reap group survivors (leaked MCP
         # children etc.) before releasing the transport.
         if reap_orphans:
@@ -391,6 +456,11 @@ async def manage_subprocess(
                     )
                 except Exception:  # noqa: BLE001
                     logger.debug("subprocess.orphan_sweep_failed", exc_info=True)
+        # Explicitly close the stdio pipe transports to prevent the proactor
+        # __del__ ResourceWarning / ValueError noise at teardown. Shielded so
+        # the close runs even under cancellation.
+        with anyio.CancelScope(shield=True):
+            await close_process_streams(proc)
         # #599: release the asyncio subprocess transport explicitly, on every
         # exit path including clean rc=0. Without this the transport is only
         # reached by GC at interpreter exit — after the event loop closed —

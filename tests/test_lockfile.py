@@ -8,7 +8,13 @@ import pytest
 
 import untether.lockfile as lockfile
 
+pytestmark_xfail_windows = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="msvcrt mandatory locking blocks reading stamp while lock is held",
+)
 
+
+@pytestmark_xfail_windows
 def test_lockfile_creates_and_stamps(tmp_path) -> None:
     config_path = tmp_path / "untether.toml"
     config_path.write_text("ok", encoding="utf-8")
@@ -104,6 +110,7 @@ def test_lockfile_released_on_holder_death(tmp_path) -> None:
     handle.release()
 
 
+@pytestmark_xfail_windows
 def test_lockfile_stale_file_with_reused_pid(tmp_path) -> None:
     """A stale lock file naming a live-but-unrelated PID must NOT block acquire
     (the old os.kill(pid, 0) check would have)."""

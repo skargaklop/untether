@@ -18,7 +18,7 @@ from .markdown import format_meta_line, render_event_cli
 from .model import ActionEvent, CompletedEvent, ResumeToken, StartedEvent, UntetherEvent
 from .presenter import Presenter
 from .progress import ProgressTracker
-from .runner import _APPROVAL_PENDING_REFIRE_S, Runner
+from .runner import _APPROVAL_PENDING_REFIRE_S, Runner, RunnerTurnControl
 from .session_quarantine import QuarantineStore, get_quarantine_store
 from .transport import (
     ChannelId,
@@ -948,6 +948,7 @@ class RunningTask:
     cancel_requested: anyio.Event = field(default_factory=anyio.Event)
     done: anyio.Event = field(default_factory=anyio.Event)
     context: RunContext | None = None
+    control: RunnerTurnControl | None = None
 
 
 RunningTasks = dict[MessageRef, RunningTask]

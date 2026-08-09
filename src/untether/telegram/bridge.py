@@ -36,6 +36,7 @@ __all__ = [
     "TelegramTransport",
     "build_bot_commands",
     "handle_callback_cancel",
+    "handle_callback_steer",
     "handle_cancel",
     "is_cancel_command",
     "run_main_loop",
@@ -45,6 +46,15 @@ __all__ = [
 CANCEL_CALLBACK_DATA = "untether:cancel"
 CANCEL_MARKUP = {
     "inline_keyboard": [[{"text": "cancel", "callback_data": CANCEL_CALLBACK_DATA}]]
+}
+STEER_CALLBACK_DATA = "untether:steer"
+STEER_CANCEL_MARKUP = {
+    "inline_keyboard": [
+        [
+            {"text": "steer", "callback_data": STEER_CALLBACK_DATA},
+            {"text": "cancel", "callback_data": CANCEL_CALLBACK_DATA},
+        ]
+    ]
 }
 CLEAR_MARKUP = {"inline_keyboard": []}
 
@@ -76,6 +86,7 @@ class TelegramPresenter:
         elapsed_s: float,
         label: str = "working",
         now: float | None = None,
+        steerable: bool = True,
     ) -> RenderedMessage:
         parts = self._formatter.render_progress_parts(
             state, elapsed_s=elapsed_s, label=label, now=now
@@ -83,6 +94,10 @@ class TelegramPresenter:
         text, entities = prepare_telegram(parts)
         if _is_cancelled_label(label):
             reply_markup = CLEAR_MARKUP
+        elif label.strip().lower() == "queued":
+            # Mid-turn steer only works when the active runner exposes turn control
+            # (currently Codex app-server). Otherwise offer cancel only.
+            reply_markup = STEER_CANCEL_MARKUP if steerable else CANCEL_MARKUP
         else:
             # Check if any active action has inline keyboard buttons (e.g. permission approval)
             reply_markup = CANCEL_MARKUP
@@ -182,6 +197,11 @@ class TelegramBridgeConfig:
     voice_transcription_url_allowlist: tuple[str, ...] = ()
     forward_coalesce_s: float = 1.0
     media_group_debounce_s: float = 1.0
+    prompt_batch_enabled: bool = True
+    prompt_batch_debounce_s: float = 0.75
+    prompt_batch_max_messages: int = 8
+    prompt_batch_max_chars: int = 120_000
+    prompt_batch_separator: Literal["newline", "blank_line"] = "blank_line"
     allowed_user_ids: tuple[int, ...] = ()
     # #377: `allow_any_user=True` is the explicit opt-in for an open bot.
     # Mirrors `TelegramTransportSettings.allow_any_user` so the loop can
@@ -216,6 +236,11 @@ class TelegramBridgeConfig:
             settings.voice_transcription_url_allowlist
         )
         self.forward_coalesce_s = float(settings.forward_coalesce_s)
+        self.prompt_batch_enabled = bool(settings.prompt_batch_enabled)
+        self.prompt_batch_debounce_s = float(settings.prompt_batch_debounce_s)
+        self.prompt_batch_max_messages = int(settings.prompt_batch_max_messages)
+        self.prompt_batch_max_chars = int(settings.prompt_batch_max_chars)
+        self.prompt_batch_separator = settings.prompt_batch_separator
         self.media_group_debounce_s = float(settings.media_group_debounce_s)
         self.allowed_user_ids = tuple(settings.allowed_user_ids)
         self.allow_any_user = bool(settings.allow_any_user)
@@ -518,6 +543,17 @@ async def handle_callback_cancel(
     from .commands import handle_callback_cancel as _handle_callback_cancel
 
     await _handle_callback_cancel(cfg, query, running_tasks, scheduler)
+
+
+async def handle_callback_steer(
+    cfg: TelegramBridgeConfig,
+    query: TelegramCallbackQuery,
+    running_tasks: RunningTasks,
+    scheduler: ThreadScheduler | None = None,
+) -> None:
+    from .commands import handle_callback_steer as _handle_callback_steer
+
+    await _handle_callback_steer(cfg, query, running_tasks, scheduler)
 
 
 async def send_with_resume(

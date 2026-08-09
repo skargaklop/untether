@@ -5,13 +5,18 @@ records ``head_sha`` + ``dev_bot_id`` so the fleet-rollout gate binds an exact
 commit + the real dev bot, not a reusable boolean.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="invokes bash to run scripts/run-integration-tests.sh (POSIX-only)",
+)
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = REPO_ROOT / "scripts" / "run-integration-tests.sh"
 FAKE_VERSION = "0.0.0test"

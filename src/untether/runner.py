@@ -1456,3 +1456,9 @@ class Runner(Protocol):
         prompt: str,
         resume: ResumeToken | None,
     ) -> AsyncIterator[UntetherEvent]: ...
+
+
+class RunnerTurnControl(Protocol):
+    async def steer(self, text: str) -> None: ...
+
+    async def interrupt(self) -> bool: ...

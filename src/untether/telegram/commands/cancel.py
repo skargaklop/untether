@@ -6,7 +6,11 @@ from typing import TYPE_CHECKING
 from ...logging import get_logger
 from ...progress import ProgressTracker
 from ...runner_bridge import RunningTasks
-from ...scheduler import ThreadJob, ThreadScheduler
+from ...scheduler import (
+    CancelQueuedStatus,
+    ThreadJob,
+    ThreadScheduler,
+)
 from ...transport import MessageRef
 from ..types import TelegramCallbackQuery, TelegramIncomingMessage
 from .reply import make_reply
@@ -92,12 +96,23 @@ async def handle_cancel(
         if scheduler is not None:
             queued = scheduler.queued_for_chat(chat_id)
             if len(queued) == 1:
-                job = await scheduler.cancel_queued(
+                result = await scheduler.cancel_queued(
                     chat_id, queued[0].progress_ref.message_id
                 )
-                if job:
-                    await _edit_cancelled_message(cfg, queued[0].progress_ref, job)
+                if (
+                    result.status is CancelQueuedStatus.CANCELLED
+                    and result.job is not None
+                ):
+                    await _edit_cancelled_message(
+                        cfg, queued[0].progress_ref, result.job
+                    )
                     return
+                if result.status is CancelQueuedStatus.ALREADY_CLAIMED:
+                    await reply(
+                        text="that queued run already started — use Cancel on the active run."
+                    )
+                    return
+                # NOT_FOUND falls through to the nothing-running path below.
             if len(queued) > 1:
                 logger.debug(
                     "cancel.ambiguous", chat_id=chat_id, queued_jobs=len(queued)
@@ -141,16 +156,22 @@ async def handle_cancel(
     running_task = running_tasks.get(progress_ref)
     if running_task is None:
         if scheduler is not None:
-            job = await scheduler.cancel_queued(chat_id, reply_id)
-            if job is not None:
+            result = await scheduler.cancel_queued(chat_id, reply_id)
+            if result.status is CancelQueuedStatus.CANCELLED and result.job is not None:
                 logger.info(
                     "cancel.queued",
                     chat_id=chat_id,
                     progress_message_id=reply_id,
-                    resume=job.resume_token.value,
+                    resume=result.job.resume_token.value,
                 )
-                await _edit_cancelled_message(cfg, progress_ref, job)
+                await _edit_cancelled_message(cfg, progress_ref, result.job)
                 return
+            if result.status is CancelQueuedStatus.ALREADY_CLAIMED:
+                await reply(
+                    text="that queued run already started — use Cancel on the active run."
+                )
+                return
+            # NOT_FOUND falls through.
         await reply(text="nothing is currently running for that message.")
         return
 
@@ -198,20 +219,27 @@ async def handle_callback_cancel(
     running_task = running_tasks.get(progress_ref)
     if running_task is None:
         if scheduler is not None:
-            job = await scheduler.cancel_queued(query.chat_id, query.message_id)
-            if job is not None:
+            result = await scheduler.cancel_queued(query.chat_id, query.message_id)
+            if result.status is CancelQueuedStatus.CANCELLED and result.job is not None:
                 logger.info(
                     "cancel.queued",
                     chat_id=query.chat_id,
                     progress_message_id=query.message_id,
-                    resume=job.resume_token.value,
+                    resume=result.job.resume_token.value,
                 )
-                await _edit_cancelled_message(cfg, progress_ref, job)
+                await _edit_cancelled_message(cfg, progress_ref, result.job)
                 await cfg.bot.answer_callback_query(
                     callback_query_id=query.callback_query_id,
                     text="dropped from queue.",
                 )
                 return
+            if result.status is CancelQueuedStatus.ALREADY_CLAIMED:
+                await cfg.bot.answer_callback_query(
+                    callback_query_id=query.callback_query_id,
+                    text="that queued run already started.",
+                )
+                return
+            # NOT_FOUND falls through.
         await cfg.bot.answer_callback_query(
             callback_query_id=query.callback_query_id,
             text="nothing is currently running for that message.",
@@ -249,6 +277,16 @@ async def _edit_cancelled_message(
     progress_ref: MessageRef,
     job: ThreadJob,
 ) -> None:
+    await _edit_labelled_message(cfg, progress_ref, job, label="`cancelled`")
+
+
+async def _edit_labelled_message(
+    cfg: TelegramBridgeConfig,
+    progress_ref: MessageRef,
+    job: ThreadJob,
+    *,
+    label: str,
+) -> None:
     tracker = ProgressTracker(engine=job.resume_token.engine)
     tracker.set_resume(job.resume_token)
     context_line = cfg.runtime.format_context_line(job.context)
@@ -256,6 +294,73 @@ async def _edit_cancelled_message(
     message = cfg.exec_cfg.presenter.render_progress(
         state,
         elapsed_s=0.0,
-        label="`cancelled`",
+        label=label,
     )
     await cfg.exec_cfg.transport.edit(ref=progress_ref, message=message)
+
+
+async def handle_callback_steer(
+    cfg: TelegramBridgeConfig,
+    query: TelegramCallbackQuery,
+    running_tasks: RunningTasks,
+    scheduler: ThreadScheduler | None = None,
+) -> None:
+    if scheduler is None:
+        await cfg.bot.answer_callback_query(
+            callback_query_id=query.callback_query_id,
+            text="no queue is available.",
+        )
+        return
+
+    progress_ref = MessageRef(channel_id=query.chat_id, message_id=query.message_id)
+    job = await scheduler.get_queued(query.chat_id, query.message_id)
+    if job is None:
+        await cfg.bot.answer_callback_query(
+            callback_query_id=query.callback_query_id,
+            text="this message is not queued.",
+        )
+        return
+
+    control = None
+    for running_task in running_tasks.values():
+        if running_task.resume == job.resume_token:
+            control = running_task.control
+            break
+    if control is None:
+        await cfg.bot.answer_callback_query(
+            callback_query_id=query.callback_query_id,
+            text="active turn is not steerable; still queued.",
+        )
+        return
+
+    claimed = await scheduler.claim_queued(query.chat_id, query.message_id)
+    if claimed is None:
+        await cfg.bot.answer_callback_query(
+            callback_query_id=query.callback_query_id,
+            text="already left the queue.",
+        )
+        return
+
+    try:
+        await control.steer(claimed.text)
+    except Exception as exc:  # noqa: BLE001
+        await scheduler.requeue_front(claimed)
+        logger.warning(
+            "steer.failed",
+            chat_id=query.chat_id,
+            progress_message_id=query.message_id,
+            resume=claimed.resume_token.value,
+            error=str(exc),
+            error_type=exc.__class__.__name__,
+        )
+        await cfg.bot.answer_callback_query(
+            callback_query_id=query.callback_query_id,
+            text="could not steer; still queued.",
+        )
+        return
+
+    await _edit_labelled_message(cfg, progress_ref, claimed, label="`steered`")
+    await cfg.bot.answer_callback_query(
+        callback_query_id=query.callback_query_id,
+        text="steered active turn.",
+    )
