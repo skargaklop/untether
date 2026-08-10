@@ -5,7 +5,7 @@ Untether is a Telegram bridge for AI coding agents (Claude Code, Codex, OpenCode
 ## Stack
 
 - Python 3.12+, anyio (async), msgspec (JSONL parsing), structlog (logging)
-- Ruff (linting/formatting), pytest + anyio (testing), 80% coverage threshold
+- Ruff (linting/formatting), pytest + anyio (testing), 81% coverage threshold
 - pydantic-settings for config, httpx for HTTP, typer for CLI
 
 ## Code style

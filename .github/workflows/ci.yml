@@ -16,7 +16,7 @@ concurrency:
 jobs:
   checks:
     name: ${{ matrix.task }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs-on }}
     permissions:
       contents: read
     strategy:
@@ -24,27 +24,40 @@ jobs:
       matrix:
         include:
           - task: format
+            runs-on: ubuntu-latest
             do_sync: true
             command: uv run --no-sync ruff format --check --diff src tests
             sync_args: --no-install-project
           - task: ruff
+            runs-on: ubuntu-latest
             do_sync: true
             command: uv run --no-sync ruff check src tests --output-format=github
             sync_args: --no-install-project
-          - task: ty
+          - task: ty (ubuntu)
+            runs-on: ubuntu-latest
             do_sync: true
-            command: uv run --no-sync ty check --warn invalid-argument-type --warn unresolved-attribute --warn invalid-assignment --warn not-subscriptable src tests
+            command: uv run --no-sync ty check src tests
             sync_args: --no-install-project
-            allow_failure: true  # ty has pre-existing warnings; informational only
+          - task: ty (macos)
+            runs-on: macos-latest
+            do_sync: true
+            command: uv run --no-sync ty check src tests
+            sync_args: --no-install-project
+          - task: ty (windows)
+            runs-on: windows-latest
+            do_sync: true
+            command: uv run --no-sync ty check src tests
+            sync_args: --no-install-project
           - task: lockfile
+            runs-on: ubuntu-latest
             do_sync: false
             command: uv lock --check
             sync_args: ""
           - task: docs
+            runs-on: ubuntu-latest
             do_sync: true
             command: uv run --no-sync python scripts/docs_prebuild.py && uv run --no-sync zensical build --clean
             sync_args: --no-install-project --group docs
-
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,11 +77,7 @@ jobs:
       - name: Run check
         env:
           CMD: ${{ matrix.command }}
-        # Use `bash -c "$CMD"` so shell control operators in matrix commands
-        # (notably `&&` in the docs job) are interpreted by the shell rather
-        # than treated as literal argv tokens to the first word of $CMD.
         run: bash -euo pipefail -c "$CMD"
-        continue-on-error: ${{ matrix.allow_failure || false }}
 
   pytest:
     name: pytest (Python ${{ matrix.python-version }})
