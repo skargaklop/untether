@@ -177,3 +177,6 @@ skips = ["B101", "B105", "B404"]
 [tool.ty.src]
 include = ["src", "tests"]
 exclude = ["scripts"]
+
+[tool.ty.environment]
+python-version = "3.14"
