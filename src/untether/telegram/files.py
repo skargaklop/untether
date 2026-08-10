@@ -162,15 +162,15 @@ def normalize_relative_path(value: str) -> Path | None:
         return None
     if cleaned.startswith("~"):
         return None
+    # Validate both path grammars: POSIX-rooted input is absolute/untrusted
+    # even when this process runs on Windows.
+    if PurePosixPath(cleaned).is_absolute():
+        return None
     path = Path(cleaned)
     if path.is_absolute():
         return None
     parts = [part for part in path.parts if part not in {"", "."}]
-    if not parts:
-        return None
-    if ".." in parts:
-        return None
-    if ".git" in parts:
+    if not parts or ".." in parts or ".git" in parts:
         return None
     return Path(*parts)
 

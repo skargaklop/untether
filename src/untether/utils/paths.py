@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from contextvars import ContextVar, Token
 from pathlib import Path
 
@@ -42,22 +41,27 @@ def relativize_path(value: str, *, base_dir: Path | None = None) -> str:
     base = get_run_base_dir() if base_dir is None else base_dir
     if base is None:
         base = Path.cwd()
-    base_str = str(base)
-    if not base_str:
-        return value
-    if value == base_str:
+    # Compare both spellings because user-facing commands may mix POSIX and
+    # native separators even on Windows.
+    value_norm = value.replace("\\", "/")
+    base_norm = str(base).replace("\\", "/").rstrip("/")
+    if not base_norm:
+        return value_norm
+    if value_norm == base_norm:
         return "."
-    for sep in (os.sep, "/"):
-        prefix = base_str if base_str.endswith(sep) else f"{base_str}{sep}"
-        if value.startswith(prefix):
-            suffix = value[len(prefix) :]
-            return suffix or "."
-    return value
+    prefix = f"{base_norm}/"
+    if value_norm.startswith(prefix):
+        return value_norm[len(prefix) :] or "."
+    return value_norm
 
 
 def relativize_command(value: str, *, base_dir: Path | None = None) -> str:
     base = get_run_base_dir() if base_dir is None else base_dir
     if base is None:
         base = Path.cwd()
-    base_with_sep = f"{base}{os.sep}"
-    return value.replace(base_with_sep, "")
+    base_norm = str(base).replace("\\", "/").rstrip("/")
+    if not base_norm:
+        return value.replace("\\", "/")
+    return value.replace("\\", "/").replace(f"{base_norm}/", "")
+
+

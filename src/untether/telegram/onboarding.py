@@ -184,11 +184,18 @@ class Services(Protocol):
 
 
 def display_path(path: Path) -> str:
+    # Resolve only real paths for home shortening; synthetic POSIX paths such
+    # as /tmp are not Windows children of the user's home.
+    normalized = str(path).replace("\\", "/")
     home = Path.home()
     try:
-        return f"~/{path.relative_to(home)}"
-    except ValueError:
-        return str(path)
+        candidate = path.resolve(strict=False)
+        home_resolved = home.resolve(strict=False)
+        if candidate.is_relative_to(home_resolved) and str(path).replace("\\", "/").startswith(str(home).replace("\\", "/") + "/"):
+            return f"~/{candidate.relative_to(home_resolved)}".replace("\\", "/")
+    except (OSError, ValueError):
+        pass
+    return normalized
 
 
 _CREATE_CONFIG_TITLE = "create a config"

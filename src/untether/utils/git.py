@@ -84,6 +84,8 @@ def resolve_main_worktree_root(cwd: Path) -> Path | None:
         return None
     if git_stdout(["rev-parse", "--is-bare-repository"], cwd=cwd) == "true":
         return cwd
+    if str(common_dir).startswith("/"):
+        return Path(str(common_dir).replace("\\", "/")).parent
     common_path = Path(common_dir)
     if not common_path.is_absolute():
         common_path = (cwd / common_path).resolve()

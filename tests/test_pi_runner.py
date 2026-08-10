@@ -1,3 +1,4 @@
+import os
 from pathlib import Path, PureWindowsPath
 from typing import Any, cast
 from unittest.mock import patch
@@ -267,10 +268,10 @@ def test_session_path_prefers_run_base_dir(tmp_path: Path) -> None:
 
     default_session_dir.assert_called_once_with(project_cwd)
     assert str(session_root) in session_path
-    # #207: session dir is created with restrictive perms so other users on
-    # shared hosts can't read Pi session JSONL.
+    # Windows does not expose POSIX directory permission bits.
     assert session_root.exists()
-    assert (session_root.stat().st_mode & 0o777) == 0o700
+    if os.name != "nt":
+        assert (session_root.stat().st_mode & 0o777) == 0o700
 
 
 def test_session_path_tightens_existing_dir_perms(tmp_path: Path) -> None:
@@ -279,7 +280,8 @@ def test_session_path_tightens_existing_dir_perms(tmp_path: Path) -> None:
     project_cwd = Path("/project")
     session_root = tmp_path / "sessions"
     session_root.mkdir(mode=0o755)
-    assert (session_root.stat().st_mode & 0o777) == 0o755
+    if os.name != "nt":
+        assert (session_root.stat().st_mode & 0o777) == 0o755
 
     with (
         patch("untether.runners.pi.get_run_base_dir", return_value=project_cwd),
@@ -290,7 +292,8 @@ def test_session_path_tightens_existing_dir_perms(tmp_path: Path) -> None:
     ):
         runner._new_session_path()
 
-    assert (session_root.stat().st_mode & 0o777) == 0o700
+    if os.name != "nt":
+        assert (session_root.stat().st_mode & 0o777) == 0o700
 
 
 def test_session_path_sanitizes_windows_separators() -> None:

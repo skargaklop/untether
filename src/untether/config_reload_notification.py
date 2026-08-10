@@ -43,9 +43,10 @@ __all__ = [
 def _short_path(path: Path | str) -> str:
     p = Path(path)
     try:
-        return f"~/{p.relative_to(Path.home())}"
+        displayed = f"~/{p.relative_to(Path.home())}"
     except ValueError:
-        return str(p)
+        displayed = str(path)
+    return displayed.replace("\\", "/")
 
 
 def format_hot_reload_only_notice(
