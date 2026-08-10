@@ -149,7 +149,13 @@ class _FakeRuntime:
     def default_context_for_chat(self, chat_id: int) -> RunContext | None:
         return self._chat_to_context.get(chat_id)
 
-    def resolve_engine(self, context: RunContext) -> str:
+    def resolve_engine(
+        self, *, engine_override: str | None, context: RunContext | None
+    ) -> str:
+        if engine_override is not None:
+            return engine_override
+        if context is None:
+            return self._global_default
         return self._engine_for_context.get(context.project, self._global_default)
 
 
