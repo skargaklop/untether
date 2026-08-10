@@ -1,13 +1,14 @@
 """Tests for the compact support model and helpers.
 
-These test the pure decision/prompt-building functions in ``compact.py``
-without any subprocess, runner, or Telegram loop.
+Exercises the protocol and helper functions directly, without any subprocess,
+runner, or Telegram loop.
 """
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from typing import cast
 
 import pytest
 
@@ -141,7 +142,8 @@ class TestCompactRunnerProtocol:
                 resume: ResumeToken,
                 instructions: str | None = None,
             ) -> AsyncIterator[UntetherEvent]:
-                yield  # type: ignore[unreachable]
+                if False:
+                    yield cast(UntetherEvent, None)
 
         assert isinstance(MyRunner(), CompactRunner)
 

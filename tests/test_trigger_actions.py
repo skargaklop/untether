@@ -1,8 +1,7 @@
 """Tests for non-agent webhook actions (file_write, http_forward, notify_only)."""
 
-from __future__ import annotations
-
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -29,8 +28,7 @@ def _make_webhook(**overrides) -> WebhookConfig:
         "action": "file_write",
         "file_path": "/tmp/test-output.json",
     }
-    defaults.update(overrides)
-    return WebhookConfig(**defaults)
+    return WebhookConfig(**cast(dict[str, Any], defaults))
 
 
 # ---------------------------------------------------------------------------

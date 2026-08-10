@@ -1,7 +1,6 @@
 """Tests for callback query dispatch to command backends."""
 
-from __future__ import annotations
-
+from typing import cast
 from unittest.mock import AsyncMock
 
 import anyio
@@ -10,6 +9,7 @@ import pytest
 from tests.telegram_fakes import FakeBot, FakeTransport, make_cfg
 from untether.commands import CommandContext, CommandResult
 from untether.runner_bridge import _EPHEMERAL_MSGS
+from untether.scheduler import ThreadScheduler
 from untether.telegram.bridge import TelegramBridgeConfig
 from untether.telegram.commands import dispatch as dispatch_mod
 from untether.telegram.commands.dispatch import _dispatch_callback, _parse_callback_data
@@ -181,7 +181,7 @@ async def test_dispatch_callback_registers_ephemeral_with_callback_query_id(
     """With callback_query_id, result is sent as persistent message AND registered for cleanup."""
     transport = FakeTransport()
     cfg = make_cfg(transport)
-    bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    bot = cast(FakeBot, cfg.bot)
     backend = _StubBackend(CommandResult(text="Approved permission request"))
     monkeypatch.setattr(dispatch_mod, "get_command", lambda *a, **kw: backend)
 
@@ -220,7 +220,7 @@ async def test_dispatch_callback_no_ephemeral_without_callback_query_id(
     """Without callback_query_id, result is sent as persistent message, NOT registered."""
     transport = FakeTransport()
     cfg = make_cfg(transport)
-    bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    bot = cast(FakeBot, cfg.bot)
     backend = _StubBackend(CommandResult(text="Approved permission request"))
     monkeypatch.setattr(dispatch_mod, "get_command", lambda *a, **kw: backend)
 
@@ -253,7 +253,7 @@ async def test_dispatch_callback_answers_on_error(monkeypatch) -> None:
     """On command error, callback is still answered to clear loading spinner."""
     transport = FakeTransport()
     cfg = make_cfg(transport)
-    bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    bot = cast(FakeBot, cfg.bot)
     backend = _StubBackend(raise_exc=RuntimeError("boom"))
     monkeypatch.setattr(dispatch_mod, "get_command", lambda *a, **kw: backend)
 
@@ -282,7 +282,7 @@ async def test_dispatch_callback_answers_when_result_is_none(monkeypatch) -> Non
     """When command returns None, callback is still answered (via finally)."""
     transport = FakeTransport()
     cfg = make_cfg(transport)
-    bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    bot = cast(FakeBot, cfg.bot)
     backend = _StubBackend(result=None)
     monkeypatch.setattr(dispatch_mod, "get_command", lambda *a, **kw: backend)
 
@@ -333,7 +333,7 @@ async def test_early_answer_clears_spinner_before_handle(monkeypatch) -> None:
     """When answer_early=True and toast is returned, callback is answered before handle()."""
     transport = FakeTransport()
     cfg = make_cfg(transport)
-    bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    bot = cast(FakeBot, cfg.bot)
     backend = _EarlyAnswerBackend(toast="Approved", result=CommandResult(text="Done"))
     monkeypatch.setattr(dispatch_mod, "get_command", lambda *a, **kw: backend)
 
@@ -368,7 +368,7 @@ async def test_early_answer_fires_before_slow_handle(monkeypatch) -> None:
 
     transport = FakeTransport()
     cfg = make_cfg(transport)
-    bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    bot = cast(FakeBot, cfg.bot)
     handle_entered_at: dict[str, float] = {}
     answer_called_at: dict[str, float] = {}
 
@@ -385,16 +385,16 @@ async def test_early_answer_fires_before_slow_handle(monkeypatch) -> None:
             await anyio.sleep(0.05)
             return CommandResult(text="ok")
 
-    backend = _SlowHandleBackend()
 
     orig_answer = bot.answer_callback_query
 
-    async def _timed_answer(query_id, text=None):
+    async def _timed_answer(
+        query_id: str, text: str | None = None, show_alert: bool | None = None
+    ) -> bool:
         answer_called_at.setdefault("t", _time.monotonic())
-        return await orig_answer(query_id, text=text)
+        return await orig_answer(query_id, text=text, show_alert=show_alert)
 
-    bot.answer_callback_query = _timed_answer  # type: ignore[assignment]
-    monkeypatch.setattr(dispatch_mod, "get_command", lambda *a, **kw: backend)
+    object.__setattr__(bot, "answer_callback_query", _timed_answer)
 
     await _dispatch_callback(
         cfg,
@@ -426,7 +426,7 @@ async def test_early_answer_none_toast_falls_through(monkeypatch) -> None:
     """When early_answer_toast returns None, callback is answered in finally (no toast)."""
     transport = FakeTransport()
     cfg = make_cfg(transport)
-    bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    bot = cast(FakeBot, cfg.bot)
     backend = _EarlyAnswerBackend(toast=None, result=None)
     monkeypatch.setattr(dispatch_mod, "get_command", lambda *a, **kw: backend)
 
@@ -454,7 +454,7 @@ async def test_no_early_answer_without_attribute(monkeypatch) -> None:
     """Backends without answer_early don't get early answering."""
     transport = FakeTransport()
     cfg = make_cfg(transport)
-    bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    bot = cast(FakeBot, cfg.bot)
     backend = _StubBackend(result=None)
     monkeypatch.setattr(dispatch_mod, "get_command", lambda *a, **kw: backend)
 
@@ -541,7 +541,7 @@ async def test_callback_rejected_for_unauthorised_sender() -> None:
         exec_cfg=cfg.exec_cfg,
         allowed_user_ids=(999,),  # only user 999 allowed
     )
-    bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    bot = cast(FakeBot, cfg.bot)
     backend = _StubBackend(CommandResult(text="Should not reach"))
 
     # sender_id=1 is NOT in allowed_user_ids=(999,)
@@ -557,7 +557,7 @@ async def test_callback_rejected_for_unauthorised_sender() -> None:
             "args",
             thread_id=None,
             running_tasks={},
-            scheduler=_StubScheduler(),
+            scheduler=cast("ThreadScheduler", _StubScheduler()),
             on_thread_known=None,
             stateful_mode=False,
             default_engine_override=None,
@@ -600,7 +600,7 @@ async def test_callback_allowed_for_authorised_sender() -> None:
             "args",
             thread_id=None,
             running_tasks={},
-            scheduler=_StubScheduler(),
+            scheduler=cast("ThreadScheduler", _StubScheduler()),
             on_thread_known=None,
             stateful_mode=False,
             default_engine_override=None,
@@ -630,7 +630,7 @@ async def test_callback_allowed_when_no_user_restriction() -> None:
             "args",
             thread_id=None,
             running_tasks={},
-            scheduler=_StubScheduler(),
+            scheduler=cast("ThreadScheduler", _StubScheduler()),
             on_thread_known=None,
             stateful_mode=False,
             default_engine_override=None,

@@ -83,7 +83,7 @@ def test_load_filters_non_string_values(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _make_run_once_settings(ids: list[str]) -> object:
+def _make_run_once_settings(ids: list[str]):
     return parse_trigger_config(
         {
             "enabled": True,

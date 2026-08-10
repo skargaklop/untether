@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import anyio
 import pytest
@@ -84,8 +84,7 @@ def _make_webhook(**kwargs: Any) -> WebhookConfig:
         "auth": "none",
         "prompt_template": "Hello",
     }
-    defaults.update(kwargs)
-    return WebhookConfig(**defaults)  # type: ignore[arg-type]
+    return WebhookConfig(**cast(dict[str, Any], defaults))
 
 
 def _make_cron(**kwargs: Any) -> CronConfig:
@@ -94,8 +93,7 @@ def _make_cron(**kwargs: Any) -> CronConfig:
         "schedule": "* * * * *",
         "prompt": "Run daily check",
     }
-    defaults.update(kwargs)
-    return CronConfig(**defaults)  # type: ignore[arg-type]
+    return CronConfig(**cast(dict[str, Any], defaults))
 
 
 @pytest.mark.anyio

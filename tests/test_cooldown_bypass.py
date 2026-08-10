@@ -1,24 +1,13 @@
-"""Tests for the Pause & Outline Plan outline-gate mechanism.
-
-When the user clicks "Pause & Outline Plan", the session is marked
-outline-pending. Subsequent ExitPlanMode calls are handled differently
-depending on whether Claude Code has written substantial outline text
-(>= 200 chars):
-
-- With outline: hold request open + synthetic Approve/Deny buttons (real request_id)
-- Without outline: auto-deny with the outline instruction + synthetic buttons (da: prefix)
-
-#570: the additional time-based progressive cooldown that used to be armed
-here was a workaround for the v2.1.72-74 upstream immediate-retry loop —
-verified fixed on CLI 2.1.215 and removed. The text-based gate stays.
-"""
+"""Tests for the Pause & Outline Plan outline-gate mechanism."""
 
 from __future__ import annotations
 
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
 
+from untether.commands import CommandExecutor
 from untether.model import ActionEvent, ResumeToken
 from untether.runners.claude import (
     _ACTIVE_RUNNERS,
@@ -35,6 +24,7 @@ from untether.runners.claude import (
     translate_claude_event,
 )
 from untether.schemas import claude as claude_schema
+from untether.transport_runtime import TransportRuntime
 
 
 @pytest.fixture(autouse=True)
@@ -494,9 +484,9 @@ async def test_synthetic_approve_after_session_ends():
         reply_to=None,
         reply_text=None,
         config_path=None,
-        plugin_config=None,  # type: ignore[arg-type]
-        runtime=None,  # type: ignore[arg-type]
-        executor=None,  # type: ignore[arg-type]
+        plugin_config=cast(dict[str, Any], None),
+        runtime=cast("TransportRuntime", None),
+        executor=cast("CommandExecutor", None),
     )
 
     cmd = ClaudeControlCommand()
@@ -530,9 +520,9 @@ async def test_synthetic_deny_after_session_ends():
         reply_to=None,
         reply_text=None,
         config_path=None,
-        plugin_config=None,  # type: ignore[arg-type]
-        runtime=None,  # type: ignore[arg-type]
-        executor=None,  # type: ignore[arg-type]
+        plugin_config=cast(dict[str, Any], None),
+        runtime=cast("TransportRuntime", None),
+        executor=cast("CommandExecutor", None),
     )
 
     cmd = ClaudeControlCommand()
@@ -567,9 +557,9 @@ async def test_synthetic_approve_with_active_session():
         reply_to=None,
         reply_text=None,
         config_path=None,
-        plugin_config=None,  # type: ignore[arg-type]
-        runtime=None,  # type: ignore[arg-type]
-        executor=None,  # type: ignore[arg-type]
+        plugin_config=cast(dict[str, Any], None),
+        runtime=cast("TransportRuntime", None),
+        executor=cast("CommandExecutor", None),
     )
 
     cmd = ClaudeControlCommand()
@@ -651,9 +641,9 @@ async def test_chat_on_synthetic_after_session_ends():
         reply_to=None,
         reply_text=None,
         config_path=None,
-        plugin_config=None,  # type: ignore[arg-type]
-        runtime=None,  # type: ignore[arg-type]
-        executor=None,  # type: ignore[arg-type]
+        plugin_config=cast(dict[str, Any], None),
+        runtime=cast("TransportRuntime", None),
+        executor=cast("CommandExecutor", None),
     )
 
     cmd = ClaudeControlCommand()
@@ -688,9 +678,9 @@ async def test_chat_on_synthetic_with_active_session():
         reply_to=None,
         reply_text=None,
         config_path=None,
-        plugin_config=None,  # type: ignore[arg-type]
-        runtime=None,  # type: ignore[arg-type]
-        executor=None,  # type: ignore[arg-type]
+        plugin_config=cast(dict[str, Any], None),
+        runtime=cast("TransportRuntime", None),
+        executor=cast("CommandExecutor", None),
     )
 
     cmd = ClaudeControlCommand()

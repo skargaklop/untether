@@ -1,9 +1,7 @@
 """Tests for the webhook HTTP server."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
@@ -81,7 +79,7 @@ def _make_dispatcher(transport=None, run_job=None):
             run_job=run_job,
             transport=transport,
             default_chat_id=100,
-            task_group=FakeTaskGroup(),  # type: ignore[arg-type]
+            task_group=cast(Any, FakeTaskGroup()),
         ),
         transport,
         run_job,
@@ -264,7 +262,7 @@ async def test_dispatch_errors_dont_fail_http_response(caplog):
         async def dispatch_webhook(self, wh, prompt):
             raise RuntimeError("boom")
 
-    app = build_webhook_app(settings, ExplodingDispatcher())  # type: ignore[arg-type]
+    app = build_webhook_app(settings, cast(TriggerDispatcher, ExplodingDispatcher()))
 
     async with TestClient(TestServer(app)) as cl:
         resp = await cl.post(
@@ -570,7 +568,7 @@ async def test_webhook_returns_202_before_dispatch_completes():
             await dispatch_release.wait()
 
     settings = _make_settings()
-    app = build_webhook_app(settings, SlowDispatcher())  # type: ignore[arg-type]
+    app = build_webhook_app(settings, cast(TriggerDispatcher, SlowDispatcher()))
 
     async with TestClient(TestServer(app)) as cl:
         # Start the request — it should return 202 without waiting for dispatch.

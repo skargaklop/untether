@@ -1,19 +1,18 @@
 """Tests for TriggerManager — mutable trigger config holder for hot-reload."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 from untether.transport import MessageRef
+
+# ── Helpers ──────────────────────────────────────────────────────────
+from untether.triggers.dispatcher import TriggerDispatcher
 from untether.triggers.manager import TriggerManager
 from untether.triggers.server import build_webhook_app
 from untether.triggers.settings import TriggersSettings, parse_trigger_config
-
-# ── Helpers ──────────────────────────────────────────────────────────
 
 
 def _settings(**overrides: Any) -> TriggersSettings:
@@ -93,7 +92,7 @@ def _make_dispatcher(transport=None, run_job=None):
         run_job=run_job,
         transport=transport,
         default_chat_id=100,
-        task_group=FakeTaskGroup(),  # type: ignore[arg-type]
+        task_group=cast(Any, FakeTaskGroup()),
     )
 
 
@@ -482,7 +481,9 @@ class TestPauseToggle:
                 self.calls.append((a, kw))
 
         dispatcher = _DispatcherStub()
-        app = build_webhook_app(_settings(), dispatcher, manager=mgr)
+        app = build_webhook_app(
+            _settings(), cast("TriggerDispatcher", dispatcher), manager=mgr
+        )
         async with TestClient(TestServer(app)) as client:
             resp = await client.post(
                 "/hooks/test",

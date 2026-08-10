@@ -1,8 +1,7 @@
 """Tests for cron data-fetch triggers (#279)."""
 
-from __future__ import annotations
-
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -17,7 +16,10 @@ from untether.triggers.settings import CronFetchConfig
 
 
 def _make_fetch(**overrides) -> CronFetchConfig:
-    defaults = {"type": "http_get", "url": "https://api.example.com/data"}
+    defaults: dict[str, Any] = {
+        "type": "http_get",
+        "url": "https://api.example.com/data",
+    }
     defaults.update(overrides)
     return CronFetchConfig(**defaults)
 
