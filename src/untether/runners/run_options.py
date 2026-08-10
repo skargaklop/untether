@@ -115,7 +115,9 @@ def merge_run_options(
         ask_questions=_bool("ask_questions", ask_questions),
         diff_preview=_bool("diff_preview", diff_preview),
         show_api_cost=_bool("show_api_cost", show_api_cost),
-        show_subscription_usage=_bool("show_subscription_usage", show_subscription_usage),
+        show_subscription_usage=_bool(
+            "show_subscription_usage", show_subscription_usage
+        ),
         show_resume_line=_bool("show_resume_line", show_resume_line),
         budget_enabled=_bool("budget_enabled", budget_enabled),
         budget_auto_cancel=_bool("budget_auto_cancel", budget_auto_cancel),

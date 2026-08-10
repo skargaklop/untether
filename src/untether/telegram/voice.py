@@ -72,11 +72,17 @@ class OpenAIVoiceTranscriber:
             timeout=120,
             max_retries=_VOICE_MAX_RETRIES,
         ) as client:
-            response = await client.audio.transcriptions.create(
-                model=model,
-                file=audio_file,
-                language=language,
-            )
+            if language is None:
+                response = await client.audio.transcriptions.create(
+                    model=model,
+                    file=audio_file,
+                )
+            else:
+                response = await client.audio.transcriptions.create(
+                    model=model,
+                    file=audio_file,
+                    language=language,
+                )
         return response.text
 
 

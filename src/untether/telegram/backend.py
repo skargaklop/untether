@@ -1,9 +1,9 @@
 from __future__ import annotations
-from typing import cast
 
 import subprocess
 import sys
 from pathlib import Path
+from typing import cast
 
 import anyio
 
@@ -19,14 +19,14 @@ from ..settings import (
     TelegramTransportSettings,
 )
 from ..transport_runtime import TransportRuntime
-from .client import BotClient
+from ..transports import SetupResult, TransportBackend
 from .bridge import (
     TelegramBridgeConfig,
     TelegramPresenter,
     TelegramTransport,
     run_main_loop,
 )
-from .client import TelegramClient
+from .client import BotClient, TelegramClient
 from .onboarding import check_setup, interactive_setup
 from .topics import _resolve_topics_scope_raw
 

@@ -1316,7 +1316,8 @@ def background_task_summary(state: ClaudeStreamState) -> str | None:
 
 
 def _tool_result_event(
-    content: claude_schema.StreamToolResultBlock | claude_schema.StreamAdvisorToolResultBlock,
+    content: claude_schema.StreamToolResultBlock
+    | claude_schema.StreamAdvisorToolResultBlock,
     *,
     action: Action,
     factory: EventFactory,
