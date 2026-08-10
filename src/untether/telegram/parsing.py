@@ -241,7 +241,12 @@ async def poll_incoming(
             await sleep(2)
             continue
         logger.debug("loop.updates", updates=updates)
-        resolved_chat_ids = chat_ids() if callable(chat_ids) else chat_ids
+        if chat_ids is None:
+            resolved_chat_ids = None
+        elif isinstance(chat_ids, Iterable):
+            resolved_chat_ids = chat_ids
+        else:
+            resolved_chat_ids = chat_ids()
         allowed = set(resolved_chat_ids) if resolved_chat_ids is not None else None
         if allowed is None and chat_id is not None:
             allowed = {chat_id}

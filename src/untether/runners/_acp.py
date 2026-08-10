@@ -530,10 +530,7 @@ class AcpCompactMixin:
                 ):
                     pass
             finally:
-                await client.close()
-[D:/Projects/untether/src/untether/runners/_acp.py#202D]
-            
-            
+                pass
             yield factory.completed_ok(
                 answer=f"{engine} compaction completed.",
                 resume=resume,

@@ -179,6 +179,8 @@ def render_markdown(md: str) -> tuple[str, list[dict[str, Any]]]:
         ed = dict(e)
         offset = ed.get("offset", 0)
         length = ed.get("length", 0)
+        if not isinstance(offset, int) or not isinstance(length, int):
+            continue
         if offset >= text_utf16_len:
             continue
         if offset + length > text_utf16_len:

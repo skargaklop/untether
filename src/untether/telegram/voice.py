@@ -63,9 +63,9 @@ class OpenAIVoiceTranscriber:
         # #638: only include `language` when configured — omitting the kwarg
         # entirely preserves the API's auto-detect for unset configs (passing
         # None would serialise a null the endpoint may reject).
-        extra: dict[str, str] = {}
+        kwargs: dict[str, object] = {}
         if language is not None:
-            extra["language"] = language
+            kwargs["language"] = language
         async with AsyncOpenAI(
             base_url=self._base_url,
             api_key=self._api_key,
@@ -75,7 +75,7 @@ class OpenAIVoiceTranscriber:
             response = await client.audio.transcriptions.create(
                 model=model,
                 file=audio_file,
-                **extra,
+                language=language,
             )
         return response.text
 

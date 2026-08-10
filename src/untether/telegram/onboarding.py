@@ -7,8 +7,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Protocol, cast
-
-import anyio
+from .client import BotClient
 import questionary
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import to_formatted_text
@@ -534,7 +533,7 @@ async def validate_topics_onboarding(
     try:
         settings = TelegramTopicsSettings(enabled=True, scope=scope)
         await _validate_topics_setup_for(
-            bot=bot,
+            bot=cast(BotClient, bot),
             topics=settings,
             chat_id=chat_id,
             project_chat_ids=project_chat_ids,
@@ -567,8 +566,7 @@ async def confirm_prompt(message: str, *, default: bool = True) -> bool | None:
             tokens.append(("class:instruction", "(yes/no) "))
         if status["answer"] is not None:
             tokens.append(("class:answer", "yes" if status["answer"] else "no"))
-        return to_formatted_text(tokens)
-
+        return to_formatted_text(cast(Any, tokens))
     def exit_with_result(event):
         status["complete"] = True
         event.app.exit(result=status["answer"])

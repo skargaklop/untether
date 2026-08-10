@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import anyio
 from anyio.abc import TaskGroup
@@ -24,7 +24,7 @@ from ..runner_bridge import RunOutcome
 from ..runners.run_options import EngineRunOptions
 from ..scheduler import ThreadJob, ThreadScheduler
 from ..settings import TelegramTransportSettings
-from ..transport import MessageRef, RenderedMessage, SendOptions
+from ..transport import MessageRef, RenderedMessage, SendOptions, Transport
 from ..transport_runtime import ResolvedMessage
 from ..utils.error_display import user_safe_error
 from .bridge import (
@@ -193,7 +193,15 @@ async def _restore_handoff_route(
     previous: ResumeToken | None,
     engine: EngineId,
 ) -> None:
-    if previous is None:
+    if isinstance(store, TopicStateStore):
+        thread_id = key[1]
+        if thread_id is None:
+            return
+        if previous is None:
+            await store.clear_engine_session(key[0], thread_id, engine)
+        else:
+            await store.set_session_resume(key[0], thread_id, previous)
+    elif previous is None:
         await store.clear_engine_session(key[0], key[1], engine)
     else:
         await store.set_session_resume(key[0], key[1], previous)
@@ -216,17 +224,13 @@ async def _commit_handoff_routing(
         ]
     ] = []
     if topic_store is not None and topic_key is not None:
-        topic_route = (topic_key[0], topic_key[1])
-        previous = await topic_store.get_session_resume(
-            *topic_route, destination.engine
-        )
-        writes.append((topic_store, topic_route, previous))
+        previous = await topic_store.get_session_resume(*topic_key, destination.engine)
+        writes.append((topic_store, topic_key, previous))
     if chat_session_store is not None and chat_session_key is not None:
         previous = await chat_session_store.get_session_resume(
             *chat_session_key, destination.engine
         )
         writes.append((chat_session_store, chat_session_key, previous))
-
     committed: list[
         tuple[
             TopicStateStore | ChatSessionStore,
@@ -236,7 +240,13 @@ async def _commit_handoff_routing(
     ] = []
     try:
         for store, key, previous in writes:
-            await store.set_session_resume(key[0], key[1], destination)
+            if isinstance(store, TopicStateStore):
+                thread_id = key[1]
+                if thread_id is None:
+                    continue
+                await store.set_session_resume(key[0], thread_id, destination)
+            else:
+                await store.set_session_resume(key[0], key[1], destination)
             committed.append((store, key, previous))
     except BaseException:
         for store, key, previous in reversed(committed):
@@ -456,6 +466,8 @@ def _dispatch_builtin_command(
                 text="file transfer disabled; enable `[transports.telegram.files]`.",
             )
         else:
+            if topic_store is None:
+                raise RuntimeError("topic store required")
             handler = partial(
                 handle_file_command,
                 cfg,
@@ -464,10 +476,8 @@ def _dispatch_builtin_command(
                 ambient_context,
                 topic_store,
             )
-        task_group.start_soon(handler)
+        task_group.start_soon(cast(Callable[..., Awaitable[Any]], handler))
         return True
-
-    if command_id == "ctx":
         topic_key = (
             _topic_key(msg, cfg, scope_chat_ids=scope_chat_ids)
             if cfg.topics.enabled and topic_store is not None
@@ -500,7 +510,7 @@ def _dispatch_builtin_command(
             if cfg.topics.enabled and topic_store is not None
             else None
         )
-        if topic_key is not None:
+        if topic_key is not None and topic_store is not None:
             handler: Callable[..., Awaitable[None]] = partial(
                 handle_new_command,
                 cfg,
@@ -1336,19 +1346,7 @@ class ResumeResolver:
         cfg: TelegramBridgeConfig,
         task_group: TaskGroup,
         running_tasks: Mapping[MessageRef, object],
-        enqueue_resume: Callable[
-            [
-                int,
-                int,
-                str,
-                ResumeToken,
-                RunContext | None,
-                int | None,
-                tuple[int, int | None] | None,
-                MessageRef | None,
-            ],
-            Awaitable[None],
-        ],
+        enqueue_resume: Callable[..., Awaitable[Any]],
         topic_store: TopicStateStore | None,
         chat_session_store: ChatSessionStore | None,
     ) -> None:
@@ -1707,12 +1705,9 @@ async def send_with_resume(
 
 
 async def _notify_drain_start(
-    transport: object,
+    transport: Transport,
     running_tasks: Mapping[MessageRef, object],
 ) -> None:
-    """Send a draining notice to each unique chat with active runs."""
-    from ..transport import RenderedMessage
-
     msg = RenderedMessage(
         text="\U0001f504 Restarting \N{EM DASH} waiting for your run to finish\N{HORIZONTAL ELLIPSIS}",
         extra={},
@@ -1728,11 +1723,10 @@ async def _notify_drain_start(
 
 
 async def _notify_drain_timeout(
-    transport: object,
+    transport: Transport,
     running_tasks: Mapping[MessageRef, object],
     remaining: int,
 ) -> None:
-    """Send a timeout notice to each unique chat still running after drain."""
     from ..transport import RenderedMessage
 
     hint = (
@@ -2408,7 +2402,7 @@ async def run_main_loop(
                     raise RuntimeError("destination session did not start")
                 await _commit_handoff_routing(
                     topic_store=state.topic_store,
-                    topic_key=(chat_id, job.thread_id)
+                    topic_key=(chat_id, cast(int, job.thread_id))
                     if state.topic_store is not None and job.thread_id is not None
                     else None,
                     chat_session_store=state.chat_session_store,
@@ -2566,7 +2560,7 @@ async def run_main_loop(
                     # /ping and /config can render per-chat trigger indicators.
                     cfg.trigger_manager = trigger_manager
                     trigger_dispatcher = TriggerDispatcher(
-                        run_job=run_job,
+                        run_job=cast(Callable[..., Awaitable[None]], run_job),
                         transport=cfg.exec_cfg.transport,
                         default_chat_id=cfg.chat_id,
                         task_group=tg,

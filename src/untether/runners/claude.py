@@ -784,7 +784,7 @@ def _tool_kind_and_title(
 
 
 def _tool_action(
-    content: claude_schema.StreamToolUseBlock,
+    content: claude_schema.StreamToolUseBlock | claude_schema.StreamServerToolUseBlock,
     *,
     parent_tool_use_id: str | None,
 ) -> Action:
@@ -843,7 +843,7 @@ def _agent_runs_in_background(raw_input: dict) -> bool:
 
 def _register_background_handle(
     state: ClaudeStreamState,
-    content: claude_schema.StreamToolUseBlock,
+    content: claude_schema.StreamToolUseBlock | claude_schema.StreamServerToolUseBlock,
 ) -> None:
     """Track long-running primitives that outlive the tool_result (#347).
 
@@ -1086,7 +1086,7 @@ def _loop_enabled_for_chat(chat_id: int | None) -> bool:
 
 def _observe_loop_tool_use(
     state: ClaudeStreamState,
-    content: claude_schema.StreamToolUseBlock,
+    content: claude_schema.StreamToolUseBlock | claude_schema.StreamServerToolUseBlock,
 ) -> None:
     """Observe ``CronCreate`` / ``ScheduleWakeup`` / ``CronDelete``
     ``tool_use`` events and register Untether-side loop entries (#289).
@@ -1316,7 +1316,7 @@ def background_task_summary(state: ClaudeStreamState) -> str | None:
 
 
 def _tool_result_event(
-    content: claude_schema.StreamToolResultBlock,
+    content: claude_schema.StreamToolResultBlock | claude_schema.StreamAdvisorToolResultBlock,
     *,
     action: Action,
     factory: EventFactory,

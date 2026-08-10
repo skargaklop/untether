@@ -423,7 +423,7 @@ def translate_pi_event(
                 else:
                     bits.append(f"attempt {attempt}")
             if delay_ms:
-                bits.append(f"~{_format_retry_delay(delay_ms)} delay")
+                bits.append(f"~{_format_retry_delay(int(delay_ms))} delay")
             suffix = f" ({', '.join(bits)})" if bits else ""
             retry_detail: dict[str, Any] = {}
             if error_message:

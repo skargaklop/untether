@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import cast
 
 import subprocess
 import sys
@@ -18,7 +19,7 @@ from ..settings import (
     TelegramTransportSettings,
 )
 from ..transport_runtime import TransportRuntime
-from ..transports import SetupResult, TransportBackend
+from .client import BotClient
 from .bridge import (
     TelegramBridgeConfig,
     TelegramPresenter,
@@ -233,7 +234,7 @@ class TelegramBackend(TransportBackend):
         )
         progress_cfg = _load_progress_settings()
         bot = TelegramClient(token, group_chat_rps=progress_cfg.group_chat_rps)
-        transport = TelegramTransport(bot)
+        transport = TelegramTransport(cast(BotClient, bot))
         formatter = MarkdownFormatter(
             max_actions=progress_cfg.max_actions,
             verbosity=progress_cfg.verbosity,
@@ -270,7 +271,7 @@ class TelegramBackend(TransportBackend):
             outbox_config=settings.files if _files_enabled else None,
         )
         cfg = TelegramBridgeConfig(
-            bot=bot,
+            bot=cast(BotClient, bot),
             runtime=runtime,
             chat_id=chat_id,
             startup_msg=startup_msg,
