@@ -23,41 +23,61 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - task: format
+          - task: format (ubuntu)
             runs-on: ubuntu-latest
             do_sync: true
+            docs: false
             command: uv run --no-sync ruff format --check --diff src tests
-            sync_args: --no-install-project
-          - task: ruff
+          - task: format (macos)
+            runs-on: macos-latest
+            do_sync: true
+            docs: false
+            command: uv run --no-sync ruff format --check --diff src tests
+          - task: format (windows)
+            runs-on: windows-latest
+            do_sync: true
+            docs: false
+            command: uv run --no-sync ruff format --check --diff src tests
+          - task: ruff (ubuntu)
             runs-on: ubuntu-latest
             do_sync: true
+            docs: false
             command: uv run --no-sync ruff check src tests --output-format=github
-            sync_args: --no-install-project
+          - task: ruff (macos)
+            runs-on: macos-latest
+            do_sync: true
+            docs: false
+            command: uv run --no-sync ruff check src tests --output-format=github
+          - task: ruff (windows)
+            runs-on: windows-latest
+            do_sync: true
+            docs: false
+            command: uv run --no-sync ruff check src tests --output-format=github
           - task: ty (ubuntu)
             runs-on: ubuntu-latest
             do_sync: true
+            docs: false
             command: uv run --no-sync ty check src tests
-            sync_args: --no-install-project
           - task: ty (macos)
             runs-on: macos-latest
             do_sync: true
+            docs: false
             command: uv run --no-sync ty check src tests
-            sync_args: --no-install-project
           - task: ty (windows)
             runs-on: windows-latest
             do_sync: true
+            docs: false
             command: uv run --no-sync ty check src tests
-            sync_args: --no-install-project
           - task: lockfile
             runs-on: ubuntu-latest
             do_sync: false
+            docs: false
             command: uv lock --check
-            sync_args: ""
           - task: docs
             runs-on: ubuntu-latest
             do_sync: true
+            docs: true
             command: uv run --no-sync python scripts/docs_prebuild.py && uv run --no-sync zensical build --clean
-            sync_args: --no-install-project --group docs
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -68,16 +88,18 @@ jobs:
           python-version: "3.14"
           enable-cache: true
 
-      - name: Install dependencies
-        if: matrix.do_sync
-        env:
-          SYNC_ARGS: ${{ matrix.sync_args }}
-        run: uv sync --frozen $SYNC_ARGS
+      - name: Install project dependencies
+        if: matrix.do_sync && !matrix.docs
+        run: uv sync --frozen --no-install-project
+
+      - name: Install docs dependencies
+        if: matrix.docs
+        run: uv sync --frozen --no-install-project --group docs
 
       - name: Run check
         env:
-          CMD: ${{ matrix.command }}
-        run: bash -euo pipefail -c "$CMD"
+          PYTHONUTF8: "1"
+        run: ${{ matrix.command }}
 
   pytest:
     name: pytest (Python ${{ matrix.python-version }})

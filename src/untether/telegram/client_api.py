@@ -135,7 +135,7 @@ class BotClient(Protocol):
         name: str,
     ) -> bool: ...
 
-    async def flush_outbox(self, *, timeout: float = 5.0) -> None: ...
+    async def flush_outbox(self, *, timeout: float = 5.0) -> None: ...  # noqa: ASYNC109
 
 
 class HttpBotClient:

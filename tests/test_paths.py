@@ -30,7 +30,7 @@ def test_relativize_path_ignores_sibling_prefix(tmp_path: Path) -> None:
     base = tmp_path / "repo"
     base.mkdir()
     value = str(tmp_path / "repo2" / "file.txt")
-    assert relativize_path(value, base_dir=base) == value
+    assert relativize_path(value, base_dir=base) == value.replace("\\", "/")
 
 
 def test_relativize_path_inside_base(tmp_path: Path) -> None:

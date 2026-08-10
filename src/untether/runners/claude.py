@@ -4277,7 +4277,7 @@ class ClaudeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         # rc-file sourcing, /etc/environment, or wrapper scripts that the
         # filtered env passed to manage_subprocess can't prevent post-exec.
         # Pass env=None to subprocess so we don't double-set.
-        if env is not None:
+        if env is not None and os.name == "posix":
             cmd = wrap_with_env_i(cmd, env)
             env = None
         # #205 / #478: redact two flavours of secret material before logging

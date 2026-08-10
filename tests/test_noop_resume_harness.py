@@ -26,6 +26,8 @@ from __future__ import annotations
 import os
 import select
 import subprocess
+import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, cast
@@ -49,6 +51,25 @@ from untether.session_quarantine import QuarantineStore, set_quarantine_store
 
 FAKE_CLI_PATH = Path(__file__).parent / "fake_clis" / "fake_claude_noop_resume.py"
 
+
+def _fixture_python() -> str:
+    return getattr(sys, "_base_executable", sys.executable)
+
+
+def _portable_fake_cli() -> Path:
+    if sys.platform != "win32":
+        return FAKE_CLI_PATH
+    wrapper = Path(tempfile.gettempdir()) / "untether-fake-claude-noop-resume.cmd"
+    wrapper.write_text(
+        f'@echo off\r\n"{_fixture_python()}" "{FAKE_CLI_PATH}" %*\r\n',
+        encoding="utf-8",
+    )
+    return wrapper
+
+
+FAKE_CLI_COMMAND = _portable_fake_cli()
+
+
 # Harness-only env vars carrying scenario selection past ClaudeRunner.env()'s
 # production security allowlist -- see _HarnessClaudeRunner docstring below.
 _HARNESS_ENV_VARS = ("FAKE_CLAUDE_SCENARIO", "FAKE_CLAUDE_LINGER_S")
@@ -63,9 +84,6 @@ class _HarnessClaudeRunner(ClaudeRunner):
     vars/secrets. ``FAKE_CLAUDE_SCENARIO`` / ``FAKE_CLAUDE_LINGER_S``
     intentionally are NOT on that allowlist -- they only exist for this
     test double and have no reason to ever reach a real `claude` subprocess
-    in production. This override re-adds them on top of the real filtered
-    env after delegating to ``super().env()``.
-
     Every other hook (``command``, ``build_args``, ``stdin_payload``,
     ``run_impl``, translation) is completely untouched -- the
     spawn/parse/translate pipeline under test is 100% production code.
@@ -81,10 +99,7 @@ class _HarnessClaudeRunner(ClaudeRunner):
 
 def _harness_runner() -> _HarnessClaudeRunner:
     assert FAKE_CLI_PATH.exists(), f"missing fake CLI: {FAKE_CLI_PATH}"
-    assert os.access(FAKE_CLI_PATH, os.X_OK), (
-        f"fake CLI is not executable (chmod +x): {FAKE_CLI_PATH}"
-    )
-    return _HarnessClaudeRunner(claude_cmd=str(FAKE_CLI_PATH))
+    return _HarnessClaudeRunner(claude_cmd=str(FAKE_CLI_COMMAND))
 
 
 @pytest.fixture
@@ -276,7 +291,7 @@ def test_harness_linger_scenario_emits_valid_result_and_outlives_it() -> None:
 
     proc = subprocess.Popen(
         [
-            str(FAKE_CLI_PATH),
+            str(FAKE_CLI_COMMAND),
             "-p",
             "--output-format",
             "stream-json",
@@ -295,9 +310,16 @@ def test_harness_linger_scenario_emits_valid_result_and_outlives_it() -> None:
     try:
         started_at = time.monotonic()
         assert proc.stdout is not None
-        init_line, result_line = _read_lines_bounded(
-            proc.stdout.fileno(), 2, timeout=5.0
-        )
+        if sys.platform == "win32":
+            # Windows select() accepts sockets only. readline() preserves its
+            # userspace buffer, so both already-flushed JSONL records remain
+            # available while the fake process lingers.
+            init_line = proc.stdout.readline()
+            result_line = proc.stdout.readline()
+        else:
+            init_line, result_line = _read_lines_bounded(
+                proc.stdout.fileno(), 2, timeout=5.0
+            )
         elapsed_to_result = time.monotonic() - started_at
 
         init_event = decode_stream_json_line(init_line)
@@ -482,7 +504,10 @@ async def test_667_cancel_midflight_captures_proc_returncode(
     assert rc is not None, (
         "#667 regression: proc_returncode left None on the cancellation path"
     )
-    # The teardown SIGTERM'd the hanging CLI, so this is a signal death — the
-    # exact case the auto-continue guard must recognise and could not when the
-    # return code was None.
-    assert _is_signal_death(rc), f"expected a signal death, got rc={rc}"
+    # POSIX reports SIGTERM as a negative return code; Windows taskkill uses a
+    # platform-native non-zero process code instead. Either outcome proves the
+    # cancelled child was reaped and its terminal code captured.
+    if sys.platform == "win32":
+        assert rc != 0, f"expected forced Windows teardown, got rc={rc}"
+    else:
+        assert _is_signal_death(rc), f"expected a signal death, got rc={rc}"

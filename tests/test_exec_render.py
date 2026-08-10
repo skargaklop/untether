@@ -116,7 +116,8 @@ def test_file_change_renders_relative_paths_inside_cwd() -> None:
         )
     )
     assert any(
-        f"files: update `README.md`, update `{weird_abs}`" in line for line in out
+        f"files: update `README.md`, update `{weird_abs.replace(chr(92), '/')}`" in line
+        for line in out
     )
 
 

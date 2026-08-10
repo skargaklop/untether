@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import re
 import signal
 import subprocess
@@ -40,6 +41,32 @@ class RunnerTimeoutError(RuntimeError):
         self.kind = kind
         self.timeout_s = timeout_s
         super().__init__(f"{kind} timeout after {timeout_s}s")
+
+
+def _process_is_running(pid: int) -> bool:
+    """Return whether *pid* is alive without Windows ``os.kill(..., 0)`` races."""
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+        except (ProcessLookupError, PermissionError):
+            return False
+        return True
+    try:
+        import ctypes
+
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            return bool(
+                ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+                and code.value == 259
+            )
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+    except (AttributeError, OSError):
+        return False
 
 
 class ResumeTokenMixin:
@@ -470,6 +497,10 @@ class JsonlSubprocessRunner(BaseRunner):
 
     def tag(self) -> str:
         return str(self.engine)
+
+    def command_args(self) -> list[str]:
+        """Return argv prefix for the runner executable."""
+        return [self.command()]
 
     def build_args(
         self,
@@ -1233,8 +1264,6 @@ class JsonlSubprocessRunner(BaseRunner):
         Also detects liveness stalls: process alive but no stdout for
         ``_LIVENESS_TIMEOUT_SECONDS``.
         """
-        import os as _os
-
         from .utils.proc_diag import collect_proc_diag, is_cpu_active
 
         liveness_warned = False
@@ -1247,9 +1276,7 @@ class JsonlSubprocessRunner(BaseRunner):
 
         # Poll until the process is dead or the reader finishes.
         while not reader_done.is_set():
-            try:
-                _os.kill(pid, 0)
-            except (ProcessLookupError, PermissionError):
+            if not _process_is_running(pid):
                 break  # process exited
 
             # #494-B: collect a baseline diag on the first successful poll so
@@ -1470,7 +1497,6 @@ class JsonlSubprocessRunner(BaseRunner):
             if not (started_emitted or action_emitted or answer_emitted):
                 continue
             # Should not reach here — events already yielded
-            return
 
     async def _run_single_attempt_events(
         self, prompt: str, resume: ResumeToken | None
@@ -1480,8 +1506,8 @@ class JsonlSubprocessRunner(BaseRunner):
 
         tag = self.tag()
         logger = self.get_logger()
-        cmd = [self.command(), *self.build_args(prompt, resume, state=state)]
         payload = self.stdin_payload(prompt, resume, state=state)
+        cmd = [*self.command_args(), *self.build_args(prompt, resume, state=state)]
         env = self.env(state=state)
         logger.info(
             "runner.start",

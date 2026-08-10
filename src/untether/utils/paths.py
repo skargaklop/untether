@@ -63,5 +63,3 @@ def relativize_command(value: str, *, base_dir: Path | None = None) -> str:
     if not base_norm:
         return value.replace("\\", "/")
     return value.replace("\\", "/").replace(f"{base_norm}/", "")
-
-

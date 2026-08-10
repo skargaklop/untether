@@ -1,8 +1,8 @@
 # Takopi Feature Port Audit — Takopi → Untether
 
 **Date:** 2026-08-10
-**Untether baseline:** `f23881123522a5336201934d7c0b9962a25772fe32331f625`; gap-closure work is uncommitted on `takopi-gap-closure`.
-**Takopi reference:** `3fea288a8aed5fd30f08fdc8dd5c9fbb716192ac`.
+**Untether baseline:** `78681542c967c5b31ece5cd138f39ba12e91c40e` on `takopi-gap-closure`; the documented closure changes are present in the working tree pending commit.
+**Takopi reference:** `d28e5ba7cf449608634c4a3ab6206998e6d4f0ae`.
 **Authoritative execution plan:** `D:/Projects/takopi/docs/plans/2026-08-10-takopi-untether-gap-closure-plan.md`.
 **Historical comparison:** `D:/Projects/takopi/docs/reference/untether-comparison.md` remains evidence only; its pre-migration conclusions are not current truth.
 
@@ -12,9 +12,9 @@ Source behavior and deterministic tests in the Untether tree override earlier co
 
 ---
 
-## A. Already-source-verified `present` (migration commit landed these)
+## A. Already-source-verified behavior
 
-These were ported by `daca548c` and are confirmed wired in current Untether source.
+The migration behavior is wired in the current Untether source and covered by deterministic tests.
 
 | # | Capability | Takopi evidence | Untether evidence | Disposition |
 |---|---|---|---|---|
@@ -67,14 +67,15 @@ Triggers (`triggers/`), cost tracking (`cost_tracker.py`), quarantine (`session_
 | Runner lifecycle and ACP timeout ownership | implemented | subprocess, settings, runner/ACP tests | runtime-unverified — native ACP probe unavailable |
 | Retry and timeout terminal semantics | implemented | retry/timeout contract tests, including a terminal timeout event with the runner engine | runtime-unverified — provider transient probe unavailable |
 | Pi goal-list extension seeding | implemented | Pi runner tests cover fresh XML seeding, escaping, fallback, and plan precedence | runtime-unverified — installed extension probe unavailable |
-| CI hard type gate and 3-OS static matrix | partial | `ty check src tests` reports 363 diagnostics on Windows; CI correctly keeps it informational | missing until diagnostics are fixed and the matrix is enforced |
-| Live config/state/poller cutover | runtime-unverified | restricted backup made; only obsolete top-level `[logging]` removed; config loader and `untether doctor` passed; no competing process observed | needs authorized running-poller ownership check and Telegram smoke |
+| CI hard type gate and 3-OS static matrix | implemented | `.github/workflows/ci.yml` enforces formatting, Ruff, and `ty check src tests` across Ubuntu, macOS, and Windows; fresh local Ruff/ty/lock checks pass with zero ty diagnostics | runtime-unverified — hosted macOS/Linux jobs await CI execution |
+| Live config/state/poller cutover | partial | restricted config/state backup created; `[logging]` absent; config loader, `untether doctor`, installed imports, Startup target, and state schema/mtime comparison verified | runtime-unverified — no poller was running; authorized Telegram and native-engine probes require external credentials/CLIs |
 
 ## F. Verification snapshot
 
-- Focused migration validation passed: **529 passed, 15 skipped**. The later timeout-event regression also passed. The resolver fixture suite was refreshed for the new sticky plan/subagent store methods: **9 passed**.
-- Formatting, Ruff, compilation, lockfile, Bandit, and `pip-audit` passed. Bandit reported only the existing scoped `# nosec` findings; `pip-audit` found no known vulnerabilities.
-- `uv build`, `twine check`, `check-wheel-contents`, and a clean-wheel import smoke passed. A fresh Windows full-suite run completed but failed: **61 failed, 3163 passed, 34 skipped**. Eight failures were stale resolver test doubles and now pass in their focused suite; the remaining failures are cross-platform fixture/path assumptions, POSIX-only socket/process behavior, and unavailable timezone data. Full site generation remains unavailable because Zensical is absent from the active dependency environment; `scripts/docs_prebuild.py` passed.
+- Focused migration validation passed: **529 passed, 15 skipped**; resolver fixtures passed **9** tests; Windows runner fixtures passed their focused suites.
+- Fresh Windows full suite: **3227 passed, 35 skipped**. Fresh static gates passed: Ruff formatting, Ruff lint, `ty check src tests` with zero diagnostics, and `uv lock --check`. Windows measures **78.26%** branch coverage, below 81%; the required 81% coverage gate remains Ubuntu/Python 3.14-only in CI, so its hosted result is runtime-unverified.
+- Documentation prebuild and clean Zensical site build passed. `uv build`, `twine check`, and `check-wheel-contents` passed. Bandit completed with only existing scoped `# nosec` findings; `pip-audit` found no known vulnerabilities.
+- A clean isolated wheel environment imported Untether, `untether.lockfile`, Telegram transport, and Codex, Claude, Pi, OMP, Grok, Agy, OpenCode, Gemini, and Amp runners.
 
 ## G. Roadmap-only carryover
 

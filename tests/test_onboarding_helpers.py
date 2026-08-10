@@ -155,10 +155,12 @@ def test_onboarding_state_helpers(tmp_path: Path) -> None:
     assert state.bot_ref == "@untether_bot"
 
 
-def test_display_path(tmp_path: Path) -> None:
+def test_display_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     home_path = Path.home() / "untether" / "cfg.toml"
     assert onboarding.display_path(home_path).startswith("~/")
-    assert onboarding.display_path(tmp_path / "cfg.toml") == str(tmp_path / "cfg.toml")
+    outside_home = tmp_path / "outside-home" / "cfg.toml"
+    monkeypatch.setattr(onboarding.Path, "home", lambda: Path("C:/unrelated-home"))
+    assert onboarding.display_path(outside_home) == str(outside_home).replace("\\", "/")
 
 
 def test_build_transport_patch_requires_fields(tmp_path: Path) -> None:

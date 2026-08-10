@@ -76,6 +76,13 @@ _EXACT_ALLOW: frozenset[str] = frozenset(
         "TMP",
         "TEMP",
         "TZ",
+        # Windows process startup — retained for native command resolution and
+        # DLL loading when engine subprocesses use an explicit environment.
+        "COMSPEC",
+        "SYSTEMROOT",
+        "WINDIR",
+        "SYSTEMDRIVE",
+        "PATHEXT",
         # CLI UX — tools that respect these render nicely for both
         # humans and our JSONL parser (which expects no ANSI).
         "NO_COLOR",
@@ -166,6 +173,11 @@ _PREFIX_ALLOW: tuple[str, ...] = (
 )
 
 
+def _normalise_name(name: str) -> str:
+    """Match Windows environment variable names case-insensitively."""
+    return name.upper() if os.name == "nt" else name
+
+
 def is_allowed(name: str) -> bool:
     """Return True if ``name`` is in the engine-subprocess env allowlist.
 
@@ -173,9 +185,10 @@ def is_allowed(name: str) -> bool:
     :mod:`untether.utils.env_audit` so the allowlist remains a single
     source of truth. Promoted from the previous private ``_is_allowed``.
     """
-    if name in _EXACT_ALLOW:
+    normalised = _normalise_name(name)
+    if normalised in _EXACT_ALLOW:
         return True
-    return any(name.startswith(prefix) for prefix in _PREFIX_ALLOW)
+    return any(normalised.startswith(prefix) for prefix in _PREFIX_ALLOW)
 
 
 def is_allowed_with_extras(

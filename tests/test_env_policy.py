@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import sys
+
+import pytest
+
 from untether.utils.env_policy import (
     _is_allowed,
     _reset_log_latch_for_tests,
@@ -44,6 +48,49 @@ class TestExactAllowlist:
             "SHELL": "/bin/zsh",
             "TERM": "xterm",
             "LANG": "en_AU.UTF-8",
+        }
+        assert filtered_env(src) == src
+
+    def test_windows_process_variables_pass(self):
+        src = {
+            "COMSPEC": r"C:\Windows\System32\cmd.exe",
+            "SYSTEMROOT": r"C:\Windows",
+            "WINDIR": r"C:\Windows",
+            "SYSTEMDRIVE": "C:",
+            "PATHEXT": ".COM;.EXE;.BAT;.CMD",
+        }
+        assert filtered_env(src) == src
+
+    def test_host_windows_environment_casing_passes(self, monkeypatch):
+        monkeypatch.setattr(
+            "untether.utils.env_policy.os.environ",
+            {
+                "COMSPEC": r"C:\Windows\System32\cmd.exe",
+                "SYSTEMROOT": r"C:\Windows",
+                "WINDIR": r"C:\Windows",
+                "SYSTEMDRIVE": "C:",
+                "PATHEXT": ".COM;.EXE;.BAT;.CMD",
+            },
+        )
+        assert filtered_env() == {
+            "COMSPEC": r"C:\Windows\System32\cmd.exe",
+            "SYSTEMROOT": r"C:\Windows",
+            "WINDIR": r"C:\Windows",
+            "SYSTEMDRIVE": "C:",
+            "PATHEXT": ".COM;.EXE;.BAT;.CMD",
+        }
+
+    def test_windows_systemdrive_passes(self):
+        assert is_allowed("SYSTEMDRIVE") is True
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="Windows environment casing")
+    def test_windows_process_variables_allow_native_casing(self):
+        src = {
+            "ComSpec": r"C:\Windows\System32\cmd.exe",
+            "SystemRoot": r"C:\Windows",
+            "windir": r"C:\Windows",
+            "SystemDrive": "C:",
+            "PathExt": ".COM;.EXE;.BAT;.CMD",
         }
         assert filtered_env(src) == src
 

@@ -40,7 +40,7 @@ def test_pi_resume_format_and_extract(tmp_path: Path) -> None:
     session_path = tmp_path / "session.jsonl"
     token = ResumeToken(engine=ENGINE, value=str(session_path))
 
-    assert runner.format_resume(token) == f"`pi --session {session_path}`"
+    assert runner.format_resume(token) == f'`pi --session "{session_path}"`'
     assert runner.extract_resume(f"`pi --session {session_path}`") == token
     assert runner.extract_resume(f'pi --session "{session_path}"') == token
     assert runner.extract_resume("`codex resume sid`") is None

@@ -1,5 +1,6 @@
 import sys
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any, cast
 
 import anyio
@@ -14,6 +15,36 @@ from untether.model import (
     UntetherEvent,
 )
 from untether.runners.codex import CodexRunner, find_exec_only_flag
+
+
+def _fixture_python() -> str:
+    return getattr(sys, "_base_executable", sys.executable)
+
+
+def _portable_fixture_command(path):
+    """Return an executable fixture path on both POSIX and Windows."""
+    if sys.platform != "win32":
+        path.chmod(0o755)
+        return path
+    source = path.with_suffix(".py")
+    path.replace(source)
+    wrapper = path.with_suffix(".cmd")
+    wrapper.write_text(
+        f'@echo off\r\n"{_fixture_python()}" "{source}" %*\r\n', encoding="utf-8"
+    )
+    return wrapper
+
+
+class _FixtureCodexRunner(CodexRunner):
+    def __init__(self, *, script: Path) -> None:
+        super().__init__(codex_cmd=str(script), extra_args=[])
+        self._script = script
+
+    def command_args(self) -> list[str]:
+        if sys.platform == "win32":
+            return [_fixture_python(), str(self._script.with_suffix(".py"))]
+        return super().command_args()
+
 
 CODEX_ENGINE = "codex"
 
@@ -199,13 +230,13 @@ async def test_run_serializes_new_session_after_session_is_known(
         "sys.exit(0)\n",
         encoding="utf-8",
     )
-    codex_path.chmod(0o755)
+    codex_path = _portable_fixture_command(codex_path)
 
     monkeypatch.setenv("CODEX_TEST_GATE", str(gate_path))
     monkeypatch.setenv("CODEX_TEST_RESUME_MARKER", str(resume_marker))
     monkeypatch.setenv("CODEX_TEST_THREAD_ID", thread_id)
 
-    runner = CodexRunner(codex_cmd=str(codex_path), extra_args=[])
+    runner = _FixtureCodexRunner(script=codex_path)
 
     session_started = anyio.Event()
     resume_value: str | None = None
@@ -260,9 +291,9 @@ async def test_codex_runner_preserves_warning_order(tmp_path) -> None:
         "print(json.dumps({'type': 'item.completed', 'item': {'id': 'item_0', 'type': 'agent_message', 'text': 'ok'}}), flush=True)\n",
         encoding="utf-8",
     )
-    codex_path.chmod(0o755)
+    codex_path = _portable_fixture_command(codex_path)
 
-    runner = CodexRunner(codex_cmd=str(codex_path), extra_args=[])
+    runner = _FixtureCodexRunner(script=codex_path)
     seen = [evt async for evt in runner.run("hi", None)]
 
     assert len(seen) == 3
@@ -296,9 +327,9 @@ async def test_codex_runner_reconnect_notice_is_non_fatal(tmp_path) -> None:
         "print(json.dumps({'type': 'item.completed', 'item': {'id': 'item_0', 'type': 'agent_message', 'text': 'ok'}}), flush=True)\n",
         encoding="utf-8",
     )
-    codex_path.chmod(0o755)
+    codex_path = _portable_fixture_command(codex_path)
 
-    runner = CodexRunner(codex_cmd=str(codex_path), extra_args=[])
+    runner = _FixtureCodexRunner(script=codex_path)
     seen = [evt async for evt in runner.run("hi", None)]
 
     assert len(seen) == 3
@@ -334,9 +365,9 @@ async def test_codex_runner_reconnect_notice_updates_phase(tmp_path) -> None:
         "print(json.dumps({'type': 'turn.completed', 'usage': {'input_tokens': 1, 'cached_input_tokens': 0, 'output_tokens': 1}}), flush=True)\n",
         encoding="utf-8",
     )
-    codex_path.chmod(0o755)
+    codex_path = _portable_fixture_command(codex_path)
 
-    runner = CodexRunner(codex_cmd=str(codex_path), extra_args=[])
+    runner = _FixtureCodexRunner(script=codex_path)
     seen = [evt async for evt in runner.run("hi", None)]
 
     assert len(seen) == 4
@@ -369,9 +400,9 @@ async def test_codex_runner_prefers_final_answer_phase(tmp_path) -> None:
         "print(json.dumps({'type': 'turn.completed', 'usage': {'input_tokens': 1, 'cached_input_tokens': 0, 'output_tokens': 1}}), flush=True)\n",
         encoding="utf-8",
     )
-    codex_path.chmod(0o755)
+    codex_path = _portable_fixture_command(codex_path)
 
-    runner = CodexRunner(codex_cmd=str(codex_path), extra_args=[])
+    runner = _FixtureCodexRunner(script=codex_path)
     seen = [evt async for evt in runner.run("hi", None)]
 
     assert len(seen) == 4
@@ -405,9 +436,9 @@ async def test_codex_runner_legacy_agent_message_no_phase(tmp_path) -> None:
         "print(json.dumps({'type': 'turn.completed', 'usage': {'input_tokens': 1, 'cached_input_tokens': 0, 'output_tokens': 1}}), flush=True)\n",
         encoding="utf-8",
     )
-    codex_path.chmod(0o755)
+    codex_path = _portable_fixture_command(codex_path)
 
-    runner = CodexRunner(codex_cmd=str(codex_path), extra_args=[])
+    runner = _FixtureCodexRunner(script=codex_path)
     seen = [evt async for evt in runner.run("hi", None)]
 
     completed = next(evt for evt in seen if isinstance(evt, CompletedEvent))
@@ -433,9 +464,9 @@ async def test_codex_runner_collab_tool_call_does_not_break_stream(tmp_path) -> 
         "print(json.dumps({'type': 'turn.completed', 'usage': {'input_tokens': 1, 'cached_input_tokens': 0, 'output_tokens': 1}}), flush=True)\n",
         encoding="utf-8",
     )
-    codex_path.chmod(0o755)
+    codex_path = _portable_fixture_command(codex_path)
 
-    runner = CodexRunner(codex_cmd=str(codex_path), extra_args=[])
+    runner = _FixtureCodexRunner(script=codex_path)
     seen = [evt async for evt in runner.run("hi", None)]
 
     completed = next(evt for evt in seen if isinstance(evt, CompletedEvent))
@@ -460,9 +491,9 @@ async def test_codex_runner_unknown_item_type_does_not_break_stream(tmp_path) ->
         "print(json.dumps({'type': 'turn.completed', 'usage': {'input_tokens': 1, 'cached_input_tokens': 0, 'output_tokens': 1}}), flush=True)\n",
         encoding="utf-8",
     )
-    codex_path.chmod(0o755)
+    codex_path = _portable_fixture_command(codex_path)
 
-    runner = CodexRunner(codex_cmd=str(codex_path), extra_args=[])
+    runner = _FixtureCodexRunner(script=codex_path)
     seen = [evt async for evt in runner.run("hi", None)]
 
     completed = next(evt for evt in seen if isinstance(evt, CompletedEvent))
@@ -482,9 +513,9 @@ async def test_codex_runner_includes_stderr_reason(tmp_path) -> None:
         "sys.exit(1)\n",
         encoding="utf-8",
     )
-    codex_path.chmod(0o755)
+    codex_path = _portable_fixture_command(codex_path)
 
-    runner = CodexRunner(codex_cmd=str(codex_path), extra_args=[])
+    runner = _FixtureCodexRunner(script=codex_path)
     events = [evt async for evt in runner.run("hi", None)]
 
     completed = next(evt for evt in events if isinstance(evt, CompletedEvent))
@@ -518,12 +549,12 @@ async def test_run_serializes_two_new_sessions_same_thread(
         "sys.exit(0)\n",
         encoding="utf-8",
     )
-    codex_path.chmod(0o755)
+    codex_path = _portable_fixture_command(codex_path)
 
     monkeypatch.setenv("CODEX_TEST_GATE", str(gate_path))
     monkeypatch.setenv("CODEX_TEST_THREAD_ID", thread_id)
 
-    runner = CodexRunner(codex_cmd=str(codex_path), extra_args=[])
+    runner = _FixtureCodexRunner(script=codex_path)
 
     started_first = anyio.Event()
     started_second = anyio.Event()
@@ -555,6 +586,7 @@ async def test_run_serializes_two_new_sessions_same_thread(
             await started_second.wait()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="requires os.fork")
 @pytest.mark.anyio
 async def test_watchdog_force_closes_orphaned_pipes(tmp_path, monkeypatch) -> None:
     """When subprocess dies but stdout stays open, watchdog force-closes pipes."""
@@ -607,9 +639,9 @@ async def test_jsonl_stream_state_tracks_events(tmp_path) -> None:
         "print(json.dumps({'type': 'item.completed', 'item': {'id': 'item_0', 'type': 'agent_message', 'text': 'ok'}}), flush=True)\n",
         encoding="utf-8",
     )
-    codex_path.chmod(0o755)
+    codex_path = _portable_fixture_command(codex_path)
 
-    runner = CodexRunner(codex_cmd=str(codex_path), extra_args=[])
+    runner = _FixtureCodexRunner(script=codex_path)
     events = [evt async for evt in runner.run("hi", None)]
 
     # Verify stream tracking
@@ -652,9 +684,9 @@ async def test_jsonl_stream_state_skips_control_channel_events(tmp_path) -> None
         "print(json.dumps({'type': 'control_response', 'request_id': 'req_1', 'response': {'subtype': 'success'}}), flush=True)\n",
         encoding="utf-8",
     )
-    codex_path.chmod(0o755)
+    codex_path = _portable_fixture_command(codex_path)
 
-    runner = CodexRunner(codex_cmd=str(codex_path), extra_args=[])
+    runner = _FixtureCodexRunner(script=codex_path)
     _ = [evt async for evt in runner.run("hi", None)]
 
     stream = runner.current_stream
@@ -698,9 +730,9 @@ async def test_liveness_stall_increments_counter(tmp_path) -> None:
         "time.sleep(1.0)\n",
         encoding="utf-8",
     )
-    codex_path.chmod(0o755)
+    codex_path = _portable_fixture_command(codex_path)
 
-    runner = CodexRunner(codex_cmd=str(codex_path), extra_args=[])
+    runner = _FixtureCodexRunner(script=codex_path)
     # Tight timing so the watchdog fires within the test's runtime
     runner._LIVENESS_TIMEOUT_SECONDS = 0.2
     runner._WATCHDOG_POLL_SECONDS = 0.05
@@ -853,9 +885,9 @@ async def test_watchdog_demotes_to_approval_pending_when_control_request_recent(
         "time.sleep(1.0)\n",
         encoding="utf-8",
     )
-    codex_path.chmod(0o755)
+    codex_path = _portable_fixture_command(codex_path)
 
-    runner = CodexRunner(codex_cmd=str(codex_path), extra_args=[])
+    runner = _FixtureCodexRunner(script=codex_path)
     runner._LIVENESS_TIMEOUT_SECONDS = 0.2
     runner._WATCHDOG_POLL_SECONDS = 0.05
     runner._WATCHDOG_GRACE_SECONDS = 0.5
@@ -912,9 +944,9 @@ async def test_watchdog_warn_still_fires_when_no_control_request(tmp_path) -> No
         "time.sleep(1.0)\n",
         encoding="utf-8",
     )
-    codex_path.chmod(0o755)
+    codex_path = _portable_fixture_command(codex_path)
 
-    runner = CodexRunner(codex_cmd=str(codex_path), extra_args=[])
+    runner = _FixtureCodexRunner(script=codex_path)
     runner._LIVENESS_TIMEOUT_SECONDS = 0.2
     runner._WATCHDOG_POLL_SECONDS = 0.05
     runner._WATCHDOG_GRACE_SECONDS = 0.5

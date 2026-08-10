@@ -191,7 +191,9 @@ def display_path(path: Path) -> str:
     try:
         candidate = path.resolve(strict=False)
         home_resolved = home.resolve(strict=False)
-        if candidate.is_relative_to(home_resolved) and str(path).replace("\\", "/").startswith(str(home).replace("\\", "/") + "/"):
+        if candidate.is_relative_to(home_resolved) and str(path).replace(
+            "\\", "/"
+        ).startswith(str(home).replace("\\", "/") + "/"):
             return f"~/{candidate.relative_to(home_resolved)}".replace("\\", "/")
     except (OSError, ValueError):
         pass

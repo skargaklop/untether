@@ -23,6 +23,24 @@ from untether.runners.claude import (
 from untether.schemas import claude as claude_schema
 
 
+def _fixture_python() -> str:
+    return getattr(sys, "_base_executable", sys.executable)
+
+
+def _portable_fixture_command(path: Path) -> Path:
+    """Return an executable fixture path on both POSIX and Windows."""
+    if sys.platform != "win32":
+        path.chmod(0o755)
+        return path
+    source = path.with_suffix(".py")
+    path.replace(source)
+    wrapper = path.with_suffix(".cmd")
+    wrapper.write_text(
+        f'@echo off\r\n"{_fixture_python()}" "{source}" %*\r\n', encoding="utf-8"
+    )
+    return wrapper
+
+
 def _load_fixture(
     name: str, *, session_id: str | None = None
 ) -> list[claude_schema.StreamJsonMessage]:
@@ -2346,7 +2364,7 @@ async def test_run_serializes_new_session_after_session_is_known(
         "sys.exit(0)\n",
         encoding="utf-8",
     )
-    claude_path.chmod(0o755)
+    claude_path = _portable_fixture_command(claude_path)
 
     monkeypatch.setenv("CLAUDE_TEST_GATE", str(gate_path))
     monkeypatch.setenv("CLAUDE_TEST_RESUME_MARKER", str(resume_marker))
@@ -2434,7 +2452,7 @@ async def test_run_strips_anthropic_api_key_by_default(tmp_path, monkeypatch) ->
         "raise SystemExit(0)\n",
         encoding="utf-8",
     )
-    claude_path.chmod(0o755)
+    claude_path = _portable_fixture_command(claude_path)
 
     monkeypatch.setenv("ANTHROPIC_API_KEY", "secret")
 

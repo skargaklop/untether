@@ -501,9 +501,7 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
     def format_resume(self, token: ResumeToken) -> str:
         if token.engine != ENGINE:
             raise RuntimeError(f"resume token is for engine {token.engine!r}")
-        # Paths are already one argv token in the runner; display them without
-        # shell quoting so resume text stays stable across platforms.
-        return f"`pi --session {token.value}`"
+        return f"`pi --session {self._quote_token(token.value)}`"
 
     def run(
         self, prompt: str, resume: ResumeToken | None
