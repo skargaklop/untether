@@ -1,8 +1,8 @@
 import re
 from collections.abc import AsyncIterator
-from typing import Any
-import anyio
+from typing import Any, cast
 
+import anyio
 import pytest
 
 import untether.runner as runner_module
@@ -393,12 +393,13 @@ async def test_jsonl_run_impl_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     events = [evt async for evt in runner.run_impl("hello", None)]
     assert any(isinstance(evt, CompletedEvent) for evt in events)
 
+
 @pytest.mark.anyio
 async def test_jsonl_timeout_completion_includes_runner_engine() -> None:
     """Timeouts become terminal events that identify their originating runner."""
 
     class _NeverReturns:
-        async def readline(self) -> bytes:
+        async def readline(self) -> bytes | None:
             await anyio.sleep_forever()
 
     runner = _DummyJsonlRunner()
@@ -637,7 +638,7 @@ async def test_drain_stderr_capture() -> None:
 
         tg.start_soon(_write)
         await drain_stderr(
-            receive,
+            cast(Any, receive),
             __import__("structlog").get_logger(),
             "test",
             capture,  # type: ignore[arg-type]
@@ -663,7 +664,9 @@ async def test_drain_stderr_no_capture() -> None:
                 await send.send(b"hello\n")
 
         tg.start_soon(_write)
-        await drain_stderr(receive, __import__("structlog").get_logger(), "test")  # type: ignore[arg-type]
+        await drain_stderr(
+            cast(Any, receive), __import__("structlog").get_logger(), "test"
+        )
 
 
 # ===========================================================================

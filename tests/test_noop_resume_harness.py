@@ -28,7 +28,7 @@ import select
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import anyio
 import pytest
@@ -142,7 +142,7 @@ async def test_harness_dangling_then_empty_resume_recovers_fresh(
         await _run_bounded(
             handle_message(
                 cfg,
-                runner=runner,
+                runner=cast(Any, runner),
                 incoming=IncomingMessage(
                     channel_id=123, message_id=10, text="please continue"
                 ),
@@ -196,7 +196,7 @@ async def test_harness_healthy_resume_no_recovery(
         await _run_bounded(
             handle_message(
                 cfg,
-                runner=runner,
+                runner=cast(Any, runner),
                 incoming=IncomingMessage(
                     channel_id=123, message_id=11, text="please continue"
                 ),
@@ -383,7 +383,7 @@ async def test_harness_w4_diverts_fresh_when_prior_owner_will_not_hand_off(
             await _run_bounded(
                 handle_message(
                     cfg,
-                    runner=runner,
+                    runner=cast(Any, runner),
                     incoming=IncomingMessage(
                         channel_id=99, message_id=1, text="follow up"
                     ),
@@ -451,7 +451,7 @@ async def test_667_cancel_midflight_captures_proc_returncode(
     async def _drive() -> None:
         await handle_message(
             cfg,
-            runner=runner,
+            runner=cast(Any, runner),
             incoming=IncomingMessage(
                 channel_id=7, message_id=1, text="do a slow thing"
             ),

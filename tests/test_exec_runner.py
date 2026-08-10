@@ -1,5 +1,6 @@
 import sys
 from collections.abc import AsyncIterator
+from typing import Any, cast
 
 import anyio
 import pytest
@@ -39,7 +40,7 @@ async def test_run_serializes_same_session() -> None:
         finally:
             in_flight -= 1
 
-    runner.run_impl = run_stub  # type: ignore[assignment]
+    runner.run_impl = cast(Any, run_stub)
 
     async def drain(prompt: str, resume: ResumeToken | None) -> None:
         async for _event in runner.run(prompt, resume):
@@ -76,7 +77,7 @@ async def test_run_allows_parallel_new_sessions() -> None:
         finally:
             in_flight -= 1
 
-    runner.run_impl = run_stub  # type: ignore[assignment]
+    runner.run_impl = cast(Any, run_stub)
 
     async def drain(prompt: str, resume: ResumeToken | None) -> None:
         async for _event in runner.run(prompt, resume):
@@ -112,7 +113,7 @@ async def test_run_allows_parallel_different_sessions() -> None:
         finally:
             in_flight -= 1
 
-    runner.run_impl = run_stub  # type: ignore[assignment]
+    runner.run_impl = cast(Any, run_stub)
 
     async def drain(prompt: str, resume: ResumeToken | None) -> None:
         async for _event in runner.run(prompt, resume):
@@ -953,7 +954,7 @@ def test_resume_line_proxy_current_stream_forwarding() -> None:
     stream = JsonlStreamState(expected_session=None)
     runner.current_stream = stream
 
-    proxy = _ResumeLineProxy(runner=runner)
+    proxy = _ResumeLineProxy(runner=cast(Any, runner))
     assert proxy.current_stream is stream
 
 
@@ -964,7 +965,7 @@ def test_resume_line_proxy_current_stream_none() -> None:
     runner = CodexRunner(codex_cmd="codex", extra_args=[])
     runner.current_stream = None
 
-    proxy = _ResumeLineProxy(runner=runner)
+    proxy = _ResumeLineProxy(runner=cast(Any, runner))
     assert proxy.current_stream is None
 
 
@@ -1016,7 +1017,7 @@ async def test_base_iter_jsonl_breaks_on_did_emit_completed() -> None:
         await anyio.Event().wait()
         yield b"never reached"
 
-    runner.iter_json_lines = fake_iter_json_lines  # type: ignore[assignment]
+    runner.iter_json_lines = cast(Any, fake_iter_json_lines)
 
     stream = JsonlStreamState(expected_session=None)
     logger = structlog.get_logger()

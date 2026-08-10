@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 import anyio
 import pytest
@@ -291,7 +291,7 @@ async def test_answer_callback_query_does_not_call_outbox_enqueue() -> None:
             "Telegram rate-limits per callback-query-id, not per chat."
         )
 
-    client._outbox.enqueue = exploding_enqueue  # type: ignore[assignment]
+    client._outbox.enqueue = cast(Any, exploding_enqueue)
 
     result = await client.answer_callback_query(
         callback_query_id="cb-fast",
@@ -477,6 +477,7 @@ async def test_retry_after_retries_once() -> None:
     )
 
     assert result is not None
+    assert isinstance(result, Message)
     assert result.message_id == 1
     assert bot._edit_attempts == 2
 

@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import anyio
 import msgspec
@@ -518,7 +519,7 @@ async def test_run_serializes_same_session() -> None:
         finally:
             in_flight -= 1
 
-    runner.run_impl = run_stub  # type: ignore[assignment]
+    runner.run_impl = cast(Any, run_stub)
 
     async def drain(prompt: str, resume: ResumeToken | None) -> None:
         async for _event in runner.run(prompt, resume):
@@ -663,6 +664,7 @@ class TestDecodeErrorEvents:
         assert len(events) == 1
         event = events[0]
         assert isinstance(event, ActionEvent)
+        assert event.message is not None
         assert "question" in event.message
 
     def test_unsupported_type_permission(self) -> None:
@@ -674,6 +676,7 @@ class TestDecodeErrorEvents:
         events = runner.decode_error_events(raw=raw, line=raw, error=error, state=state)
         assert len(events) == 1
         assert isinstance(events[0], ActionEvent)
+        assert events[0].message is not None
         assert "permission" in events[0].message
 
     def test_unextractable_type_returns_empty(self) -> None:
@@ -777,8 +780,8 @@ def test_build_runner_falls_back_to_opencode_config(
     config.write_text(json.dumps({"model": "openai/gpt-4o"}))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     runner = build_runner({}, tmp_path / "untether.toml")
-    assert runner.model == "openai/gpt-4o"
-    assert runner.session_title == "openai/gpt-4o"
+    assert cast(OpenCodeRunner, runner).model == "openai/gpt-4o"
+    assert cast(OpenCodeRunner, runner).session_title == "openai/gpt-4o"
 
 
 def test_build_runner_prefers_untether_config(
@@ -791,7 +794,7 @@ def test_build_runner_prefers_untether_config(
     runner = build_runner(
         {"model": "anthropic/claude-sonnet"}, tmp_path / "untether.toml"
     )
-    assert runner.model == "anthropic/claude-sonnet"
+    assert cast(OpenCodeRunner, runner).model == "anthropic/claude-sonnet"
 
 
 def test_build_runner_no_opencode_config(
@@ -799,5 +802,5 @@ def test_build_runner_no_opencode_config(
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     runner = build_runner({}, tmp_path / "untether.toml")
-    assert runner.model is None
-    assert runner.session_title == "opencode"
+    assert cast(OpenCodeRunner, runner).model is None
+    assert cast(OpenCodeRunner, runner).session_title == "opencode"

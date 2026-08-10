@@ -1,4 +1,5 @@
 from pathlib import Path, PureWindowsPath
+from typing import Any, cast
 from unittest.mock import patch
 
 import anyio
@@ -197,7 +198,7 @@ async def test_run_keeps_resume_path(tmp_path: Path) -> None:
             answer="ok",
         )
 
-    runner.run_impl = run_stub  # type: ignore[assignment]
+    runner.run_impl = cast(Any, run_stub)
     resume = ResumeToken(engine=ENGINE, value=str(session_path))
     async for _event in runner.run("test", resume):
         pass
@@ -231,7 +232,7 @@ async def test_run_serializes_same_session() -> None:
         finally:
             in_flight -= 1
 
-    runner.run_impl = run_stub  # type: ignore[assignment]
+    runner.run_impl = cast(Any, run_stub)
 
     async def drain(prompt: str, resume: ResumeToken | None) -> None:
         async for _event in runner.run(prompt, resume):
