@@ -57,7 +57,7 @@ def _isolated_quarantine_store(tmp_path):
 
 
 @pytest.fixture(autouse=True)
-def _clear_cancel_dedup() -> None:
+def _clear_cancel_dedup():
     """#525: ``_RECENT_CANCELS`` is module-level state that persists across
     tests. Without an explicit clear, two tests using the same
     ``(chat_id, progress_message_id)`` pair within ~1 second wall-clock

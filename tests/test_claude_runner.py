@@ -2282,7 +2282,7 @@ async def test_run_serializes_same_session() -> None:
         finally:
             in_flight -= 1
 
-    runner.run_impl = run_stub  # type: ignore[assignment]
+    runner.run_impl = run_stub  # ty: ignore[invalid-assignment]
 
     async def drain(prompt: str, resume: ResumeToken | None) -> None:
         async for _event in runner.run(prompt, resume):
@@ -4179,13 +4179,15 @@ class TestLoopObservation:
             return None
 
         class _Transport:
+            async def close(self) -> None: ...
+
             async def send(self, **_):
                 return None
 
             async def edit(self, **_):
                 return None
 
-            async def delete(self, _ref):
+            async def delete(self, *, ref):
                 return None
 
         async with anyio.create_task_group() as tg:
@@ -4485,8 +4487,8 @@ def test_first_user_message_text_captured_in_new_state() -> None:
         allowed_tools=[],
         extra_args=[],
         dangerously_skip_permissions=False,
-        use_api_billing=None,
-        session_title=None,
+        use_api_billing=False,
+        session_title="claude",
     )
     state = runner.new_state("user typed /loop X", None)
     assert state.first_user_message_text == "user typed /loop X"

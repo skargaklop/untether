@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from untether.model import ResumeToken
 from untether.router import AutoRouter, RunnerEntry
 from untether.runners.claude import ClaudeRunner
@@ -9,8 +11,8 @@ def _router() -> tuple[AutoRouter, ClaudeRunner, CodexRunner]:
     claude = ClaudeRunner(claude_cmd="claude")
     router = AutoRouter(
         entries=[
-            RunnerEntry(engine=claude.engine, runner=claude),
-            RunnerEntry(engine=codex.engine, runner=codex),
+            RunnerEntry(engine=claude.engine, runner=cast(Any, claude)),
+            RunnerEntry(engine=codex.engine, runner=cast(Any, codex)),
         ],
         default_engine=codex.engine,
     )

@@ -61,6 +61,7 @@ def _make_ctx(
 async def test_ping_returns_pong() -> None:
     result = await BACKEND.handle(_make_ctx())
     assert isinstance(result, CommandResult)
+    assert isinstance(result, CommandResult)
     assert result.text.startswith("\U0001f3d3 pong")
     assert result.notify is True
     # No trigger line when manager absent.
@@ -83,8 +84,8 @@ def _make_manager(**overrides):
 
 @pytest.mark.anyio
 async def test_ping_no_trigger_line_when_empty() -> None:
-    mgr = _make_manager()
-    result = await BACKEND.handle(_make_ctx(chat_id=1, trigger_manager=mgr))
+    result = await BACKEND.handle(_make_ctx(chat_id=1, trigger_manager=_make_manager()))
+    assert isinstance(result, CommandResult)
     assert "\u23f0 triggers" not in result.text
 
 
@@ -102,6 +103,7 @@ async def test_ping_single_cron_targeting_chat() -> None:
         ]
     )
     result = await BACKEND.handle(_make_ctx(chat_id=5000, trigger_manager=mgr))
+    assert isinstance(result, CommandResult)
     assert "\u23f0 triggers: 1 cron (daily-review, 9:00 AM daily (Melbourne))" in (
         result.text
     )
@@ -116,6 +118,7 @@ async def test_ping_multiple_crons_shows_count() -> None:
         ]
     )
     result = await BACKEND.handle(_make_ctx(chat_id=10, trigger_manager=mgr))
+    assert isinstance(result, CommandResult)
     assert "\u23f0 triggers: 2 crons" in result.text
 
 
@@ -133,6 +136,7 @@ async def test_ping_webhooks_appear_when_targeting_chat() -> None:
         ]
     )
     result = await BACKEND.handle(_make_ctx(chat_id=999, trigger_manager=mgr))
+    assert isinstance(result, CommandResult)
     assert "\u23f0 triggers: 1 webhook" in result.text
 
 
@@ -142,6 +146,7 @@ async def test_ping_other_chat_not_affected() -> None:
         crons=[{"id": "a", "schedule": "0 9 * * *", "prompt": "x", "chat_id": 10}]
     )
     result = await BACKEND.handle(_make_ctx(chat_id=999, trigger_manager=mgr))
+    assert isinstance(result, CommandResult)
     assert "\u23f0 triggers" not in result.text
 
 
@@ -152,6 +157,7 @@ async def test_ping_default_chat_fallback_matches_unscoped_triggers() -> None:
     result = await BACKEND.handle(
         _make_ctx(chat_id=555, trigger_manager=mgr, default_chat_id=555)
     )
+    assert isinstance(result, CommandResult)
     assert "\u23f0 triggers: 1 cron (any," in result.text
 
 
@@ -166,6 +172,7 @@ async def test_ping_paused_indicator() -> None:
     )
     mgr.pause()
     result = await BACKEND.handle(_make_ctx(chat_id=10, trigger_manager=mgr))
+    assert isinstance(result, CommandResult)
     assert "⏸ triggers paused" in result.text
     assert "(suspended)" in result.text
     # Active prefix must NOT appear (no double-rendering).
@@ -181,5 +188,6 @@ async def test_ping_resumed_indicator() -> None:
     mgr.pause()
     mgr.resume()
     result = await BACKEND.handle(_make_ctx(chat_id=10, trigger_manager=mgr))
+    assert isinstance(result, CommandResult)
     assert "⏰ triggers:" in result.text
     assert "⏸ triggers paused" not in result.text

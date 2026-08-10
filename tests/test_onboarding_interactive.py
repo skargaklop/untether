@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import partial
+from typing import Any, cast
 
 import anyio
 
@@ -109,7 +110,9 @@ def test_interactive_setup_writes_config(monkeypatch, tmp_path) -> None:
     config_path = tmp_path / "untether.toml"
     monkeypatch.setattr(onboarding, "HOME_CONFIG_PATH", config_path)
 
-    backend = EngineBackend(id="codex", build_runner=lambda _cfg, _path: None)
+    backend = EngineBackend(
+        id="codex", build_runner=lambda _cfg, _path: cast(Any, None)
+    )
     monkeypatch.setattr(onboarding, "list_backends", lambda: [backend])
     monkeypatch.setattr(onboarding.shutil, "which", lambda _cmd: "/usr/bin/codex")
 
@@ -156,7 +159,9 @@ def test_interactive_setup_preserves_projects(monkeypatch, tmp_path) -> None:
     )
     monkeypatch.setattr(onboarding, "HOME_CONFIG_PATH", config_path)
 
-    backend = EngineBackend(id="codex", build_runner=lambda _cfg, _path: None)
+    backend = EngineBackend(
+        id="codex", build_runner=lambda _cfg, _path: cast(Any, None)
+    )
     monkeypatch.setattr(onboarding, "list_backends", lambda: [backend])
     monkeypatch.setattr(onboarding.shutil, "which", lambda _cmd: "/usr/bin/codex")
 
@@ -192,7 +197,9 @@ def test_interactive_setup_no_agents_aborts(monkeypatch, tmp_path) -> None:
     config_path = tmp_path / "untether.toml"
     monkeypatch.setattr(onboarding, "HOME_CONFIG_PATH", config_path)
 
-    backend = EngineBackend(id="codex", build_runner=lambda _cfg, _path: None)
+    backend = EngineBackend(
+        id="codex", build_runner=lambda _cfg, _path: cast(Any, None)
+    )
     monkeypatch.setattr(onboarding, "list_backends", lambda: [backend])
     monkeypatch.setattr(onboarding.shutil, "which", lambda _cmd: None)
 
@@ -228,7 +235,9 @@ def test_interactive_setup_recovers_from_malformed_toml(monkeypatch, tmp_path) -
     config_path.write_text(bad_toml, encoding="utf-8")
     monkeypatch.setattr(onboarding, "HOME_CONFIG_PATH", config_path)
 
-    backend = EngineBackend(id="codex", build_runner=lambda _cfg, _path: None)
+    backend = EngineBackend(
+        id="codex", build_runner=lambda _cfg, _path: cast(Any, None)
+    )
     monkeypatch.setattr(onboarding, "list_backends", lambda: [backend])
     monkeypatch.setattr(onboarding.shutil, "which", lambda _cmd: "/usr/bin/codex")
 

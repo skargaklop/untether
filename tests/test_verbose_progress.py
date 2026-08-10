@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from untether.markdown import (
     MarkdownFormatter,
@@ -180,7 +180,9 @@ class TestFormatVerboseDetail:
         assert result is None
 
     def test_none_detail(self):
-        action = Action(id="1", kind="tool", title="unknown", detail=None)  # type: ignore[arg-type]
+        action = Action(
+            id="1", kind="tool", title="unknown", detail=cast(dict[str, Any], None)
+        )
         result = format_verbose_detail(action)
         assert result is None
 

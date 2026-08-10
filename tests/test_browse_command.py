@@ -163,7 +163,7 @@ class TestRegistryTrimming:
         import untether.telegram.commands.browse as mod
 
         old_max = mod._MAX_REGISTRY
-        mod._MAX_REGISTRY = 3  # type: ignore[assignment]
+        mod._MAX_REGISTRY = 3  # ty: ignore[invalid-assignment]
         try:
             _register_path("/a")
             _register_path("/b")

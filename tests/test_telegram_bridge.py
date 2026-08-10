@@ -3971,7 +3971,7 @@ async def test_598_edit_failed_log_includes_reason() -> None:
     from untether.telegram.bridge import TelegramTransport
 
     bot = _FailingEditBot("Bad Request: message to edit not found")
-    transport = TelegramTransport(bot)  # type: ignore[arg-type]
+    transport = TelegramTransport(cast(Any, bot))
     ref = MessageRef(channel_id=123, message_id=916)
 
     with capture_logs() as logs:
@@ -3998,7 +3998,7 @@ async def test_598_not_modified_treated_as_noop() -> None:
     from untether.telegram.bridge import TelegramTransport
 
     bot = _FailingEditBot("Bad Request: message is not modified")
-    transport = TelegramTransport(bot)  # type: ignore[arg-type]
+    transport = TelegramTransport(cast(Any, bot))
     ref = MessageRef(channel_id=123, message_id=916)
 
     with capture_logs() as logs:
@@ -4022,7 +4022,7 @@ async def test_598_edit_failed_tolerates_bot_without_pop() -> None:
         async def edit_message_text(self, **kwargs: Any) -> None:
             return None
 
-    transport = TelegramTransport(_PlainFailingBot())  # type: ignore[arg-type]
+    transport = TelegramTransport(cast(Any, _PlainFailingBot()))
     ref = MessageRef(channel_id=123, message_id=917)
 
     with capture_logs() as logs:
@@ -4047,7 +4047,7 @@ async def test_598_superseded_edit_is_noop_not_failure() -> None:
         async def edit_message_text(self, **kwargs: Any) -> Any:
             return SUPERSEDED
 
-    transport = TelegramTransport(_SupersedingBot())  # type: ignore[arg-type]
+    transport = TelegramTransport(cast(Any, _SupersedingBot()))
     ref = MessageRef(channel_id=123, message_id=1561)
 
     with capture_logs() as logs:

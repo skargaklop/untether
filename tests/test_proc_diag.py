@@ -293,7 +293,7 @@ def test_process_diag_defaults() -> None:
 def test_process_diag_frozen() -> None:
     diag = ProcessDiag(pid=1, alive=True)
     with pytest.raises(AttributeError):
-        diag.pid = 2  # type: ignore[misc]
+        object.__setattr__(diag, "pid", 2)
 
 
 # ---------------------------------------------------------------------------

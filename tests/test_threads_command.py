@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shutil
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -68,7 +68,7 @@ def _make_ctx(args_text: str = "", command: str = "threads") -> CommandContext:
         reply_text=None,
         config_path=None,
         plugin_config={},
-        runtime=FakeRuntime(),  # type: ignore[arg-type]
+        runtime=cast(Any, FakeRuntime()),
         executor=FakeExecutor(),  # type: ignore[arg-type]
     )
 

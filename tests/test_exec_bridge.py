@@ -2,6 +2,7 @@ import contextlib
 import os
 import sys
 import uuid
+from typing import Any, cast
 
 import anyio
 import pytest
@@ -186,7 +187,7 @@ def test_codex_extract_resume_accepts_plain_line() -> None:
     sys.version_info < (3, 14), reason="uuid.uuid7 requires Python 3.14+"
 )
 def test_codex_extract_resume_accepts_uuid7() -> None:
-    uuid7 = uuid.uuid7  # type: ignore[attr-defined]
+    uuid7 = cast(Any, uuid).uuid7
     token = str(uuid7())
     runner = CodexRunner(codex_cmd="codex", extra_args=[])
     text = f"`codex resume {token}`"
@@ -522,14 +523,11 @@ def _make_edits(
 ) -> ProgressEdits:
     if clock is None:
         clock = _FakeClock()
-    # #481: thread the FakeClock into the tracker so ActionState
-    # timestamps align with the bridge's clock (otherwise long-running
-    # action age computations would mix wall-clock and fake clock).
     tracker = ProgressTracker(engine="codex", clock=clock)
     progress_ref = MessageRef(channel_id=123, message_id=1)
     return ProgressEdits(
         transport=transport,
-        presenter=presenter,
+        presenter=cast(Any, presenter),
         channel_id=123,
         progress_ref=progress_ref,
         tracker=tracker,
@@ -5401,6 +5399,7 @@ class TestHandleStuckAfterToolResult:
         assert edits._stuck_state is not None
         assert edits._stuck_state.recovery_attempted is False
         assert edits._stuck_state.cancelled is False
+        assert edits.cancel_event is not None
         assert not edits.cancel_event.is_set()
 
     @pytest.mark.anyio
@@ -5431,8 +5430,10 @@ class TestHandleStuckAfterToolResult:
             diag=diag, mcp_server="cloudflare-observability", last_action=None
         )
         assert result == "recovery"
+        assert edits._stuck_state is not None
         assert edits._stuck_state.recovery_attempted is True
         assert killed == [99999]
+        assert edits.cancel_event is not None
         assert not edits.cancel_event.is_set()
 
     @pytest.mark.anyio
@@ -5451,6 +5452,7 @@ class TestHandleStuckAfterToolResult:
         await edits._handle_stuck_after_tool_result(
             diag=diag, mcp_server=None, last_action=None
         )
+        assert edits._stuck_state is not None
         assert edits._stuck_state.recovery_attempted is True
 
         # Advance clock past recovery_delay; Tier 3 should cancel.
@@ -5459,10 +5461,12 @@ class TestHandleStuckAfterToolResult:
             diag=diag, mcp_server="cloudflare-observability", last_action=None
         )
         assert result == "cancelled"
+        assert edits._stuck_state is not None
         assert edits._stuck_state.cancelled is True
+        assert edits.cancel_event is not None
         assert edits.cancel_event.is_set()
         # The cancellation message was sent to the transport
-        texts = [c["message"].text for c in edits.transport.send_calls]
+        texts = [c["message"].text for c in cast(Any, edits.transport).send_calls]
         assert any("stuck after tool_result" in t for t in texts)
         assert any("#322" in t for t in texts)
 
@@ -7421,7 +7425,7 @@ async def _drive_cancel_mid_delivery(
     async def drive() -> None:
         outcome_box.append(
             await run_runner_with_cancel(
-                runner,  # type: ignore[arg-type]
+                cast(Any, runner),
                 prompt="p",
                 resume_token=None,
                 edits=edits,

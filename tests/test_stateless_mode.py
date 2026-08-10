@@ -10,6 +10,7 @@ Stateless mode (session_mode="stateless") is the handoff workflow:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 import anyio
 import pytest
@@ -182,7 +183,7 @@ class TestResumeResolverStateless:
         """No explicit token, no reply → no resume (new run)."""
         resolver = ResumeResolver(
             cfg=_make_stateless_cfg(),
-            task_group=_NoopTaskGroup(),
+            task_group=cast(Any, _NoopTaskGroup()),
             running_tasks={},
             enqueue_resume=_noop_enqueue,
             topic_store=None,
@@ -208,7 +209,7 @@ class TestResumeResolverStateless:
         token = ResumeToken(engine=CODEX_ENGINE, value="explicit123")
         resolver = ResumeResolver(
             cfg=_make_stateless_cfg(),
-            task_group=_NoopTaskGroup(),
+            task_group=cast(Any, _NoopTaskGroup()),
             running_tasks={},
             enqueue_resume=_noop_enqueue,
             topic_store=None,
@@ -233,7 +234,7 @@ class TestResumeResolverStateless:
         """With chat_session_store=None, no stored session is looked up."""
         resolver = ResumeResolver(
             cfg=_make_stateless_cfg(),
-            task_group=_NoopTaskGroup(),
+            task_group=cast(Any, _NoopTaskGroup()),
             running_tasks={},
             enqueue_resume=_noop_enqueue,
             topic_store=None,

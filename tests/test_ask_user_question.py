@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -569,9 +570,7 @@ async def test_answer_with_options_includes_answers_in_input() -> None:
     _ASK_QUESTION_FLOWS["req-opts-b"] = flow
 
     await answer_ask_question_with_options("req-opts-b")
-
-    assert isinstance(stored_input["answers"], dict)
-    assert stored_input["answers"]["Colour?"] == "Red"
+    assert cast(dict[str, Any], stored_input["answers"])["Colour?"] == "Red"
 
 
 @pytest.mark.anyio
@@ -759,7 +758,7 @@ async def test_send_next_ask_question_message_uses_rendered_message() -> None:
     transport = _RecordingTransport()
 
     await send_next_ask_question_message(
-        transport,  # type: ignore[arg-type]
+        cast(Any, transport),
         chat_id=-12345,
         user_msg_id=678,
         thread_id=42,
@@ -802,16 +801,14 @@ async def test_send_next_ask_question_message_no_thread() -> None:
     transport = _RecordingTransport()
 
     await send_next_ask_question_message(
-        transport,  # type: ignore[arg-type]
+        cast(Any, transport),
         chat_id=-9999,
         user_msg_id=1,
         thread_id=None,
         flow=flow,
     )
-
     _, _, options = transport.sent[0]
-    assert isinstance(options, SendOptions)
-    assert options.thread_id is None
+    assert cast(SendOptions, options).thread_id is None
 
 
 # ---------------------------------------------------------------------------

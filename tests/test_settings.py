@@ -985,7 +985,7 @@ def test_loop_settings_rejects_unknown_keys() -> None:
     from untether.settings import LoopSettings
 
     with pytest.raises(ValidationError):
-        LoopSettings(budget_per_loop_usd=5.0)  # cost caps live in [cost_budget]
+        LoopSettings.model_validate({"budget_per_loop_usd": 5.0})
 
 
 def test_594_voice_key_with_embedded_newline_rejected(tmp_path: Path) -> None:

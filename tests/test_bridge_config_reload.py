@@ -46,7 +46,7 @@ class TestUnfrozen:
     def test_cfg_keeps_slots(self, cfg: TelegramBridgeConfig):
         """slots=True still prevents creating arbitrary new attributes."""
         with pytest.raises(AttributeError):
-            cfg.not_a_real_field = 42  # type: ignore[attr-defined]
+            cfg.not_a_real_field = 42  # ty: ignore[unresolved-attribute]
 
     def test_dataclass_is_unfrozen(self):
         """dataclasses.is_dataclass confirms the @dataclass decorator remained."""

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from untether.utils.transient_failures import (
     TransientFailure,
     classify_transient_failure,
@@ -12,7 +14,7 @@ from untether.utils.transient_failures import (
 class TestClassifyTransientFailure:
     def test_empty(self) -> None:
         assert classify_transient_failure("") is None
-        assert classify_transient_failure(None) is None  # type: ignore[arg-type]
+        assert classify_transient_failure(cast(str, None)) is None
 
     def test_whitespace_only(self) -> None:
         assert classify_transient_failure("   ") is None

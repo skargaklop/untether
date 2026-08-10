@@ -1,8 +1,7 @@
 """Observable compact/handoff confirmation contracts."""
 
-from __future__ import annotations
-
 import time
+from typing import Any, cast
 
 import pytest
 
@@ -115,7 +114,7 @@ async def test_callback_allowlist_rejects_before_confirmation_claim() -> None:
 
     transport = FakeTransport()
     cfg = make_cfg(transport)
-    cfg.allowed_user_ids = {30}
+    cfg.allowed_user_ids = (30,)
     record = _record()
     registry = {record.token: record}
     update = TelegramCallbackQuery(
@@ -131,7 +130,7 @@ async def test_callback_allowlist_rejects_before_confirmation_claim() -> None:
     await handle_compact_callback(cfg, update, registry, _Scheduler(), object())
 
     assert registry[record.token] is record
-    assert cfg.bot.callback_calls[-1]["text"] == "Not authorised"
+    assert cast(Any, cfg.bot).callback_calls[-1]["text"] == "Not authorised"
 
 
 @pytest.mark.anyio
@@ -229,7 +228,7 @@ async def test_handoff_route_commit_rolls_back_first_store_on_second_failure() -
             self.fail = fail
 
         async def get_session_resume(self, *_args: object) -> ResumeToken | None:
-            return self.current
+            return cast(ResumeToken | None, self.current)
 
         async def set_session_resume(self, *_args: object) -> None:
             if self.fail:
@@ -247,9 +246,9 @@ async def test_handoff_route_commit_rolls_back_first_store_on_second_failure() -
 
     with pytest.raises(OSError, match="write failed"):
         await _commit_handoff_routing(
-            topic_store=topic_store,
+            topic_store=cast(Any, topic_store),
             topic_key=(10, 20),
-            chat_session_store=chat_store,
+            chat_session_store=cast(Any, chat_store),
             chat_session_key=(10, 30),
             destination=destination,
         )

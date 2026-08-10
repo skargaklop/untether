@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -62,7 +63,7 @@ class _FakeTransport:
 
 
 def _engine_backend() -> EngineBackend:
-    return EngineBackend(id="codex", build_runner=lambda _cfg, _path: None)
+    return EngineBackend(id="codex", build_runner=lambda _cfg, _path: cast(Any, None))
 
 
 def _settings() -> UntetherSettings:

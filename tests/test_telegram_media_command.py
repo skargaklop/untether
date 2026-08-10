@@ -1,5 +1,6 @@
 from dataclasses import replace
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -124,7 +125,7 @@ async def test_media_group_uses_chat_prefs_bound_context(monkeypatch) -> None:
         cfg,
         [msg],
         topic_store=None,
-        chat_prefs=_FakeChatPrefs(RunContext(project="auditor-toolkit")),
+        chat_prefs=cast(Any, _FakeChatPrefs(RunContext(project="auditor-toolkit"))),
     )
 
     ambient = captured["ambient_context"]
