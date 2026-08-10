@@ -2394,7 +2394,9 @@ class ProgressEdits:
         if engine_state is not None:
             has_live_background_work: Callable[[Any], bool] | None = None
             try:
-                from .runners.claude import has_live_background_work as _has_live_background_work
+                from .runners.claude import (
+                    has_live_background_work as _has_live_background_work,
+                )
 
                 has_live_background_work = _has_live_background_work
             except ImportError:
@@ -3803,12 +3805,11 @@ async def handle_message(
             except Exception:  # noqa: BLE001
                 logger.debug("session.quarantine_check_failed", exc_info=True)
                 _poison_was_quarantined = None
+            _resume_for_log = completed.resume or run_outcome.resume
             logger.warning(
                 "runner.empty_result",
                 engine=runner.engine,
-                resume=(completed.resume or run_outcome.resume).value
-                if (completed.resume or run_outcome.resume)
-                else None,
+                resume=_resume_for_log.value if _resume_for_log is not None else None,
                 was_resume=resume_token is not None,
                 raw_subtype=(completed.usage or {}).get("subtype"),
                 is_error=run_ok is False,
@@ -4329,11 +4330,20 @@ async def handle_message(
             if _run_root is not None:
                 _oc = cfg.outbox_config
                 try:
+                    _channel_id = incoming.channel_id
+                    _thread_id = incoming.thread_id
+                    _reply_to_id = user_ref.message_id
+                    if not isinstance(_channel_id, int):
+                        raise TypeError("outbox channel id must be an integer")
+                    if _thread_id is not None and not isinstance(_thread_id, int):
+                        raise TypeError("outbox thread id must be an integer")
+                    if not isinstance(_reply_to_id, int):
+                        raise TypeError("outbox reply id must be an integer")
                     result = await deliver_outbox_files(
                         send_file=cfg.send_file,
-                        channel_id=incoming.channel_id,
-                        thread_id=incoming.thread_id,
-                        reply_to_msg_id=user_ref.message_id,
+                        channel_id=_channel_id,
+                        thread_id=_thread_id,
+                        reply_to_msg_id=_reply_to_id,
                         run_root=_run_root,
                         outbox_dir=_oc.outbox_dir,
                         deny_globs=_oc.deny_globs,
@@ -4510,11 +4520,20 @@ async def handle_message(
             _outbox_result: OutboxResult | None = None
             if run_ok is not False:
                 try:
+                    _channel_id = incoming.channel_id
+                    _thread_id = incoming.thread_id
+                    _reply_to_id = user_ref.message_id
+                    if not isinstance(_channel_id, int):
+                        raise TypeError("outbox channel id must be an integer")
+                    if _thread_id is not None and not isinstance(_thread_id, int):
+                        raise TypeError("outbox thread id must be an integer")
+                    if not isinstance(_reply_to_id, int):
+                        raise TypeError("outbox reply id must be an integer")
                     _outbox_result = await deliver_outbox_files(
                         send_file=cfg.send_file,
-                        channel_id=incoming.channel_id,
-                        thread_id=incoming.thread_id,
-                        reply_to_msg_id=user_ref.message_id,
+                        channel_id=_channel_id,
+                        thread_id=_thread_id,
+                        reply_to_msg_id=_reply_to_id,
                         run_root=_run_root,
                         outbox_dir=_oc.outbox_dir,
                         deny_globs=_oc.deny_globs,
