@@ -18,7 +18,7 @@ import pytest
 
 from untether import loop_scheduler
 from untether.context import RunContext
-from untether.transport import MessageRef
+from untether.transport import MessageRef, RenderedMessage, SendOptions
 
 pytestmark = pytest.mark.anyio
 
@@ -28,20 +28,35 @@ pytestmark = pytest.mark.anyio
 
 @dataclass
 class FakeTransport:
-    sent: list[Any] = None  # type: ignore[assignment]
+    sent: list[Any]
 
-    def __post_init__(self):
+    def __init__(self) -> None:
         self.sent = []
 
-    async def send(self, *, channel_id, message, options=None, **_):
+    async def close(self) -> None:
+        return None
+
+    async def send(
+        self,
+        *,
+        channel_id: int | str,
+        message: RenderedMessage,
+        options: SendOptions | None = None,
+    ) -> MessageRef:
         self.sent.append((channel_id, message.text, options))
         return MessageRef(channel_id=channel_id, message_id=9999)
 
-    async def edit(self, *, ref, message, **_):
+    async def edit(
+        self,
+        *,
+        ref: MessageRef,
+        message: RenderedMessage,
+        wait: bool = True,
+    ) -> MessageRef:
         return ref
 
-    async def delete(self, ref):
-        return None
+    async def delete(self, *, ref: MessageRef) -> bool:
+        return True
 
 
 class RunJobRecorder:
@@ -203,6 +218,7 @@ class TestRegisterCron:
                     engine_override="claude",
                 )
                 entry = loop_scheduler.pending_for_chat(11)[0]
+                assert entry.context is not None
                 assert entry.context.project == "acme"
                 assert entry.engine_override == "claude"
             finally:

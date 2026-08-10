@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import anyio
 import pytest
 
-from untether.commands import CommandContext
+from untether.commands import CommandContext, CommandExecutor
 from untether.context import RunContext
 from untether.telegram import at_scheduler
 from untether.telegram.commands.at import AtCommand, _format_delay, _parse_args
-from untether.transport import MessageRef
+from untether.transport import MessageRef, RenderedMessage, SendOptions
+from untether.transport_runtime import TransportRuntime
 
 pytestmark = pytest.mark.anyio
+
+
+# ── Parse tests ─────────────────────────────────────────────────────────
 
 
 # ── Parse tests ─────────────────────────────────────────────────────────
@@ -84,20 +88,35 @@ class TestFormatDelay:
 
 @dataclass
 class FakeTransport:
-    sent: list[Any] = None  # type: ignore[assignment]
+    sent: list[Any]
 
-    def __post_init__(self):
+    def __init__(self) -> None:
         self.sent = []
 
-    async def send(self, *, channel_id, message, options=None, **_):
+    async def close(self) -> None:
+        return None
+
+    async def send(
+        self,
+        *,
+        channel_id: int | str,
+        message: RenderedMessage,
+        options: SendOptions | None = None,
+    ) -> MessageRef:
         self.sent.append((channel_id, message.text, options))
         return MessageRef(channel_id=channel_id, message_id=9999)
 
-    async def edit(self, *, ref, message, **_):
+    async def edit(
+        self,
+        *,
+        ref: MessageRef,
+        message: RenderedMessage,
+        wait: bool = True,
+    ) -> MessageRef:
         return ref
 
-    async def delete(self, ref):
-        return None
+    async def delete(self, *, ref: MessageRef) -> bool:
+        return True
 
 
 class RunJobRecorder:
@@ -120,25 +139,18 @@ class _FakeRuntime:
         self,
         *,
         chat_to_context: dict[int, RunContext] | None = None,
-        engine_for_context: dict[str | None, str] | None = None,
-        global_default: str = "codex",
+        engine_for_context: dict[str, str] | None = None,
+        global_default: str = "claude",
     ):
         self._chat_to_context = chat_to_context or {}
         self._engine_for_context = engine_for_context or {}
         self._global_default = global_default
 
-    def default_context_for_chat(self, chat_id):
+    def default_context_for_chat(self, chat_id: int) -> RunContext | None:
         return self._chat_to_context.get(chat_id)
 
-    def resolve_engine(self, *, engine_override, context):
-        if engine_override is not None:
-            return engine_override
-        if context is None or context.project is None:
-            return self._global_default
+    def resolve_engine(self, context: RunContext) -> str:
         return self._engine_for_context.get(context.project, self._global_default)
-
-
-# ── AtCommand.handle tests ──────────────────────────────────────────────
 
 
 def _make_ctx(
@@ -158,8 +170,10 @@ def _make_ctx(
         reply_text=None,
         config_path=None,
         plugin_config={},
-        runtime=runtime if runtime is not None else _FakeRuntime(),
-        executor=None,  # type: ignore[arg-type]
+        runtime=cast(
+            TransportRuntime, runtime if runtime is not None else _FakeRuntime()
+        ),
+        executor=cast(CommandExecutor, None),
     )
 
 
@@ -360,9 +374,8 @@ class TestAtScheduler:
         transport = FakeTransport()
         captured_context = RunContext(project="pi-test", branch=None)
 
-        # Patch MIN_DELAY_SECONDS to allow a 1s schedule for fast firing.
         original_min = at_scheduler.MIN_DELAY_SECONDS
-        at_scheduler.MIN_DELAY_SECONDS = 1
+        at_scheduler.MIN_DELAY_SECONDS = cast(Any, 1)
         try:
             async with anyio.create_task_group() as tg:
                 at_scheduler.install(tg, recorder, transport, 555)
