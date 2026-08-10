@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import cast
 
 import pytest
 
+from untether.commands import CommandContext
 from untether.telegram.commands.export import (
     _SESSION_HISTORY,
     ExportCommand,
@@ -99,21 +101,17 @@ class TestExportChatIsolation:
         @dataclass
         class FakeCtx:
             args_text: str = "json"
-            message: FakeMessage = None  # type: ignore[assignment]
-
-            def __post_init__(self):
-                if self.message is None:
-                    self.message = FakeMessage()
+            message: FakeMessage = field(default_factory=FakeMessage)
 
         # Chat A should get sess_a (claude), not sess_b (opencode)
         ctx_a = FakeCtx(message=FakeMessage(channel_id=CHAT_A))
-        result_a = await cmd.handle(ctx_a)  # type: ignore[arg-type]
+        result_a = await cmd.handle(cast(CommandContext, ctx_a))
         assert result_a is not None
         assert "claude" in result_a.text.lower() or "sess_a" in result_a.text
 
         # Chat B should get sess_b (opencode)
         ctx_b = FakeCtx(message=FakeMessage(channel_id=CHAT_B))
-        result_b = await cmd.handle(ctx_b)  # type: ignore[arg-type]
+        result_b = await cmd.handle(cast(CommandContext, ctx_b))
         assert result_b is not None
         assert "opencode" in result_b.text.lower() or "sess_b" in result_b.text
 
@@ -131,14 +129,10 @@ class TestExportChatIsolation:
         @dataclass
         class FakeCtx:
             args_text: str = "md"
-            message: FakeMessage = None  # type: ignore[assignment]
-
-            def __post_init__(self):
-                if self.message is None:
-                    self.message = FakeMessage()
+            message: FakeMessage = field(default_factory=FakeMessage)
 
         ctx = FakeCtx()
-        result = await cmd.handle(ctx)  # type: ignore[arg-type]
+        result = await cmd.handle(cast(CommandContext, ctx))
         assert result is not None
         assert "no session history" in result.text.lower()
 

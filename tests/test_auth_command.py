@@ -1,11 +1,11 @@
 """Tests for /auth command backend."""
 
-from __future__ import annotations
-
+from typing import cast
 from unittest.mock import patch
 
 import pytest
 
+from untether.commands import CommandContext
 from untether.telegram.commands.auth import (
     AuthCommand,
     parse_device_code,
@@ -91,7 +91,7 @@ async def test_auth_no_args_shows_codex_info() -> None:
         executor = None
 
     cmd = AuthCommand()
-    result = await cmd.handle(FakeCtx())
+    result = await cmd.handle(cast(CommandContext, FakeCtx()))
     assert "/auth codex" in result.text
     assert "Only Codex" in result.text
     assert "terminal" in result.text
@@ -116,7 +116,7 @@ async def test_auth_non_codex_engine_shows_info() -> None:
         executor = None
 
     cmd = AuthCommand()
-    result = await cmd.handle(FakeCtx())
+    result = await cmd.handle(cast(CommandContext, FakeCtx()))
     assert "Only Codex" in result.text
 
 
@@ -140,7 +140,7 @@ async def test_auth_cli_not_found() -> None:
 
     cmd = AuthCommand()
     with patch("untether.telegram.commands.auth.shutil.which", return_value=None):
-        result = await cmd.handle(FakeCtx())
+        result = await cmd.handle(cast(CommandContext, FakeCtx()))
     assert "not found" in result.text
 
 
@@ -172,7 +172,7 @@ async def test_auth_concurrent_guard() -> None:
             "untether.telegram.commands.auth.shutil.which",
             return_value="/usr/bin/codex",
         ):
-            result = await cmd.handle(FakeCtx())
+            result = await cmd.handle(cast(CommandContext, FakeCtx()))
         assert "already in progress" in result.text
     finally:
         auth_mod._auth_running = old_value

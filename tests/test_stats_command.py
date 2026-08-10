@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import time
+from dataclasses import field
+from typing import cast
 from unittest.mock import patch
 
 import pytest
 
+from untether.commands import CommandContext
 from untether.session_stats import AggregatedStats
 from untether.telegram.commands.stats import (
     StatsCommand,
@@ -196,9 +199,8 @@ async def test_stats_command_default() -> None:
         args: tuple = ()
         message = None
         reply_to = None
-        reply_text = None
+        plugin_config: dict = field(default_factory=dict)
         config_path = None
-        plugin_config: dict = None
         runtime = None
         executor = None
 
@@ -208,7 +210,7 @@ async def test_stats_command_default() -> None:
 
     cmd = StatsCommand()
     with patch("untether.telegram.commands.stats.get_stats", return_value=[]):
-        result = await cmd.handle(FakeCtx())
+        result = await cmd.handle(cast(CommandContext, FakeCtx()))
     assert result is not None
     assert result.parse_mode == "HTML"
 
@@ -225,9 +227,8 @@ async def test_stats_command_with_engine_and_period() -> None:
         args: tuple = ("claude", "week")
         message = None
         reply_to = None
-        reply_text = None
+        plugin_config: dict = field(default_factory=dict)
         config_path = None
-        plugin_config: dict = None
         runtime = None
         executor = None
 
@@ -239,7 +240,7 @@ async def test_stats_command_with_engine_and_period() -> None:
     with patch(
         "untether.telegram.commands.stats.get_stats", return_value=[]
     ) as mock_get:
-        result = await cmd.handle(FakeCtx())
+        result = await cmd.handle(cast(CommandContext, FakeCtx()))
     mock_get.assert_called_once_with(engine="claude", period="week")
     assert "This Week" in result.text
 
@@ -265,9 +266,8 @@ async def test_stats_auth_subcommand() -> None:
         args: tuple = ("auth",)
         message = None
         reply_to = None
-        reply_text = None
+        plugin_config: dict = field(default_factory=dict)
         config_path = None
-        plugin_config: dict = None
         runtime = None
         executor = None
 
@@ -280,7 +280,7 @@ async def test_stats_auth_subcommand() -> None:
         "untether.telegram.commands.stats.get_auth_status",
         return_value=["<b>claude</b>: \u2705 api_key"],
     ):
-        result = await cmd.handle(FakeCtx())
+        result = await cmd.handle(cast(CommandContext, FakeCtx()))
     assert "Auth Status" in result.text
     assert "claude" in result.text
     assert result.parse_mode == "HTML"
@@ -298,9 +298,8 @@ async def test_stats_auth_no_engines() -> None:
         args: tuple = ("auth",)
         message = None
         reply_to = None
-        reply_text = None
+        plugin_config: dict = field(default_factory=dict)
         config_path = None
-        plugin_config: dict = None
         runtime = None
         executor = None
 
@@ -313,5 +312,5 @@ async def test_stats_auth_no_engines() -> None:
         "untether.telegram.commands.stats.get_auth_status",
         return_value=[],
     ):
-        result = await cmd.handle(FakeCtx())
+        result = await cmd.handle(cast(CommandContext, FakeCtx()))
     assert "No engines found" in result.text

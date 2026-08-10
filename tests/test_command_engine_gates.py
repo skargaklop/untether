@@ -6,11 +6,13 @@ behaviour for engines that don't support the feature.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 import pytest
 
+from untether.commands import CommandContext
 from untether.telegram.commands._resolve_engine import resolve_effective_engine
 from untether.telegram.commands.planmode import PlanModeCommand
 from untether.telegram.commands.usage import UsageCommand
@@ -57,15 +59,13 @@ class FakeCommandContext:
     reply_to: FakeMessage | None = None
     reply_text: str | None = None
     config_path: Path | None = None
-    plugin_config: dict = None  # type: ignore[assignment]
+    plugin_config: dict = field(default_factory=dict)
     runtime: FakeTransportRuntime | None = None
     executor: object = None
 
     def __post_init__(self):
         if self.message is None:
             self.message = FakeMessage()
-        if self.plugin_config is None:
-            self.plugin_config = {}
         if self.runtime is None:
             self.runtime = FakeTransportRuntime()
 
@@ -79,7 +79,7 @@ class TestResolveEffectiveEngine:
     @pytest.mark.anyio
     async def test_returns_global_default_when_no_overrides(self):
         ctx = FakeCommandContext(runtime=FakeTransportRuntime(default_engine="codex"))
-        result = await resolve_effective_engine(ctx)  # type: ignore[arg-type]
+        result = await resolve_effective_engine(cast(CommandContext, ctx))
         assert result == "codex"
 
     @pytest.mark.anyio
@@ -89,7 +89,7 @@ class TestResolveEffectiveEngine:
                 default_engine="claude", project_engine="codex"
             )
         )
-        result = await resolve_effective_engine(ctx)  # type: ignore[arg-type]
+        result = await resolve_effective_engine(cast(CommandContext, ctx))
         assert result == "codex"
 
 
@@ -105,7 +105,7 @@ class TestUsageEngineGate:
             runtime=FakeTransportRuntime(default_engine="codex"),
         )
         cmd = UsageCommand()
-        result = await cmd.handle(ctx)  # type: ignore[arg-type]
+        result = await cmd.handle(cast(CommandContext, ctx))
         assert result is not None
         assert "not available" in result.text.lower()
         assert "codex" in result.text.lower()
@@ -116,7 +116,7 @@ class TestUsageEngineGate:
             runtime=FakeTransportRuntime(default_engine="pi"),
         )
         cmd = UsageCommand()
-        result = await cmd.handle(ctx)  # type: ignore[arg-type]
+        result = await cmd.handle(cast(CommandContext, ctx))
         assert result is not None
         assert "not available" in result.text.lower()
         assert "pi" in result.text.lower()
@@ -127,7 +127,7 @@ class TestUsageEngineGate:
             runtime=FakeTransportRuntime(default_engine="opencode"),
         )
         cmd = UsageCommand()
-        result = await cmd.handle(ctx)  # type: ignore[arg-type]
+        result = await cmd.handle(cast(CommandContext, ctx))
         assert result is not None
         assert "not available" in result.text.lower()
 
@@ -139,7 +139,7 @@ class TestUsageEngineGate:
             runtime=FakeTransportRuntime(default_engine="claude"),
         )
         cmd = UsageCommand()
-        result = await cmd.handle(ctx)  # type: ignore[arg-type]
+        result = await cmd.handle(cast(CommandContext, ctx))
         assert result is not None
         # Should get past the engine gate — either shows data or credential error
         assert "not available" not in result.text.lower()
@@ -159,7 +159,7 @@ class TestPlanModeEngineGate:
             runtime=FakeTransportRuntime(default_engine="codex"),
         )
         cmd = PlanModeCommand()
-        result = await cmd.handle(ctx)  # type: ignore[arg-type]
+        result = await cmd.handle(cast(CommandContext, ctx))
         assert result is not None
         assert "only available for claude" in result.text.lower()
         assert "codex" in result.text.lower()
@@ -172,7 +172,7 @@ class TestPlanModeEngineGate:
             runtime=FakeTransportRuntime(default_engine="codex"),
         )
         cmd = PlanModeCommand()
-        result = await cmd.handle(ctx)  # type: ignore[arg-type]
+        result = await cmd.handle(cast(CommandContext, ctx))
         assert result is not None
         assert "approval policy" in result.text.lower()
 
@@ -184,7 +184,7 @@ class TestPlanModeEngineGate:
             runtime=FakeTransportRuntime(default_engine="gemini"),
         )
         cmd = PlanModeCommand()
-        result = await cmd.handle(ctx)  # type: ignore[arg-type]
+        result = await cmd.handle(cast(CommandContext, ctx))
         assert result is not None
         assert "approval policy" in result.text.lower()
 
@@ -196,7 +196,7 @@ class TestPlanModeEngineGate:
             runtime=FakeTransportRuntime(default_engine="pi"),
         )
         cmd = PlanModeCommand()
-        result = await cmd.handle(ctx)  # type: ignore[arg-type]
+        result = await cmd.handle(cast(CommandContext, ctx))
         assert result is not None
         assert "only available for claude" in result.text.lower()
         # Pi doesn't have approval policy either, so no hint
@@ -213,7 +213,7 @@ class TestPlanModeEngineGate:
             ),
         )
         cmd = PlanModeCommand()
-        result = await cmd.handle(ctx)  # type: ignore[arg-type]
+        result = await cmd.handle(cast(CommandContext, ctx))
         assert result is not None
         assert "only available for claude" in result.text.lower()
 
@@ -253,7 +253,7 @@ class TestUsageDebugMode:
             args_text="debug",
         )
         cmd = UsageCommand()
-        result = await cmd.handle(ctx)  # type: ignore[arg-type]
+        result = await cmd.handle(cast(CommandContext, ctx))
         assert result is not None
         assert "debug" in result.text.lower()
         assert "OAuth token" in result.text
@@ -263,6 +263,6 @@ class TestUsageDebugMode:
             runtime=FakeTransportRuntime(default_engine="claude"),
             args_text="",
         )
-        result_plain = await cmd.handle(ctx_plain)  # type: ignore[arg-type]
+        result_plain = await cmd.handle(cast(CommandContext, ctx_plain))
         assert result_plain is not None
         assert "🔧 debug" not in result_plain.text
