@@ -9,12 +9,14 @@ Tests for:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import anyio
 import pytest
 
 from untether.runners.run_options import EngineRunOptions
+from untether.telegram.bridge import TelegramBridgeConfig
+from untether.telegram.chat_prefs import ChatPrefsStore
 from untether.telegram.engine_overrides import EngineOverrides
 from untether.telegram.loop import (
     _ANSWERED_ECHO_MAX,
@@ -27,6 +29,7 @@ from untether.telegram.loop import (
     _PendingPrompt,
     _resolve_engine_run_options,
 )
+from untether.telegram.topic_state import TopicStateStore
 from untether.telegram.types import TelegramIncomingMessage
 
 # ---------------------------------------------------------------------------
@@ -161,7 +164,7 @@ class TestResolveEngineRunOptions:
             chat_id=100,
             thread_id=None,
             engine="claude",
-            chat_prefs=prefs,
+            chat_prefs=cast(ChatPrefsStore, prefs),
             topic_store=None,
         )
         assert result is not None
@@ -177,7 +180,7 @@ class TestResolveEngineRunOptions:
             thread_id=5,
             engine="claude",
             chat_prefs=None,
-            topic_store=topic,
+            topic_store=cast(TopicStateStore, topic),
         )
         assert result is not None
         assert result.model == "sonnet-4"
@@ -195,15 +198,14 @@ class TestResolveEngineRunOptions:
             chat_id=100,
             thread_id=5,
             engine="claude",
-            chat_prefs=prefs,
-            topic_store=topic,
+            chat_prefs=cast(ChatPrefsStore, prefs),
+            topic_store=cast(TopicStateStore, topic),
         )
         assert result is not None
         assert result.model == "topic-model"
 
     @pytest.mark.anyio
     async def test_chat_fills_when_topic_has_no_model(self) -> None:
-        """If topic override exists but has no model, chat model fills in."""
         topic = FakeTopicStore(
             overrides={(100, 5, "claude"): EngineOverrides(reasoning="high")}
         )
@@ -214,8 +216,8 @@ class TestResolveEngineRunOptions:
             chat_id=100,
             thread_id=5,
             engine="claude",
-            chat_prefs=prefs,
-            topic_store=topic,
+            chat_prefs=cast(ChatPrefsStore, prefs),
+            topic_store=cast(TopicStateStore, topic),
         )
         assert result is not None
         assert result.model == "chat-model"
@@ -223,7 +225,6 @@ class TestResolveEngineRunOptions:
 
     @pytest.mark.anyio
     async def test_no_thread_skips_topic_store(self) -> None:
-        """Without a thread_id, topic_store is not consulted."""
         topic = FakeTopicStore(
             overrides={(100, 0, "claude"): EngineOverrides(model="topic-model")}
         )
@@ -234,23 +235,20 @@ class TestResolveEngineRunOptions:
             chat_id=100,
             thread_id=None,
             engine="claude",
-            chat_prefs=prefs,
-            topic_store=topic,
+            chat_prefs=cast(ChatPrefsStore, prefs),
+            topic_store=cast(TopicStateStore, topic),
         )
         assert result is not None
         assert result.model == "chat-model"
 
     @pytest.mark.anyio
     async def test_no_overrides_returns_none(self) -> None:
-        """Both stores present but no matching overrides → None."""
-        prefs = FakeChatPrefs()
-        topic = FakeTopicStore()
         result = await _resolve_engine_run_options(
             chat_id=100,
             thread_id=5,
             engine="claude",
-            chat_prefs=prefs,
-            topic_store=topic,
+            chat_prefs=cast(ChatPrefsStore, FakeChatPrefs()),
+            topic_store=cast(TopicStateStore, FakeTopicStore()),
         )
         assert result is None
 
@@ -263,7 +261,7 @@ class TestResolveEngineRunOptions:
             chat_id=100,
             thread_id=None,
             engine="claude",
-            chat_prefs=prefs,
+            chat_prefs=cast(ChatPrefsStore, prefs),
             topic_store=None,
         )
         assert result is not None
@@ -276,7 +274,7 @@ class TestResolveEngineRunOptions:
             chat_id=100,
             thread_id=None,
             engine="claude",
-            chat_prefs=prefs,
+            chat_prefs=cast(ChatPrefsStore, prefs),
             topic_store=None,
         )
         assert isinstance(result, EngineRunOptions)
@@ -293,7 +291,7 @@ class TestDrainBacklog:
         """No pending updates → returns offset immediately."""
         bot = FakeBot(responses=[[]])
         cfg = FakeConfig(bot=bot)
-        offset = await _drain_backlog(cfg, None)  # type: ignore[arg-type]
+        offset = await _drain_backlog(cast(TelegramBridgeConfig, cfg), None)
         assert offset is None
 
     @pytest.mark.anyio
@@ -307,7 +305,7 @@ class TestDrainBacklog:
             ]
         )
         cfg = FakeConfig(bot=bot)
-        offset = await _drain_backlog(cfg, None)  # type: ignore[arg-type]
+        offset = await _drain_backlog(cast(TelegramBridgeConfig, cfg), None)
         assert offset == 13  # last update_id (12) + 1
 
     @pytest.mark.anyio
@@ -315,7 +313,7 @@ class TestDrainBacklog:
         """get_updates returning None → returns the original offset."""
         bot = FakeBot(responses=[None])
         cfg = FakeConfig(bot=bot)
-        offset = await _drain_backlog(cfg, 5)  # type: ignore[arg-type]
+        offset = await _drain_backlog(cast(TelegramBridgeConfig, cfg), 5)
         assert offset == 5
 
     @pytest.mark.anyio
@@ -327,7 +325,7 @@ class TestDrainBacklog:
             ]
         )
         cfg = FakeConfig(bot=bot)
-        offset = await _drain_backlog(cfg, None)  # type: ignore[arg-type]
+        offset = await _drain_backlog(cast(TelegramBridgeConfig, cfg), None)
         assert offset == 101
 
     @pytest.mark.anyio
@@ -335,7 +333,7 @@ class TestDrainBacklog:
         """Starting with a non-None offset passes it through correctly."""
         bot = FakeBot(responses=[[]])
         cfg = FakeConfig(bot=bot)
-        offset = await _drain_backlog(cfg, 50)  # type: ignore[arg-type]
+        offset = await _drain_backlog(cast(TelegramBridgeConfig, cfg), 50)
         assert offset == 50
 
 

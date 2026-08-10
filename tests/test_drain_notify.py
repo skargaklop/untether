@@ -29,6 +29,21 @@ class FakeTransport:
         self.send_calls.append({"channel_id": channel_id, "text": message.text})
         return ref
 
+    async def close(self) -> None:
+        return None
+
+    async def edit(
+        self,
+        *,
+        ref: MessageRef,
+        message: RenderedMessage,
+        wait: bool = True,
+    ) -> MessageRef:
+        return ref
+
+    async def delete(self, *, ref: MessageRef) -> bool:
+        return True
+
 
 def _make_tasks(*channel_ids: int) -> dict[MessageRef, RunningTask]:
     """Create running_tasks dict with the given channel IDs."""
