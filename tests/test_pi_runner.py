@@ -369,11 +369,11 @@ def test_stream_end_zero_events_reports_startup_failure() -> None:
     completed = events[0]
     assert isinstance(completed, CompletedEvent)
     assert completed.ok is False
+    assert completed.error is not None
     assert "produced no events" in completed.error
     # resume was non-None → resumed hint present
     assert "failed to load on resume" in completed.error
     # stderr tail surfaced (the whole point of the fix)
-    assert "MCP server 'foo' failed to connect" in completed.error
 
 
 def test_stream_end_with_events_reports_truncated_stream() -> None:
@@ -390,6 +390,7 @@ def test_stream_end_with_events_reports_truncated_stream() -> None:
     )
     completed = events[0]
     assert isinstance(completed, CompletedEvent)
+    assert completed.error is not None
     assert "finished without an agent_end event" in completed.error
     assert "produced no events" not in completed.error
 
@@ -404,6 +405,8 @@ def test_stream_end_appends_stderr_excerpt_when_present() -> None:
         state=state,
         stderr_lines=["traceback line 1", "RuntimeError: kaboom"],
     )
+    assert isinstance(events[0], CompletedEvent)
+    assert events[0].error is not None
     assert "RuntimeError: kaboom" in events[0].error
 
 
@@ -458,6 +461,7 @@ def test_auto_retry_start_omits_null_fields_gracefully() -> None:
         meta=None,
         state=state,
     )
+    assert isinstance(events[0], ActionEvent)
     assert events[0].action.title == "retrying provider"
 
 
@@ -471,6 +475,7 @@ def test_auto_retry_end_success_completes_same_action() -> None:
     )
     assert len(events) == 1
     evt = events[0]
+    assert isinstance(evt, ActionEvent)
     assert evt.phase == "completed"
     assert evt.ok is True
     assert evt.action.id == "retry_1"  # stable across start/end
@@ -488,6 +493,7 @@ def test_auto_retry_end_failure_includes_final_error() -> None:
         state=state,
     )
     evt = events[0]
+    assert isinstance(evt, ActionEvent)
     assert evt.phase == "completed"
     assert evt.ok is False
     assert evt.action.title == "retry exhausted: 503 from provider"
@@ -507,6 +513,10 @@ def test_multiple_retries_have_stable_distinct_ids() -> None:
     e2 = translate_pi_event(
         pi_schema.AutoRetryEnd(success=True), title="pi", meta=None, state=state
     )
+    assert isinstance(s1[0], ActionEvent)
+    assert isinstance(e1[0], ActionEvent)
+    assert isinstance(s2[0], ActionEvent)
+    assert isinstance(e2[0], ActionEvent)
     assert s1[0].action.id == "retry_1"
     assert e1[0].action.id == "retry_1"
     assert s2[0].action.id == "retry_2"

@@ -212,6 +212,8 @@ def test_decode_advisor_tool_result_block_with_dict_content() -> None:
         },
     }
     decoded = claude_schema.decode_stream_json_line(json.dumps(payload).encode())
+    assert isinstance(decoded, claude_schema.StreamUserMessage)
+    assert isinstance(decoded.message.content, list)
     block = decoded.message.content[0]
     assert isinstance(block, claude_schema.StreamAdvisorToolResultBlock)
     assert block.tool_use_id == "adv_501"

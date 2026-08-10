@@ -390,6 +390,7 @@ def test_ask_question_multi_question_counter() -> None:
     )
     events = translate_claude_event(event, title="claude", state=state, factory=factory)
     assert len(events) == 1
+    assert isinstance(events[0], ActionEvent)
     assert "1 of 2" in events[0].action.title
 
 
@@ -440,6 +441,7 @@ def test_option_buttons_callback_data_format() -> None:
         }
     )
     events = translate_claude_event(event, title="claude", state=state, factory=factory)
+    assert isinstance(events[0], ActionEvent)
     detail = events[0].action.detail
     kb = detail["inline_keyboard"]["buttons"]
     cb_data = [b["callback_data"] for row in kb for b in row]
@@ -568,8 +570,7 @@ async def test_answer_with_options_includes_answers_in_input() -> None:
 
     await answer_ask_question_with_options("req-opts-b")
 
-    # The stored_input should now have "answers" key
-    assert "answers" in stored_input
+    assert isinstance(stored_input["answers"], dict)
     assert stored_input["answers"]["Colour?"] == "Red"
 
 
@@ -787,6 +788,7 @@ async def test_send_next_ask_question_message_no_thread() -> None:
     from untether.telegram.commands.ask_question import (
         send_next_ask_question_message,
     )
+    from untether.transport import SendOptions
 
     flow = AskQuestionState(
         request_id="req-488-b",
@@ -808,6 +810,7 @@ async def test_send_next_ask_question_message_no_thread() -> None:
     )
 
     _, _, options = transport.sent[0]
+    assert isinstance(options, SendOptions)
     assert options.thread_id is None
 
 

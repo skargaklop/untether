@@ -195,6 +195,7 @@ def test_translate_tool_result_error() -> None:
         meta=None,
     )
     assert len(events) == 1
+    assert isinstance(events[0], ActionEvent)
     assert events[0].ok is False
 
 
@@ -366,6 +367,7 @@ def test_snake_case_tool_names() -> None:
         meta=None,
     )
     assert len(events) == 1
+    assert isinstance(events[0], ActionEvent)
     assert events[0].action.kind == "tool"
     assert "test.py" in events[0].action.title
 
@@ -383,6 +385,7 @@ def test_snake_case_tool_names() -> None:
         meta=None,
     )
     assert len(events2) == 1
+    assert isinstance(events2[0], ActionEvent)
     assert events2[0].action.kind == "file_change"
 
 

@@ -280,6 +280,7 @@ class TestFooterWithMetaLine:
         parts = formatter.render_final_parts(
             state, elapsed_s=5.0, status="done", answer="ok"
         )
+        assert parts.footer is not None
         lines = parts.footer.split(HARD_BREAK)
         assert lines[0] == ""  # blank line for visual separation
         assert lines[1] == "\u21a9\ufe0f `codex resume t-1`"

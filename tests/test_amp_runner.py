@@ -195,6 +195,7 @@ def test_translate_tool_result_error() -> None:
         meta=None,
     )
     assert len(events) == 1
+    assert isinstance(events[0], ActionEvent)
     assert events[0].ok is False
 
 
@@ -511,6 +512,7 @@ def test_subagent_parent_tool_use_id_tracked() -> None:
         meta=None,
     )
     assert len(result_events) == 1
+    assert isinstance(result_events[0], ActionEvent)
     assert result_events[0].action.detail["parent_tool_use_id"] == "toolu_parent_01"
 
 
@@ -542,6 +544,7 @@ def test_no_parent_tool_use_id_when_absent() -> None:
         meta=None,
     )
     assert len(events) == 1
+    assert isinstance(events[0], ActionEvent)
     assert "parent_tool_use_id" not in events[0].action.detail
 
 

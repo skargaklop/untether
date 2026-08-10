@@ -1,5 +1,6 @@
 import contextlib
 import json
+import os
 import signal
 import sys
 import time
@@ -1688,19 +1689,23 @@ def test_translate_rate_limit_event_surfaces_as_action() -> None:
     # started + completed so the progress bar shows a finished note
     assert len(events) == 2
     assert all(isinstance(e, ActionEvent) for e in events)
-    assert events[0].phase == "started"
-    assert events[1].phase == "completed"
-    assert events[0].action.kind == "note"
-    assert "⏳" in events[0].action.title
-    assert "retrying in 47s" in events[0].action.title
-    assert events[1].ok is True
-    assert events[1].level == "info"
+    first = events[0]
+    second = events[1]
+    assert isinstance(first, ActionEvent)
+    assert isinstance(second, ActionEvent)
+    assert first.phase == "started"
+    assert second.phase == "completed"
+    assert first.action.kind == "note"
+    assert "⏳" in first.action.title
+    assert "retrying in 47s" in first.action.title
+    assert second.ok is True
+    assert second.level == "info"
     # Cumulative counter feeds the future footer annotation / /stats surface
     assert state.rate_limit_count == 1
     assert state.rate_limit_total_s == 47.0
     # Detail dict preserves the raw retry_after_ms for callers that want it
-    assert events[0].action.detail.get("retry_after_ms") == 47_000
-    assert events[0].action.detail.get("tokens_remaining") == 0
+    assert first.action.detail.get("retry_after_ms") == 47_000
+    assert first.action.detail.get("tokens_remaining") == 0
 
 
 def test_translate_rate_limit_event_accumulates_across_throttles() -> None:
@@ -1740,6 +1745,7 @@ def test_translate_rate_limit_event_bare_event_latches_default_wait() -> None:
         factory=state.factory,
     )
     assert len(events) == 2
+    assert isinstance(events[0], ActionEvent)
     assert "⏳" in events[0].action.title
     # The guessed wait is flagged as an estimate, not presented as fact
     assert "~" in events[0].action.title
@@ -1777,6 +1783,7 @@ def test_translate_rate_limit_event_derives_retry_after_from_reset_ts() -> None:
     assert len(events) == 2
     # Should now show "retrying in Ns" (not the generic "waiting to retry"),
     # and cumulative should accumulate the derived seconds.
+    assert isinstance(events[0], ActionEvent)
     assert "retrying in" in events[0].action.title
     assert state.rate_limit_count == 1
     # Allow ±2s wiggle for clock drift between the test's setup and translate
@@ -1861,6 +1868,7 @@ def test_translate_rate_limit_event_handles_unparseable_reset_ts() -> None:
         factory=state.factory,
     )
     assert len(events) == 2
+    assert isinstance(events[0], ActionEvent)
     assert "~" in events[0].action.title
     assert state.rate_limit_total_s == DEFAULT_BARE_RATE_LIMIT_WAIT_S
     assert state.awaiting_rate_limit_retry() is True
@@ -5440,8 +5448,6 @@ async def test_655_limbo_grace_real_busy_subprocess_survives() -> None:
     no monkeypatched diag. A genuinely busy process with no registered
     background handles must survive well past the limbo grace; the eventual
     kill is the full-timeout path, not the grace."""
-    import contextlib
-    import os
     import subprocess as _subprocess
 
     import anyio
@@ -5526,8 +5532,11 @@ async def test_655_limbo_grace_real_busy_subprocess_survives() -> None:
                     await anyio.sleep(0.05)
             tg.cancel_scope.cancel()
     finally:
-        with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.killpg(proc.pid, signal.SIGKILL)
+        sigkill = getattr(signal, "SIGKILL", signal.SIGTERM)
+        killpg = getattr(os, "killpg", None)
+        if killpg is not None:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                killpg(proc.pid, sigkill)
         proc.wait(timeout=5)
 
     sigterm_logs = [

@@ -4,7 +4,7 @@ registry lifecycle, auto-approve drain, and full tool-use lifecycle."""
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import anyio
@@ -815,8 +815,8 @@ async def test_discuss_action_sends_deny_with_custom_message() -> None:
         reply_to=None,
         reply_text=None,
         config_path=None,
-        plugin_config=None,  # type: ignore[arg-type]
-        runtime=None,  # type: ignore[arg-type]
+        plugin_config=cast(dict[str, Any], None),
+        runtime=cast(Any, None),
         executor=fake_executor,
     )
 
@@ -1016,8 +1016,8 @@ async def test_discuss_handler_sets_outline_pending() -> None:
         reply_to=None,
         reply_text=None,
         config_path=None,
-        plugin_config=None,  # type: ignore[arg-type]
-        runtime=None,  # type: ignore[arg-type]
+        plugin_config=cast(dict[str, Any], None),
+        runtime=cast(Any, None),
         executor=AsyncMock(send=AsyncMock(return_value=None)),
     )
 
@@ -1055,8 +1055,8 @@ async def test_chat_action_hold_open_sends_deny() -> None:
         reply_to=None,
         reply_text=None,
         config_path=None,
-        plugin_config=None,  # type: ignore[arg-type]
-        runtime=None,  # type: ignore[arg-type]
+        plugin_config=cast(dict[str, Any], None),
+        runtime=cast(Any, None),
         executor=AsyncMock(send=AsyncMock(return_value=None)),
     )
 
@@ -1110,9 +1110,9 @@ async def test_approve_handler_clears_outline_pending() -> None:
         reply_to=None,
         reply_text=None,
         config_path=None,
-        plugin_config=None,  # type: ignore[arg-type]
-        runtime=None,  # type: ignore[arg-type]
-        executor=None,  # type: ignore[arg-type]
+        plugin_config=cast(dict[str, Any], None),
+        runtime=cast(Any, None),
+        executor=cast(Any, None),
     )
 
     cmd = ClaudeControlCommand()
@@ -1366,6 +1366,7 @@ def test_reconciliation_emits_action_completed_for_stale_keyboard() -> None:
         event, title="claude", state=state, factory=factory
     )
     assert len(started_events) == 1
+    assert isinstance(started_events[0], ActionEvent)
     action_id = started_events[0].action.id
 
     # Verify the request_to_action mapping was created
@@ -1520,6 +1521,7 @@ def test_diff_preview_bypassed_after_plan_exit_approved(tool_name: str) -> None:
     from untether.runners.run_options import EngineRunOptions, apply_run_options
 
     state, factory = _make_state_with_session()
+    assert factory.resume is not None
     session_id = factory.resume.value
     # Simulate plan exit approval
     _PLAN_EXIT_APPROVED.add(session_id)
@@ -1713,9 +1715,9 @@ async def test_deny_exit_plan_mode_uses_specific_message() -> None:
         reply_to=None,
         reply_text=None,
         config_path=None,
-        plugin_config=None,  # type: ignore[arg-type]
-        runtime=None,  # type: ignore[arg-type]
-        executor=None,  # type: ignore[arg-type]
+        plugin_config=cast(dict[str, Any], None),
+        runtime=cast(Any, None),
+        executor=cast(Any, None),
     )
 
     cmd = ClaudeControlCommand()
@@ -1761,9 +1763,9 @@ async def test_deny_non_exit_plan_mode_uses_generic_message() -> None:
         reply_to=None,
         reply_text=None,
         config_path=None,
-        plugin_config=None,  # type: ignore[arg-type]
-        runtime=None,  # type: ignore[arg-type]
-        executor=None,  # type: ignore[arg-type]
+        plugin_config=cast(dict[str, Any], None),
+        runtime=cast(Any, None),
+        executor=cast(Any, None),
     )
 
     cmd = ClaudeControlCommand()
@@ -1881,7 +1883,7 @@ async def test_discuss_approve_edits_feedback_message() -> None:
         reply_text=None,
         config_path=None,
         plugin_config={},
-        runtime=None,  # type: ignore[arg-type]
+        runtime=cast(Any, None),
         executor=fake_executor,
     )
 
@@ -1927,7 +1929,7 @@ async def test_discuss_deny_edits_feedback_message() -> None:
         reply_text=None,
         config_path=None,
         plugin_config={},
-        runtime=None,  # type: ignore[arg-type]
+        runtime=cast(Any, None),
         executor=fake_executor,
     )
 
@@ -1966,8 +1968,8 @@ async def test_discuss_approve_falls_back_without_stored_ref() -> None:
         reply_text=None,
         config_path=None,
         plugin_config={},
-        runtime=None,  # type: ignore[arg-type]
-        executor=None,  # type: ignore[arg-type]
+        runtime=cast(Any, None),
+        executor=cast(Any, None),
     )
 
     cmd = ClaudeControlCommand()
@@ -2013,7 +2015,7 @@ async def test_normal_approve_edits_feedback_when_outline_ref_exists() -> None:
         reply_text=None,
         config_path=None,
         plugin_config={},
-        runtime=None,  # type: ignore[arg-type]
+        runtime=cast(Any, None),
         executor=fake_executor,
     )
 
