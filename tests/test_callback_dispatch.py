@@ -384,7 +384,7 @@ async def test_early_answer_fires_before_slow_handle(monkeypatch) -> None:
             handle_entered_at["t"] = _time.monotonic()
             await anyio.sleep(0.05)
             return CommandResult(text="ok")
-
+    backend = _SlowHandleBackend()
 
     orig_answer = bot.answer_callback_query
 
@@ -395,7 +395,7 @@ async def test_early_answer_fires_before_slow_handle(monkeypatch) -> None:
         return await orig_answer(query_id, text=text, show_alert=show_alert)
 
     object.__setattr__(bot, "answer_callback_query", _timed_answer)
-
+    monkeypatch.setattr(dispatch_mod, "get_command", lambda *a, **kw: backend)
     await _dispatch_callback(
         cfg,
         _make_callback_query(),

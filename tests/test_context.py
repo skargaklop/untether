@@ -37,7 +37,7 @@ def test_run_context_is_frozen():
 
     ctx = RunContext(project="p")
     try:
-        object.__setattr__(ctx, "project", "other")
+        ctx.project = "other"  # ty: ignore[invalid-assignment]
     except dataclasses.FrozenInstanceError:
         return
     raise AssertionError("expected FrozenInstanceError on attribute assignment")
