@@ -7,6 +7,9 @@ from typing import Any
 
 from untether import sdnotify
 
+if not hasattr(socket_mod, "AF_UNIX"):
+    setattr(socket_mod, "AF_UNIX", 1)  # noqa: B010
+
 
 class FakeSocket:
     """Minimal AF_UNIX SOCK_DGRAM stand-in — records sendto() calls."""
@@ -14,7 +17,9 @@ class FakeSocket:
     calls: list[tuple[bytes, Any]]
 
     def __init__(self, family: int, kind: int, *args: Any, **kwargs: Any) -> None:
-        assert family == socket_mod.AF_UNIX
+        af_unix = getattr(socket_mod, "AF_UNIX", None)
+        assert af_unix is not None
+        assert family == af_unix
         assert kind == socket_mod.SOCK_DGRAM
         self.calls = []
 

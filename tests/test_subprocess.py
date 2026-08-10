@@ -2,6 +2,7 @@ import os
 import signal
 import sys
 from dataclasses import dataclass
+from typing import cast
 
 import pytest
 
@@ -36,7 +37,7 @@ def test_kill_process_uses_direct_child_fallback_without_sigkill(
     monkeypatch.delattr(subprocess_utils.signal, "SIGKILL", raising=False)
 
     proc = _FakeProc()
-    subprocess_utils.kill_process(proc)
+    subprocess_utils.kill_process(cast(subprocess_utils.Process, proc))
 
     assert proc.kill_called == 1
 
@@ -112,7 +113,7 @@ def test_terminate_process_signals_captured_descendants(monkeypatch) -> None:
     monkeypatch.setattr(subprocess_utils.os, "kill", fake_kill)
     monkeypatch.setattr(subprocess_utils, "find_descendants", fake_find)
 
-    subprocess_utils.terminate_process(_FakeProc())
+    subprocess_utils.terminate_process(cast(subprocess_utils.Process, _FakeProc()))
 
     # killpg fires first, then each descendant PID individually.
     assert calls[0] == ("killpg", 1234, signal.SIGTERM)
@@ -138,10 +139,11 @@ def test_kill_process_signals_descendants_with_sigkill(monkeypatch) -> None:
     )
     monkeypatch.setattr(subprocess_utils, "find_descendants", lambda pid: [9001])
 
-    subprocess_utils.kill_process(_FakeProc(pid=4242))
+    subprocess_utils.kill_process(cast(subprocess_utils.Process, _FakeProc(pid=4242)))
 
-    assert ("killpg", 4242, signal.SIGKILL) in calls
-    assert ("kill", 9001, signal.SIGKILL) in calls
+    sigkill = cast(int, getattr(signal, "SIGKILL", signal.SIGTERM))
+    assert ("killpg", 4242, sigkill) in calls
+    assert ("kill", 9001, sigkill) in calls
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux /proc only")
@@ -164,7 +166,7 @@ def test_signal_process_swallows_descendant_process_lookup(monkeypatch) -> None:
     )
 
     # Must not raise.
-    subprocess_utils.terminate_process(_FakeProc())
+    subprocess_utils.terminate_process(cast(subprocess_utils.Process, _FakeProc()))
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux /proc only")
@@ -184,7 +186,7 @@ def test_signal_process_descendant_oserror_is_logged_not_raised(
     monkeypatch.setattr(subprocess_utils.os, "kill", partial_kill)
     monkeypatch.setattr(subprocess_utils, "find_descendants", lambda pid: [6001, 6002])
 
-    subprocess_utils.terminate_process(_FakeProc())
+    subprocess_utils.terminate_process(cast(subprocess_utils.Process, _FakeProc()))
 
     assert 6002 in remaining  # 6001 errored but 6002 still got signalled
 
@@ -207,7 +209,7 @@ def test_signal_process_degrades_when_find_descendants_raises(
     monkeypatch.setattr(subprocess_utils, "find_descendants", raise_oserror)
 
     # Must not raise.
-    subprocess_utils.terminate_process(_FakeProc())
+    subprocess_utils.terminate_process(cast(subprocess_utils.Process, _FakeProc()))
     assert calls == ["killpg"]
 
 
@@ -230,7 +232,7 @@ def test_signal_process_still_signals_descendants_when_parent_gone(
     monkeypatch.setattr(subprocess_utils.os, "kill", record_kill)
     monkeypatch.setattr(subprocess_utils, "find_descendants", lambda pid: [8001, 8002])
 
-    subprocess_utils.terminate_process(_FakeProc())
+    subprocess_utils.terminate_process(cast(subprocess_utils.Process, _FakeProc()))
 
     assert descendants_signalled == [8001, 8002]
 
@@ -393,9 +395,8 @@ async def test_reap_orphaned_group_sigterms_then_sigkills_survivors(
                 raise ProcessLookupError
             return
         killpg_signals.append(sig)
-        if sig == signal.SIGTERM:
-            alive[31001] = False  # one member obeys SIGTERM
-        if sig == signal.SIGKILL:
+        sigkill = cast(int, getattr(signal, "SIGKILL", signal.SIGTERM))
+        if sig == sigkill:
             alive[31002] = False
 
     def fake_kill(pid: int, sig: int) -> None:
@@ -412,9 +413,10 @@ async def test_reap_orphaned_group_sigterms_then_sigkills_survivors(
     reaped = await subprocess_utils.reap_orphaned_group(31000, grace_s=0.2)
 
     assert reaped == [31001, 31002]
+    sigkill = cast(int, getattr(signal, "SIGKILL", signal.SIGTERM))
     assert killpg_signals[0] == signal.SIGTERM
-    assert signal.SIGKILL in killpg_signals
-    assert (31002, signal.SIGKILL) in kill_calls
+    assert sigkill in killpg_signals
+    assert (31002, sigkill) in kill_calls
 
 
 @pytest.mark.anyio
