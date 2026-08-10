@@ -84,6 +84,7 @@ def _make_webhook(**kwargs: Any) -> WebhookConfig:
         "auth": "none",
         "prompt_template": "Hello",
     }
+    defaults.update(kwargs)
     return WebhookConfig(**cast(dict[str, Any], defaults))
 
 
@@ -93,6 +94,7 @@ def _make_cron(**kwargs: Any) -> CronConfig:
         "schedule": "* * * * *",
         "prompt": "Run daily check",
     }
+    defaults.update(kwargs)
     return CronConfig(**cast(dict[str, Any], defaults))
 
 

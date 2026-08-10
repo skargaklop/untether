@@ -28,6 +28,7 @@ def _make_webhook(**overrides) -> WebhookConfig:
         "action": "file_write",
         "file_path": "/tmp/test-output.json",
     }
+    defaults.update(overrides)
     return WebhookConfig(**cast(dict[str, Any], defaults))
 
 
@@ -45,7 +46,7 @@ class TestResolveFilePath:
     def test_tilde_expansion(self) -> None:
         result = _resolve_file_path("~/data/output.json")
         assert result is not None
-        assert str(result).startswith("/home") or str(result).startswith("/root")
+        assert result == Path.home() / "data" / "output.json"
 
     def test_traversal_rejected(self) -> None:
         result = _resolve_file_path("../../../etc/passwd")
