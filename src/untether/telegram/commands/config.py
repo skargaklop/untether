@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 from ...commands import CommandBackend, CommandContext, CommandResult
 from ...logging import get_logger
 from ...transport import RenderedMessage
@@ -2176,8 +2178,9 @@ async def _page_triggers(ctx: CommandContext, action: str | None = None) -> None
 # ---------------------------------------------------------------------------
 # Routing
 # ---------------------------------------------------------------------------
+PageHandler = Callable[[CommandContext, str | None], Awaitable[None]]
 
-_PAGES: dict[str, object] = {
+_PAGES: dict[str, PageHandler] = {
     "pm": _page_planmode,
     "vb": _page_verbose,
     "ag": _page_engine,

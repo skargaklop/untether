@@ -284,7 +284,8 @@ async def _dispatch_callback(
         # entry); the `early=True` flag lets us split the metric by branch
         # when grepping.
         if getattr(backend, "answer_early", False) and callback_query_id is not None:
-            toast = backend.early_answer_toast(args_text)  # type: ignore[attr-defined]
+            toast_fn = getattr(backend, "early_answer_toast", None)
+            toast = toast_fn(args_text) if callable(toast_fn) else None
             # Always answer early when the backend opts in, even if the toast
             # is None — clearing the spinner before backend.handle() is the
             # whole point. A None toast just means no toast text will appear.

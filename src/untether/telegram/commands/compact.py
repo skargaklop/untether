@@ -19,9 +19,10 @@ if TYPE_CHECKING:
     from ...context import RunContext
     from ...scheduler import ThreadScheduler
     from ..bridge import TelegramBridgeConfig
+    from ..chat_sessions import ChatSessionStore
     from ..loop import ResumeResolver, TelegramLoopState
+    from ..topic_state import TopicStateStore
     from ..types import TelegramIncomingMessage
-
 Callable = Any  # ReplyCallable alias to avoid import cycle
 
 _CONFIRM_EXPIRY_S = 300.0  # 5 minutes
@@ -159,8 +160,8 @@ async def handle_compact_command(
     reply: Any,
     scheduler: ThreadScheduler,
     resume_resolver: ResumeResolver,
-    topic_store: object | None,
-    chat_session_store: object | None,
+    topic_store: TopicStateStore | None,
+    chat_session_store: ChatSessionStore | None,
     topic_key: tuple[int, int] | None,
     chat_session_key: tuple[int, int | None] | None,
     reply_id: int | None,
@@ -204,7 +205,7 @@ async def handle_compact_command(
             explicit_engine=None,
             chat_id=chat_id,
             topic_key=topic_key,
-            topic_store=topic_store,  # type: ignore[arg-type]
+            topic_store=topic_store,
             chat_prefs=state.chat_prefs,
         )
         engine = engine_resolution.engine

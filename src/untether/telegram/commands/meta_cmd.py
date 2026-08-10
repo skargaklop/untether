@@ -238,10 +238,10 @@ async def _handle_subagent(
         return
 
     if head == "set":
-        if len(tokens) < 2:
+        name = next(iter(tokens[1:]), None)
+        if name is None:
             await reply(text=SUBAGENT_USAGE)
             return
-        name: str | None = tokens[1]
     else:  # off / clear
         name = None
 

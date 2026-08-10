@@ -94,9 +94,7 @@ class CommandResult:
 class CommandBackend(Protocol):
     id: str
     description: str
-
     async def handle(self, ctx: CommandContext) -> CommandResult | None: ...
-
 
 def _validate_command_backend(backend: object, ep) -> None:
     if not isinstance(backend, CommandBackend):

@@ -19,9 +19,12 @@ class RestartCommand:
                 notify=True,
             )
 
-        # #559: record the originating chat so the drain loop can confirm the
-        # precise self-restart case when this chat is the sole active run.
-        request_shutdown(origin_chat_id=ctx.message.channel_id)
+        # Telegram channel ids are normally integers; bridge typing also permits
+        # string transports, which cannot identify a shutdown origin.
+        origin_chat_id = ctx.message.channel_id
+        request_shutdown(
+            origin_chat_id=origin_chat_id if isinstance(origin_chat_id, int) else None
+        )
         return CommandResult(
             text="Draining active runs… will restart shortly.",
             notify=True,
