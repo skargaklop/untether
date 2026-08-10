@@ -84,3 +84,6 @@ Tasks 4, 20, and 23 appear exactly once under Untether’s **Future** roadmap se
 ## H. Historical claims corrected
 
 Earlier blanket-completion language was stale: parser/data-field presence did not prove meta dispatch, sticky plan behavior, one-card compact/handoff lifecycle, or Claude/OpenCode agent injection. The implemented source is covered by focused tests; the runtime-only and CI-type-gate limitations remain recorded in sections E–F. Skill is intentionally one-shot carried data; source-backed badges/context show plan and goal only.
+## I. Complete commit-ledger reconciliation
+
+The durable ordered evidence ledger is `D:/Projects/takopi/docs/plans/2026-08-11-takopi-commit-contract-ledger.md`. It records the first 453 ordered Takopi commits exactly once, from `75fa95752feac42d05dc635c450027c69aa6ae17` through `d28e5ba7cf449608634c4a3ab6206998e6d4f0ae`, with per-commit `git diff-tree` changed-path anchors. The ledger deliberately uses conservative `partial` and `runtime-unverified` dispositions where current Untether source plus observable tests/probes do not establish parity; historical subjects and documentation alone are not treated as implementation evidence. Ordinals 115–152 and 343–380 were reconstructed from actual diffs. This section supersedes no source behavior and makes no new implementation claim.
