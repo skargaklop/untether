@@ -1115,6 +1115,8 @@ class ProgressEdits:
             bg_tg.start_soon(_monitor)
             await self._run_loop(bg_tg)
             stall_scope.cancel()
+        self._frozen_ring_count = 0
+        self._prev_recent_events = None
 
     def _heartbeat_tick(self) -> None:
         """#481: per-tick visibility refresh.

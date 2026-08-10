@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Iterable
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import (
@@ -105,17 +105,25 @@ class TelegramFilesSettings(BaseModel):
     # denied/empty) or an oversize zip fall back to the #600 archive.
     outbox_deliver_directories: Literal["off", "zip"] = "off"
 
+    @staticmethod
+    def _is_absolute_path(value: str) -> bool:
+        return (
+            Path(value).is_absolute()
+            or PurePosixPath(value).is_absolute()
+            or PureWindowsPath(value).is_absolute()
+        )
+
     @field_validator("uploads_dir")
     @classmethod
     def _validate_uploads_dir(cls, value: str) -> str:
-        if Path(value).is_absolute():
+        if cls._is_absolute_path(value):
             raise ValueError("files.uploads_dir must be a relative path")
         return value
 
     @field_validator("outbox_dir")
     @classmethod
     def _validate_outbox_dir(cls, value: str) -> str:
-        if Path(value).is_absolute():
+        if cls._is_absolute_path(value):
             raise ValueError("files.outbox_dir must be a relative path")
         return value
 
