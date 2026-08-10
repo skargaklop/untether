@@ -771,7 +771,9 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
         extra_args.extend(["--profile", profile_value])
         title = profile_value
 
-    return cast(Runner, CodexRunner(codex_cmd=codex_cmd, extra_args=extra_args, title=title))
+    return cast(
+        Runner, CodexRunner(codex_cmd=codex_cmd, extra_args=extra_args, title=title)
+    )
 
 
 BACKEND = EngineBackend(

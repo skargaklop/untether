@@ -7,7 +7,7 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import anyio
 
@@ -2392,10 +2392,13 @@ class ProgressEdits:
         # check no-ops.
         engine_state = getattr(stream, "engine_state", None)
         if engine_state is not None:
+            has_live_background_work: Callable[[Any], bool] | None = None
             try:
-                from .runners.claude import has_live_background_work
+                from .runners.claude import has_live_background_work as _has_live_background_work
+
+                has_live_background_work = _has_live_background_work
             except ImportError:
-                has_live_background_work = None  # type: ignore[assignment]
+                pass
             if has_live_background_work is not None and has_live_background_work(
                 engine_state
             ):
@@ -2735,7 +2738,7 @@ class ProgressEdits:
                 if self._outline_sent and not source_has_approval:
                     self._outline_sent = False
 
-                if rendered != self.last_rendered:
+                if self.progress_ref is not None:
                     # Log keyboard transitions at info level for #103/#104 diagnostics
                     if has_approval and not had_approval:
                         logger.info(
@@ -3508,7 +3511,7 @@ async def handle_message(
                 logger.warning(
                     "session.resume_diverted_fresh",
                     engine=runner.engine,
-                    session_id=resume_token.value,
+                    session_id=resume_token.value if resume_token is not None else None,
                     reason="handoff_timeout",
                 )
                 # #647: never divert silently — a confidently contextless
@@ -3526,7 +3529,7 @@ async def handle_message(
                         ),
                         options=SendOptions(thread_id=incoming.thread_id),
                     )
-                if on_resume_failed is not None:
+                if on_resume_failed is not None and resume_token is not None:
                     try:
                         await on_resume_failed(resume_token)
                     except Exception:  # noqa: BLE001
@@ -3625,12 +3628,12 @@ async def handle_message(
         # #481: bash grace window for the stall_bash_grace_suppressed branch.
         edits._bash_grace_seconds = watchdog.bash_grace_seconds
         if hasattr(runner, "_LIVENESS_TIMEOUT_SECONDS"):
-            runner._LIVENESS_TIMEOUT_SECONDS = watchdog.liveness_timeout
+            cast(Any, runner)._LIVENESS_TIMEOUT_SECONDS = watchdog.liveness_timeout
         if hasattr(runner, "_stall_auto_kill"):
-            runner._stall_auto_kill = watchdog.stall_auto_kill
+            cast(Any, runner)._stall_auto_kill = watchdog.stall_auto_kill
         # #590: post-exit orphan sweep toggle.
         if hasattr(runner, "_reap_orphans"):
-            runner._reap_orphans = watchdog.reap_orphans
+            cast(Any, runner)._reap_orphans = watchdog.reap_orphans
 
     # #481: heartbeat tick cadence — drives the long-running-action elapsed
     # tail and the post-result closing-message poller. Read live so config

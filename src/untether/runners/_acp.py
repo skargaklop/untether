@@ -519,7 +519,8 @@ class AcpCompactMixin:
             meta={"compact": {"mode": "acp", "true_compaction": True}},
         )
         try:
-            async with self.create_acp_client() as client:
+            client = self.create_acp_client()
+            try:
                 await client.initialize()
                 await client.resume_or_load(resume.value)
                 await client.wait_for_available_commands()
@@ -528,6 +529,11 @@ class AcpCompactMixin:
                     resume.value, compact_prompt(instructions)
                 ):
                     pass
+            finally:
+                await client.close()
+[D:/Projects/untether/src/untether/runners/_acp.py#202D]
+            
+            
             yield factory.completed_ok(
                 answer=f"{engine} compaction completed.",
                 resume=resume,

@@ -57,7 +57,7 @@ def _format_dow(dow: str) -> str | None:
             normalised = [_normalise_dow(int(p)) for p in dow.split(",")]
             if any(n is None for n in normalised):
                 return None
-            return ",".join(_DAY_NAMES[n] for n in normalised)  # type: ignore[index]
+            return ",".join(_DAY_NAMES[n] for n in normalised if n is not None)
         except ValueError:
             return None
     # Single day

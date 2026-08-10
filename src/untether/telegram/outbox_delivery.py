@@ -376,7 +376,8 @@ def _zip_skipped_dir(
                     excluded.append((member_rel, "directory total too large"))
                     truncated = True
                     break
-                total_input += added  # bytes written
+                if isinstance(added, int):
+                    total_input += added  # bytes written
                 included.append(member_rel)
             if truncated:
                 break

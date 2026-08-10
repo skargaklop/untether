@@ -108,8 +108,6 @@ async def handle_cancel(
                 ):
                     await _edit_cancelled_message(cfg, queued_ref, result.job)
                     return
-                    )
-                    return
                 if result.status is CancelQueuedStatus.ALREADY_CLAIMED:
                     await reply(
                         text="that queued run already started — use Cancel on the active run."

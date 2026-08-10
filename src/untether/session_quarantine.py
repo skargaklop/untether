@@ -86,7 +86,8 @@ class QuarantineStore:
         stale = []
         for k, v in self._entries.items():
             try:
-                ts = float(v.get("ts", 0) or 0)
+                raw_ts = v.get("ts")
+                ts = float(raw_ts) if isinstance(raw_ts, (int, float, str)) else 0.0
                 if ts < cutoff:
                     stale.append(k)
             except (TypeError, ValueError):

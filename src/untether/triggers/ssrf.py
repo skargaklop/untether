@@ -174,7 +174,7 @@ def resolve_and_validate(
     blocked: list[str] = []
 
     for _family, _type, _proto, _canonname, sockaddr in results:
-        ip_str = sockaddr[0]
+        ip_str = str(sockaddr[0])
         try:
             addr = ipaddress.ip_address(ip_str)
         except ValueError:
