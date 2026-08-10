@@ -226,7 +226,7 @@ async def validate_url_with_dns(
     except ValueError:
         # Hostname — resolve and check all addresses.
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
-        await anyio.to_thread.run_sync(
+        await anyio.to_thread.run_sync(  # ty: ignore[unresolved-attribute]
             lambda: resolve_and_validate(hostname, port=port, allowlist=allowlist)
         )
 

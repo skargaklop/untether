@@ -4,7 +4,7 @@ import shutil
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from .backends import EngineBackend
 from .config import ConfigError, ProjectsConfig
@@ -12,6 +12,7 @@ from .engines import get_backend, list_backend_ids
 from .ids import RESERVED_CHAT_COMMANDS
 from .logging import get_logger
 from .router import AutoRouter, EngineStatus, RunnerEntry
+from .runner import JsonlSubprocessRunner
 from .settings import UntetherSettings
 from .transport_runtime import TransportRuntime
 
@@ -125,20 +126,20 @@ def build_router(
                 continue
 
         # Apply global [runners] lifecycle settings to runners exposing the
-        # corresponding attributes (Takopi's attribute-based wiring).
         rs = settings.runners
+        configured_runner = cast(JsonlSubprocessRunner, runner)
         if hasattr(runner, "startup_timeout_s"):
-            runner.startup_timeout_s = rs.startup_timeout_s  # type: ignore[attr-defined]
+            configured_runner.startup_timeout_s = rs.startup_timeout_s
         if hasattr(runner, "idle_timeout_s"):
-            runner.idle_timeout_s = rs.idle_timeout_s  # type: ignore[attr-defined]
+            configured_runner.idle_timeout_s = rs.idle_timeout_s
         if hasattr(runner, "shutdown_timeout_s"):
-            runner.shutdown_timeout_s = rs.shutdown_timeout_s  # type: ignore[attr-defined]
+            configured_runner.shutdown_timeout_s = rs.shutdown_timeout_s
         if hasattr(runner, "kill_tree_on_cancel"):
-            runner.kill_tree_on_cancel = rs.kill_tree_on_cancel  # type: ignore[attr-defined]
+            configured_runner.kill_tree_on_cancel = rs.kill_tree_on_cancel
         if hasattr(runner, "retry_max_attempts"):
-            runner.retry_max_attempts = rs.retry_max_attempts  # type: ignore[attr-defined]
+            configured_runner.retry_max_attempts = rs.retry_max_attempts
         if hasattr(runner, "retry_base_delay_s"):
-            runner.retry_base_delay_s = rs.retry_base_delay_s  # type: ignore[attr-defined]
+            configured_runner.retry_base_delay_s = rs.retry_base_delay_s
 
         cmd = backend.cli_cmd or backend.id
         if shutil.which(cmd) is None:

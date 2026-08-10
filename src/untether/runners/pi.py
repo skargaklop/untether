@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path, PurePath
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import msgspec
@@ -489,11 +489,13 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         model: str | None,
         provider: str | None,
         plan_mode_extension: bool = False,
+        goal_list_extension: bool = False,
     ) -> None:
         self.extra_args = extra_args
         self.model = model
         self.provider = provider
         self.plan_mode_extension = plan_mode_extension
+        self.goal_list_extension = goal_list_extension
         self._plan_warning_logged = False
 
     def format_resume(self, token: ResumeToken) -> str:
@@ -522,10 +524,13 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
             return None
         return ResumeToken(engine=self.engine, value=found)
 
-    def _final_prompt(self, prompt: str) -> str:
+    def _final_prompt(self, prompt: str, *, resume: ResumeToken | None = None) -> str:
         """Apply goal/plan mode mutations to the prompt.
 
-        - Goal mode: injects the autonomous-goal prefix (unchanged).
+        - Goal mode + goal-list extension + fresh session: seeds
+          ``<task-goal>{escaped goal}</task-goal>`` as the first message.
+        - Goal mode + no extension (or resumed session): injects the
+          autonomous-goal prefix.
         - Plan mode + extension: delegates to the extension via ``--plan``,
           no prompt mutation.
         - Plan mode + no extension: applies the soft-plan prompt prefix
@@ -535,6 +540,11 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         plan, goal = run_modes(run_options)
         if goal is not None:
             body = prompt.strip()
+            is_fresh = resume is None
+            if self.goal_list_extension and is_fresh:
+                escaped = _escape_goal_xml(goal)
+                directive = f"<task-goal>{escaped}</task-goal>"
+                return f"{directive}\n\n{body}" if body else directive
             note = f"(autonomous goal — work until: {goal})"
             return f"{note}\n\n{body}" if body else note
         if plan and not self.plan_mode_extension:
@@ -565,7 +575,7 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
     ) -> list[str]:
         run_options = get_run_options()
         plan, _goal = run_modes(run_options)
-        final_prompt = self._final_prompt(prompt)
+        final_prompt = self._final_prompt(prompt, resume=resume)
         args: list[str] = [*self.extra_args, "--print", "--mode", "json"]
         if self.provider:
             args.extend(["--provider", self.provider])
@@ -598,7 +608,7 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         *,
         state: PiStreamState,
     ) -> bytes | None:
-        final_prompt = self._final_prompt(prompt)
+        final_prompt = self._final_prompt(prompt, resume=resume)
         if not self._prompt_needs_stdin(final_prompt):
             return None
         # Newline-terminated UTF-8 bytes for the multi-line/Windows-safe path.
@@ -801,7 +811,28 @@ def _default_session_dir(cwd: PurePath) -> Path:
     return base / "sessions" / safe_path
 
 
+def _escape_goal_xml(goal: str) -> str:
+    """Escape ``&``, ``<``, ``>`` so user content cannot close the directive."""
+    return goal.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 _PLAN_MODE_EXTENSION_PACKAGE = "@narumitw/pi-plan-mode"
+_GOAL_LIST_EXTENSION_PACKAGE = "pi-goal-list-loop-audit"
+
+
+def detect_goal_list_extension(root: Path | None = None) -> bool:
+    """True when the ``pi-goal-list-loop-audit`` extension is installed.
+
+    Checks ``<root>/pi-goal-list-loop-audit`` (directory existence). The
+    default root mirrors :func:`detect_plan_mode_extension`.
+    """
+    if root is None:
+        agent_dir = os.environ.get("PI_CODING_AGENT_DIR")
+        base = (
+            Path(agent_dir).expanduser() if agent_dir else Path.home() / ".pi" / "agent"
+        )
+        root = base / "npm" / "node_modules"
+    return (root / _GOAL_LIST_EXTENSION_PACKAGE).is_dir()
 
 
 def detect_plan_mode_extension(root: Path | None = None) -> bool:
@@ -819,6 +850,7 @@ def detect_plan_mode_extension(root: Path | None = None) -> bool:
         )
         root = base / "npm" / "node_modules"
     return (root / _PLAN_MODE_EXTENSION_PACKAGE).is_dir()
+
 
 def build_runner(config: EngineConfig, config_path: Path) -> Runner:
     extra_args_value = config.get("extra_args")
@@ -856,11 +888,15 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
         )
         raise ConfigError(f"Invalid `pi.provider` in {config_path}; expected a string.")
 
-    return PiRunner(
-        extra_args=extra_args,
-        model=model,
-        provider=provider,
-        plan_mode_extension=detect_plan_mode_extension(),
+    return cast(
+        Runner,
+        PiRunner(
+            extra_args=extra_args,
+            model=model,
+            provider=provider,
+            plan_mode_extension=detect_plan_mode_extension(),
+            goal_list_extension=detect_goal_list_extension(),
+        ),
     )
 
 

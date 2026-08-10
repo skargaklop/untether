@@ -49,7 +49,7 @@ async def test_run_serializes_same_session() -> None:
     async with anyio.create_task_group() as tg:
         tg.start_soon(drain, "a", token)
         tg.start_soon(drain, "b", token)
-        await anyio.lowlevel.checkpoint()
+        await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
         gate.set()
     assert max_in_flight == 1
 
@@ -85,7 +85,7 @@ async def test_run_allows_parallel_new_sessions() -> None:
     async with anyio.create_task_group() as tg:
         tg.start_soon(drain, "a", None)
         tg.start_soon(drain, "b", None)
-        await anyio.lowlevel.checkpoint()
+        await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
         gate.set()
     assert max_in_flight == 2
 
@@ -123,7 +123,7 @@ async def test_run_allows_parallel_different_sessions() -> None:
     async with anyio.create_task_group() as tg:
         tg.start_soon(drain, "a", token_a)
         tg.start_soon(drain, "b", token_b)
-        await anyio.lowlevel.checkpoint()
+        await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
         gate.set()
     assert max_in_flight == 2
 

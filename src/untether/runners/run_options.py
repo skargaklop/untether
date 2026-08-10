@@ -4,6 +4,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
+from typing import cast
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +92,12 @@ def merge_run_options(
             return override
         return getattr(base, field) if base is not None else None
 
+    def _str(field: str, override: str | None) -> str | None:
+        return cast(str | None, _inherit(field, override))
+
+    def _bool(field: str, override: bool | None) -> bool | None:
+        return cast(bool | None, _inherit(field, override))
+
     base_atts = base.attachments if base is not None else ()
     new_atts = tuple(attachments) if attachments is not None else base_atts
     new_plan = bool(base.plan) if base is not None else False
@@ -102,24 +109,22 @@ def merge_run_options(
         new_goal = cleaned or None
 
     opts = EngineRunOptions(
-        model=_inherit("model", model),  # type: ignore[arg-type]
-        reasoning=_inherit("reasoning", reasoning),  # type: ignore[arg-type]
-        permission_mode=_inherit("permission_mode", permission_mode),  # type: ignore[arg-type]
-        ask_questions=_inherit("ask_questions", ask_questions),  # type: ignore[arg-type]
-        diff_preview=_inherit("diff_preview", diff_preview),  # type: ignore[arg-type]
-        show_api_cost=_inherit("show_api_cost", show_api_cost),  # type: ignore[arg-type]
-        show_subscription_usage=_inherit(
-            "show_subscription_usage", show_subscription_usage
-        ),  # type: ignore[arg-type]
-        show_resume_line=_inherit("show_resume_line", show_resume_line),  # type: ignore[arg-type]
-        budget_enabled=_inherit("budget_enabled", budget_enabled),  # type: ignore[arg-type]
-        budget_auto_cancel=_inherit("budget_auto_cancel", budget_auto_cancel),  # type: ignore[arg-type]
-        loop_enabled=_inherit("loop_enabled", loop_enabled),  # type: ignore[arg-type]
+        model=_str("model", model),
+        reasoning=_str("reasoning", reasoning),
+        permission_mode=_str("permission_mode", permission_mode),
+        ask_questions=_bool("ask_questions", ask_questions),
+        diff_preview=_bool("diff_preview", diff_preview),
+        show_api_cost=_bool("show_api_cost", show_api_cost),
+        show_subscription_usage=_bool("show_subscription_usage", show_subscription_usage),
+        show_resume_line=_bool("show_resume_line", show_resume_line),
+        budget_enabled=_bool("budget_enabled", budget_enabled),
+        budget_auto_cancel=_bool("budget_auto_cancel", budget_auto_cancel),
+        loop_enabled=_bool("loop_enabled", loop_enabled),
         attachments=new_atts,
         plan=new_plan,
         goal=new_goal,
-        skill=_inherit("skill", skill),  # type: ignore[arg-type]
-        subagent=_inherit("subagent", subagent),  # type: ignore[arg-type]
+        skill=_str("skill", skill),
+        subagent=_str("subagent", subagent),
     )
 
     if (

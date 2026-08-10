@@ -43,6 +43,7 @@ class _ThreadState(msgspec.Struct, forbid_unknown_fields=False):
     default_engine: str | None = None
     trigger_mode: str | None = None
     engine_overrides: dict[str, EngineOverrides] = msgspec.field(default_factory=dict)
+    plan_mode: bool | None = None
 
 
 class _TopicState(msgspec.Struct, forbid_unknown_fields=False):
@@ -243,6 +244,21 @@ class TopicStateStore(JsonStateStore[_TopicState]):
 
     async def clear_listen_mode(self, chat_id: int, thread_id: int) -> None:
         await self.set_listen_mode(chat_id, thread_id, None)
+
+    async def get_plan_mode(self, chat_id: int, thread_id: int) -> bool | None:
+        async with self._lock:
+            self._reload_locked_if_needed()
+            thread = self._get_thread_locked(chat_id, thread_id)
+            return thread.plan_mode if thread is not None else None
+
+    async def set_plan_mode(
+        self, chat_id: int, thread_id: int, enabled: bool | None
+    ) -> None:
+        async with self._lock:
+            self._reload_locked_if_needed()
+            thread = self._ensure_thread_locked(chat_id, thread_id)
+            thread.plan_mode = enabled
+            self._save_locked()
 
     # #297: legacy aliases preserved for one release cycle.
     async def set_trigger_mode(

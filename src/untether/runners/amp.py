@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import msgspec
 
@@ -577,12 +577,15 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
 
     title = str(model) if model is not None else "amp"
 
-    return AmpRunner(
-        model=model,
-        mode=mode,
-        dangerously_allow_all=dangerously_allow_all,
-        stream_json_input=stream_json_input,
-        session_title=title,
+    return cast(
+        Runner,
+        AmpRunner(
+            model=model,
+            mode=mode,
+            dangerously_allow_all=dangerously_allow_all,
+            stream_json_input=stream_json_input,
+            session_title=title,
+        ),
     )
 
 

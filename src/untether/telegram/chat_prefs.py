@@ -24,6 +24,8 @@ class _ChatPrefs(msgspec.Struct, forbid_unknown_fields=False):
     context_project: str | None = None
     context_branch: str | None = None
     engine_overrides: dict[str, EngineOverrides] = msgspec.field(default_factory=dict)
+    plan_mode: bool | None = None
+    subagent: str | None = None
 
 
 class _ChatPrefsState(msgspec.Struct, forbid_unknown_fields=False):
@@ -236,6 +238,51 @@ class ChatPrefsStore(JsonStateStore[_ChatPrefsState]):
                 permission_mode=normalized.permission_mode,
             )
 
+    async def get_plan_mode(self, chat_id: ChannelId) -> bool | None:
+        async with self._lock:
+            self._reload_locked_if_needed()
+            chat = self._get_chat_locked(chat_id)
+            return chat.plan_mode if chat is not None else None
+
+    async def set_plan_mode(self, chat_id: ChannelId, enabled: bool | None) -> None:
+        async with self._lock:
+            self._reload_locked_if_needed()
+            chat = self._get_chat_locked(chat_id)
+            if enabled is None:
+                if chat is None:
+                    return
+                chat.plan_mode = None
+                if self._chat_is_empty(chat):
+                    self._remove_chat_locked(chat_id)
+                self._save_locked()
+                return
+            chat = self._ensure_chat_locked(chat_id)
+            chat.plan_mode = enabled
+            self._save_locked()
+
+    async def get_subagent(self, chat_id: ChannelId) -> str | None:
+        async with self._lock:
+            self._reload_locked_if_needed()
+            chat = self._get_chat_locked(chat_id)
+            return _normalize_text(chat.subagent) if chat is not None else None
+
+    async def set_subagent(self, chat_id: ChannelId, subagent: str | None) -> None:
+        normalized = _normalize_text(subagent)
+        async with self._lock:
+            self._reload_locked_if_needed()
+            chat = self._get_chat_locked(chat_id)
+            if normalized is None:
+                if chat is None:
+                    return
+                chat.subagent = None
+                if self._chat_is_empty(chat):
+                    self._remove_chat_locked(chat_id)
+                self._save_locked()
+                return
+            chat = self._ensure_chat_locked(chat_id)
+            chat.subagent = normalized
+            self._save_locked()
+
     async def clear_engine_override(self, chat_id: ChannelId, engine: str) -> None:
         await self.set_engine_override(chat_id, engine, None)
 
@@ -258,6 +305,8 @@ class ChatPrefsStore(JsonStateStore[_ChatPrefsState]):
             and _normalize_text(chat.context_project) is None
             and _normalize_text(chat.context_branch) is None
             and not self._has_engine_overrides(chat.engine_overrides)
+            and chat.plan_mode is None
+            and _normalize_text(chat.subagent) is None
         )
 
     @staticmethod

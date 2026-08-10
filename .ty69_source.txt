@@ -1,0 +1,311 @@
+src/untether/cli/doctor.py: 2 diagnostics
+  error[call-non-callable] L71: Object of type `object` is not callable
+  error[call-non-callable] L93: Object of type `~AlwaysFalsy` is not callable
+src/untether/loop_scheduler.py: 38 diagnostics
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+  error[invalid-argument-type] L130: Argument to function `install` is incorrect
+src/untether/runner_bridge.py: 26 diagnostics
+  error[invalid-argument-type] L1014: Argument to `ProgressEdits.__init__` is incorrect
+  error[invalid-argument-type] L2754: Argument to bound method `Transport.edit` is incorrect
+  error[invalid-argument-type] L3040: Argument to function `run_runner_with_cancel` is incorrect
+  error[invalid-argument-type] L3270: Argument to function `handle_message` is incorrect
+  error[invalid-argument-type] L3270: Argument to function `handle_message` is incorrect
+  error[invalid-argument-type] L3270: Argument to function `handle_message` is incorrect
+  error[invalid-argument-type] L3270: Argument to function `handle_message` is incorrect
+  error[invalid-argument-type] L3531: Argument is incorrect
+  error[invalid-argument-type] L4331: Argument to function `deliver_outbox_files` is incorrect
+  error[invalid-argument-type] L4332: Argument to function `deliver_outbox_files` is incorrect
+  error[invalid-argument-type] L4333: Argument to function `deliver_outbox_files` is incorrect
+  error[invalid-argument-type] L4512: Argument to function `deliver_outbox_files` is incorrect
+  error[invalid-argument-type] L4513: Argument to function `deliver_outbox_files` is incorrect
+  error[invalid-argument-type] L4514: Argument to function `deliver_outbox_files` is incorrect
+  error[invalid-assignment] L2398: Object of type `None` is not assignable to `def has_live_bac
+  error[invalid-assignment] L3628: Object of type `Unknown` is not assignable to attribute `_LI
+  error[invalid-assignment] L3630: Object of type `Unknown` is not assignable to attribute `_st
+  error[invalid-assignment] L3633: Object of type `Unknown` is not assignable to attribute `_re
+  error[unresolved-attribute] L2551: Object of type `type[BrokenWorkerInterpreter]` has no attrib
+  error[unresolved-attribute] L2744: Attribute `message_id` is not defined on `None` in union `Me
+  error[unresolved-attribute] L2750: Attribute `message_id` is not defined on `None` in union `Me
+  error[unresolved-attribute] L2766: Attribute `message_id` is not defined on `None` in union `Me
+  error[unresolved-attribute] L2860: Object of type `type[BrokenWorkerInterpreter]` has no attrib
+  error[unresolved-attribute] L3511: Attribute `value` is not defined on `None` in union `ResumeT
+  error[unresolved-attribute] L3806: Attribute `value` is not defined on `None` in union `ResumeT
+  error[unresolved-attribute] L4067: Object of type `type[BrokenWorkerInterpreter]` has no attrib
+src/untether/runners/_acp.py: 1 diagnostics
+  error[invalid-context-manager] L522: Object of type `AcpClient` cannot be used with `async with` 
+src/untether/runners/amp.py: 1 diagnostics
+  error[invalid-return-type] L580: Return type does not match returned value
+src/untether/runners/claude.py: 9 diagnostics
+  error[invalid-argument-type] L786: Argument to function `_tool_action` is incorrect
+  error[invalid-argument-type] L844: Argument to function `_register_background_handle` is incorr
+  error[invalid-argument-type] L1087: Argument to function `_observe_loop_tool_use` is incorrect
+  error[invalid-argument-type] L1318: Argument to function `_tool_result_event` is incorrect
+  error[invalid-argument-type] L1805: Argument to function `_tool_action` is incorrect
+  error[invalid-argument-type] L1812: Argument to function `_register_background_handle` is incorr
+  error[invalid-argument-type] L1817: Argument to function `_observe_loop_tool_use` is incorrect
+  error[invalid-argument-type] L1923: Argument to function `_tool_result_event` is incorrect
+  error[invalid-return-type] L4674: Return type does not match returned value
+src/untether/runners/codex.py: 1 diagnostics
+  error[invalid-return-type] L774: Return type does not match returned value
+src/untether/runners/gemini.py: 1 diagnostics
+  error[invalid-return-type] L564: Return type does not match returned value
+src/untether/runners/mock.py: 3 diagnostics
+  error[unresolved-attribute] L123: Object of type `type[BrokenWorkerInterpreter]` has no attrib
+  error[unresolved-attribute] L188: Object of type `type[BrokenWorkerInterpreter]` has no attrib
+  error[unresolved-attribute] L202: Object of type `type[BrokenWorkerInterpreter]` has no attrib
+src/untether/runners/opencode.py: 1 diagnostics
+  error[invalid-return-type] L679: Return type does not match returned value
+src/untether/runners/pi.py: 3 diagnostics
+  error[invalid-argument-type] L154: Argument to function `_format_retry_delay` is incorrect
+  error[invalid-argument-type] L426: Argument to function `_format_retry_delay` is incorrect
+  error[invalid-return-type] L891: Return type does not match returned value
+src/untether/runners/run_options.py: 13 diagnostics
+  error[invalid-argument-type] L105: Argument is incorrect
+  error[invalid-argument-type] L106: Argument is incorrect
+  error[invalid-argument-type] L107: Argument is incorrect
+  error[invalid-argument-type] L108: Argument is incorrect
+  error[invalid-argument-type] L109: Argument is incorrect
+  error[invalid-argument-type] L110: Argument is incorrect
+  error[invalid-argument-type] L111: Argument is incorrect
+  error[invalid-argument-type] L114: Argument is incorrect
+  error[invalid-argument-type] L115: Argument is incorrect
+  error[invalid-argument-type] L116: Argument is incorrect
+  error[invalid-argument-type] L117: Argument is incorrect
+  error[invalid-argument-type] L121: Argument is incorrect
+  error[invalid-argument-type] L122: Argument is incorrect
+src/untether/runtime_loader.py: 6 diagnostics
+  error[invalid-assignment] L131: Object of type `float` is not assignable to attribute `start
+  error[invalid-assignment] L133: Object of type `float` is not assignable to attribute `idle_
+  error[invalid-assignment] L135: Object of type `float` is not assignable to attribute `shutd
+  error[invalid-assignment] L137: Object of type `bool` is not assignable to attribute `kill_t
+  error[invalid-assignment] L139: Object of type `int` is not assignable to attribute `retry_m
+  error[invalid-assignment] L141: Object of type `float` is not assignable to attribute `retry
+src/untether/sdnotify.py: 1 diagnostics
+  error[unresolved-attribute] L49: Module `socket` has no member `AF_UNIX`
+src/untether/session_quarantine.py: 1 diagnostics
+  error[invalid-argument-type] L89: Argument to constructor `float.__new__` is incorrect
+src/untether/shutdown.py: 1 diagnostics
+  error[invalid-argument-type] L29: Argument to function `request_shutdown` is incorrect
+src/untether/telegram/at_scheduler.py: 12 diagnostics
+  error[invalid-argument-type] L78: Argument to function `install` is incorrect
+  error[invalid-argument-type] L78: Argument to function `install` is incorrect
+  error[invalid-argument-type] L78: Argument to function `install` is incorrect
+  error[invalid-argument-type] L78: Argument to function `install` is incorrect
+  error[invalid-argument-type] L78: Argument to function `install` is incorrect
+  error[invalid-argument-type] L78: Argument to function `install` is incorrect
+  error[invalid-argument-type] L78: Argument to function `install` is incorrect
+  error[invalid-argument-type] L78: Argument to function `install` is incorrect
+  error[invalid-argument-type] L78: Argument to function `install` is incorrect
+  error[invalid-argument-type] L78: Argument to function `install` is incorrect
+  error[invalid-argument-type] L78: Argument to function `install` is incorrect
+  error[invalid-argument-type] L78: Argument to function `install` is incorrect
+src/untether/telegram/backend.py: 2 diagnostics
+  error[invalid-argument-type] L236: Argument to `TelegramTransport.__init__` is incorrect
+  error[invalid-argument-type] L273: Argument is incorrect
+src/untether/telegram/bridge.py: 6 diagnostics
+  error[invalid-argument-type] L251: Argument to `TelegramTransport.__init__` is incorrect
+  error[invalid-argument-type] L251: Argument to `TelegramTransport.__init__` is incorrect
+  error[invalid-argument-type] L251: Argument to `TelegramTransport.__init__` is incorrect
+  error[invalid-argument-type] L251: Argument to `TelegramTransport.__init__` is incorrect
+  error[invalid-argument-type] L251: Argument to `TelegramTransport.__init__` is incorrect
+  error[unresolved-attribute] L292: Object of type `BotClient` has no attribute `flush_outbox`
+src/untether/telegram/commands/_resolve_engine.py: 2 diagnostics
+  error[invalid-argument-type] L8: Argument to function `resolve_effective_engine` is incorrect
+  error[invalid-argument-type] L8: Argument to function `resolve_effective_engine` is incorrect
+src/untether/telegram/commands/ask_question.py: 2 diagnostics
+  error[invalid-argument-type] L22: Argument to function `send_next_ask_question_message` is inc
+  error[invalid-argument-type] L22: Argument to function `send_next_ask_question_message` is inc
+src/untether/telegram/commands/auth.py: 4 diagnostics
+  error[invalid-argument-type] L67: Argument to bound method `AuthCommand.handle` is incorrect
+  error[invalid-argument-type] L67: Argument to bound method `AuthCommand.handle` is incorrect
+  error[invalid-argument-type] L67: Argument to bound method `AuthCommand.handle` is incorrect
+  error[invalid-argument-type] L67: Argument to bound method `AuthCommand.handle` is incorrect
+src/untether/telegram/commands/cancel.py: 5 diagnostics
+  error[invalid-argument-type] L39: Argument to function `_claim_cancel` is incorrect
+  error[invalid-argument-type] L76: Argument to function `_claim_cancel` is incorrect
+  error[invalid-argument-type] L107: Argument to function `_edit_cancelled_message` is incorrect
+  error[invalid-argument-type] L275: Argument to function `_edit_cancelled_message` is incorrect
+  error[unresolved-attribute] L100: Attribute `message_id` is not defined on `None` in union `Me
+src/untether/telegram/commands/compact.py: 1 diagnostics
+  error[invalid-argument-type] L207: Argument to function `resolve_engine_for_message` is incorre
+src/untether/telegram/commands/config.py: 1 diagnostics
+  error[call-non-callable] L2309: Object of type `~None` is not callable
+src/untether/telegram/commands/dispatch.py: 4 diagnostics
+  error[invalid-argument-type] L164: Argument to function `_dispatch_callback` is incorrect
+  error[invalid-argument-type] L164: Argument to function `_dispatch_callback` is incorrect
+  error[invalid-argument-type] L164: Argument to function `_dispatch_callback` is incorrect
+  error[unresolved-attribute] L287: Object of type `CommandBackend` has no attribute `early_answ
+src/untether/telegram/commands/export.py: 3 diagnostics
+  error[invalid-argument-type] L163: Argument to bound method `ExportCommand.handle` is incorrect
+  error[invalid-argument-type] L163: Argument to bound method `ExportCommand.handle` is incorrect
+  error[invalid-argument-type] L163: Argument to bound method `ExportCommand.handle` is incorrect
+src/untether/telegram/commands/file_transfer.py: 1 diagnostics
+  error[unresolved-attribute] L603: Object of type `type[BrokenWorkerInterpreter]` has no attrib
+src/untether/telegram/commands/media.py: 1 diagnostics
+  error[invalid-argument-type] L28: Argument to function `_handle_media_group` is incorrect
+src/untether/telegram/commands/meta_cmd.py: 1 diagnostics
+  error[index-out-of-bounds] L244: Index 1 is out of bounds for tuple `tuple[str]` with length 
+src/untether/telegram/commands/planmode.py: 5 diagnostics
+  error[invalid-argument-type] L33: Argument to bound method `PlanModeCommand.handle` is incorre
+  error[invalid-argument-type] L33: Argument to bound method `PlanModeCommand.handle` is incorre
+  error[invalid-argument-type] L33: Argument to bound method `PlanModeCommand.handle` is incorre
+  error[invalid-argument-type] L33: Argument to bound method `PlanModeCommand.handle` is incorre
+  error[invalid-argument-type] L33: Argument to bound method `PlanModeCommand.handle` is incorre
+src/untether/telegram/commands/restart.py: 1 diagnostics
+  error[invalid-argument-type] L24: Argument to function `request_shutdown` is incorrect
+src/untether/telegram/commands/stats.py: 4 diagnostics
+  error[invalid-argument-type] L191: Argument to bound method `StatsCommand.handle` is incorrect
+  error[invalid-argument-type] L191: Argument to bound method `StatsCommand.handle` is incorrect
+  error[invalid-argument-type] L191: Argument to bound method `StatsCommand.handle` is incorrect
+  error[invalid-argument-type] L191: Argument to bound method `StatsCommand.handle` is incorrect
+src/untether/telegram/commands/usage.py: 6 diagnostics
+  error[invalid-argument-type] L306: Argument to bound method `UsageCommand.handle` is incorrect
+  error[invalid-argument-type] L306: Argument to bound method `UsageCommand.handle` is incorrect
+  error[invalid-argument-type] L306: Argument to bound method `UsageCommand.handle` is incorrect
+  error[invalid-argument-type] L306: Argument to bound method `UsageCommand.handle` is incorrect
+  error[invalid-argument-type] L306: Argument to bound method `UsageCommand.handle` is incorrect
+  error[invalid-argument-type] L306: Argument to bound method `UsageCommand.handle` is incorrect
+src/untether/telegram/engine_defaults.py: 1 diagnostics
+  error[invalid-argument-type] L30: Argument to function `resolve_engine_for_message` is incorre
+src/untether/telegram/loop.py: 37 diagnostics
+  error[invalid-argument-type] L134: Argument to function `_resolve_engine_run_options` is incorr
+  error[invalid-argument-type] L134: Argument to function `_resolve_engine_run_options` is incorr
+  error[invalid-argument-type] L134: Argument to function `_resolve_engine_run_options` is incorr
+  error[invalid-argument-type] L134: Argument to function `_resolve_engine_run_options` is incorr
+  error[invalid-argument-type] L134: Argument to function `_resolve_engine_run_options` is incorr
+  error[invalid-argument-type] L134: Argument to function `_resolve_engine_run_options` is incorr
+  error[invalid-argument-type] L134: Argument to function `_resolve_engine_run_options` is incorr
+  error[invalid-argument-type] L134: Argument to function `_resolve_engine_run_options` is incorr
+  error[invalid-argument-type] L134: Argument to function `_resolve_engine_run_options` is incorr
+  error[invalid-argument-type] L134: Argument to function `_resolve_engine_run_options` is incorr
+  error[invalid-argument-type] L134: Argument to function `_resolve_engine_run_options` is incorr
+  error[invalid-argument-type] L134: Argument to function `_resolve_engine_run_options` is incorr
+  error[invalid-argument-type] L197: Argument to bound method `TopicStateStore.clear_engine_sessi
+  error[invalid-argument-type] L199: Argument to bound method `TopicStateStore.set_session_resume
+  error[invalid-argument-type] L202: Argument to function `_commit_handoff_routing` is incorrect
+  error[invalid-argument-type] L202: Argument to function `_commit_handoff_routing` is incorrect
+  error[invalid-argument-type] L202: Argument to function `_commit_handoff_routing` is incorrect
+  error[invalid-argument-type] L239: Argument to bound method `TopicStateStore.set_session_resume
+  error[invalid-argument-type] L467: Argument to bound method `TaskGroup.start_soon` is incorrect
+  error[invalid-argument-type] L482: Argument to class `partial` is incorrect
+  error[invalid-argument-type] L508: Argument to class `partial` is incorrect
+  error[invalid-argument-type] L652: Argument to function `_drain_backlog` is incorrect
+  error[invalid-argument-type] L652: Argument to function `_drain_backlog` is incorrect
+  error[invalid-argument-type] L652: Argument to function `_drain_backlog` is incorrect
+  error[invalid-argument-type] L652: Argument to function `_drain_backlog` is incorrect
+  error[invalid-argument-type] L652: Argument to function `_drain_backlog` is incorrect
+  error[invalid-argument-type] L1333: Argument to `ResumeResolver.__init__` is incorrect
+  error[invalid-argument-type] L1333: Argument to `ResumeResolver.__init__` is incorrect
+  error[invalid-argument-type] L1333: Argument to `ResumeResolver.__init__` is incorrect
+  error[invalid-argument-type] L1333: Argument to `ResumeResolver.__init__` is incorrect
+  error[invalid-argument-type] L2411: Argument to function `_commit_handoff_routing` is incorrect
+  error[invalid-argument-type] L2516: Argument to function `install` is incorrect
+  error[invalid-argument-type] L2541: Argument to function `install` is incorrect
+  error[invalid-argument-type] L2569: Argument is incorrect
+  error[invalid-argument-type] L2710: Argument to `ResumeResolver.__init__` is incorrect
+  error[unresolved-attribute] L1725: Object of type `object` has no attribute `send`
+  error[unresolved-attribute] L1756: Object of type `object` has no attribute `send`
+src/untether/telegram/onboarding.py: 2 diagnostics
+  error[invalid-argument-type] L537: Argument to function `_validate_topics_setup_for` is incorre
+  error[invalid-argument-type] L570: Argument to function `to_formatted_text` is incorrect
+src/untether/telegram/outbox_delivery.py: 8 diagnostics
+  error[invalid-argument-type] L506: Argument to function `deliver_outbox_files` is incorrect
+  error[invalid-argument-type] L506: Argument to function `deliver_outbox_files` is incorrect
+  error[invalid-argument-type] L506: Argument to function `deliver_outbox_files` is incorrect
+  error[invalid-argument-type] L506: Argument to function `deliver_outbox_files` is incorrect
+  error[invalid-argument-type] L506: Argument to function `deliver_outbox_files` is incorrect
+  error[invalid-argument-type] L506: Argument to function `deliver_outbox_files` is incorrect
+  error[unresolved-attribute] L446: Object of type `type[BrokenWorkerInterpreter]` has no attrib
+  error[unsupported-operator] L379: Unsupported `+=` operation
+src/untether/telegram/parsing.py: 2 diagnostics
+  error[call-top-callable] L244: Object of type `Top[(...) -> object]` is not safe to call; i
+  error[invalid-argument-type] L245: Argument to `set.__init__` is incorrect
+src/untether/telegram/render.py: 3 diagnostics
+  error[unsupported-operator] L182: Unsupported `>=` operation
+  error[unsupported-operator] L184: Unsupported `+` operation
+  error[unsupported-operator] L185: Unsupported `-` operation
+src/untether/telegram/topic_state.py: 3 diagnostics
+  error[invalid-argument-type] L297: Argument to bound method `TopicStateStore.set_session_resume
+  error[invalid-argument-type] L297: Argument to bound method `TopicStateStore.set_session_resume
+  error[invalid-argument-type] L326: Argument to bound method `TopicStateStore.clear_engine_sessi
+src/untether/telegram/topics.py: 1 diagnostics
+  error[invalid-argument-type] L206: Argument to function `_validate_topics_setup_for` is incorre
+src/untether/telegram/voice.py: 1 diagnostics
+  error[no-matching-overload] L75: No overload of bound method `AsyncTranscriptions.create` mat
+src/untether/transport.py: 1 diagnostics
+  error[invalid-argument-type] L45: Argument to bound method `Transport.edit` is incorrect
+src/untether/triggers/describe.py: 1 diagnostics
+  error[invalid-argument-type] L60: Method `__getitem__` of type `Overload[(index: Literal[-7, 0
+src/untether/triggers/manager.py: 5 diagnostics
+  error[invalid-argument-type] L45: Argument to `TriggerManager.__init__` is incorrect
+  error[invalid-argument-type] L45: Argument to `TriggerManager.__init__` is incorrect
+  error[invalid-argument-type] L45: Argument to `TriggerManager.__init__` is incorrect
+  error[invalid-argument-type] L45: Argument to `TriggerManager.__init__` is incorrect
+  error[invalid-argument-type] L74: Argument to bound method `TriggerManager.update` is incorrec
+src/untether/triggers/server.py: 11 diagnostics
+  error[invalid-argument-type] L81: Argument to `StreamReader.__init__` is incorrect
+  error[invalid-argument-type] L209: Argument to function `build_webhook_app` is incorrect
+  error[invalid-argument-type] L209: Argument to function `build_webhook_app` is incorrect
+  error[invalid-argument-type] L209: Argument to function `build_webhook_app` is incorrect
+  error[invalid-argument-type] L381: Argument to function `render_prompt` is incorrect
+  error[invalid-assignment] L157: Invalid subscript assignment with key of type `Literal["file
+  error[unresolved-attribute] L135: Attribute `filename` is not defined on `MultipartReader`, `N
+  error[unresolved-attribute] L137: Attribute `filename` is not defined on `MultipartReader`, `N
+  error[unresolved-attribute] L147: Attribute `read_chunk` is not defined on `MultipartReader`, 
+  error[unresolved-attribute] L202: Attribute `name` is not defined on `MultipartReader`, `None`
+  error[unresolved-attribute] L203: Attribute `read` is not defined on `MultipartReader`, `None`
+src/untether/triggers/ssrf.py: 3 diagnostics
+  error[invalid-argument-type] L183: Argument to bound method `list.append` is incorrect
+  error[invalid-argument-type] L191: Argument to bound method `list.append` is incorrect
+  error[unresolved-attribute] L229: Object of type `type[BrokenWorkerInterpreter]` has no attrib
+src/untether/triggers/templating.py: 1 diagnostics
+  error[invalid-argument-type] L33: Argument to function `render_prompt` is incorrect
+src/untether/utils/streams.py: 2 diagnostics
+  error[invalid-argument-type] L28: Argument to function `drain_stderr` is incorrect
+  error[invalid-argument-type] L28: Argument to function `drain_stderr` is incorrect
+src/untether/utils/subprocess.py: 7 diagnostics
+  error[invalid-argument-type] L88: Argument to function `terminate_process` is incorrect
+  error[invalid-argument-type] L88: Argument to function `terminate_process` is incorrect
+  error[invalid-argument-type] L88: Argument to function `terminate_process` is incorrect
+  error[invalid-argument-type] L88: Argument to function `terminate_process` is incorrect
+  error[invalid-argument-type] L88: Argument to function `terminate_process` is incorrect
+  error[invalid-argument-type] L97: Argument to function `kill_process` is incorrect
+  error[invalid-argument-type] L97: Argument to function `kill_process` is incorrect
+src/untether/utils/transient_failures.py: 1 diagnostics
+  error[invalid-argument-type] L124: Argument to function `classify_transient_failure` is incorre

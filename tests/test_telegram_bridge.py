@@ -1590,7 +1590,7 @@ async def test_send_with_resume_waits_for_token() -> None:
     running_task = RunningTask()
 
     async def trigger_resume() -> None:
-        await anyio.lowlevel.checkpoint()
+        await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
         running_task.resume = ResumeToken(engine=CODEX_ENGINE, value="abc123")
         running_task.resume_ready.set()
 
@@ -1787,11 +1787,11 @@ async def test_run_main_loop_routes_reply_to_running_resume() -> None:
             # runs don't flake (2s expired on the CI 3.12 runner).
             with anyio.fail_after(30):
                 await reply_ready.wait()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             hold.set()
             with anyio.fail_after(30):
                 while len(runner.calls) < 2:
-                    await anyio.lowlevel.checkpoint()
+                    await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             assert runner.calls[1][1] == ResumeToken(
                 engine=CODEX_ENGINE, value=resume_value
             )
@@ -2068,6 +2068,44 @@ async def test_run_main_loop_auto_resumes_topic_default_engine(
     assert claude_runner.calls[0][1] == ResumeToken(
         engine="claude", value="resume-claude"
     )
+
+
+@pytest.mark.anyio
+async def test_run_main_loop_zero_batch_debounce_dispatches_prompt(
+    tmp_path: Path,
+) -> None:
+    runner = ScriptRunner([Return(answer="ok")], engine=CODEX_ENGINE)
+    runtime = TransportRuntime(
+        router=_make_router(runner),
+        projects=_empty_projects(),
+        config_path=tmp_path / "untether.toml",
+    )
+    cfg = TelegramBridgeConfig(
+        bot=FakeBot(),
+        runtime=runtime,
+        chat_id=123,
+        startup_msg="",
+        exec_cfg=ExecBridgeConfig(
+            transport=FakeTransport(), presenter=MarkdownPresenter(), final_notify=True
+        ),
+        prompt_batch_debounce_s=0.0,
+        forward_coalesce_s=0.0,
+    )
+
+    async def poller(_cfg: TelegramBridgeConfig):
+        yield TelegramIncomingMessage(
+            transport="telegram",
+            chat_id=123,
+            message_id=1,
+            text="hello",
+            reply_to_message_id=None,
+            reply_to_text=None,
+            sender_id=123,
+        )
+
+    await run_main_loop(cfg, poller)
+
+    assert len(runner.calls) == 1
 
 
 @pytest.mark.anyio

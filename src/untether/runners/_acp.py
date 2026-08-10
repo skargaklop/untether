@@ -95,6 +95,8 @@ class SubprocessAcpTransport:
     env: dict[str, str] | None = None
     close_timeout_s: float = 5.0
     request_timeout_s: float = 60.0
+    shutdown_timeout_s: float = 5.0
+    kill_tree_on_cancel: bool = True
 
     def __post_init__(self) -> None:
         self._proc: Process | None = None
@@ -116,7 +118,12 @@ class SubprocessAcpTransport:
         kwargs["stderr"] = asyncio.subprocess.PIPE
         if self.env is not None:
             kwargs["env"] = self.env
-        self._ctx = manage_subprocess(cmd, **kwargs)
+        self._ctx = manage_subprocess(
+            cmd,
+            shutdown_timeout_s=self.shutdown_timeout_s,
+            kill_tree_on_cancel=self.kill_tree_on_cancel,
+            **kwargs,
+        )
         proc = await self._ctx.__aenter__()
         self._proc = proc
         if proc.stdout is None or proc.stdin is None or proc.stderr is None:
@@ -305,6 +312,8 @@ class AcpClient:
     env: dict[str, str] | None = None
     close_timeout_s: float = 5.0
     request_timeout_s: float = 60.0
+    shutdown_timeout_s: float = 5.0
+    kill_tree_on_cancel: bool = True
     transport: AcpTransport | None = None
     _id_counter: itertools.count[int] = field(
         default_factory=lambda: itertools.count(1), init=False, repr=False
@@ -323,15 +332,9 @@ class AcpClient:
             env=self.env,
             close_timeout_s=self.close_timeout_s,
             request_timeout_s=self.request_timeout_s,
+            shutdown_timeout_s=self.shutdown_timeout_s,
+            kill_tree_on_cancel=self.kill_tree_on_cancel,
         )
-
-    async def __aenter__(self) -> AcpClient:
-        self._owned_transport = self._resolve_transport()
-        await self._owned_transport.start()
-        return self
-
-    async def __aexit__(self, *exc: object) -> None:
-        await self._owned_transport.close()
 
     async def initialize(self) -> None:
         from .. import __version__ as _ver
@@ -468,6 +471,8 @@ class _AcpCompactRunner(Protocol):
     compact_accepts_instructions: bool
     close_timeout_s: float
     startup_timeout_s: float | None
+    shutdown_timeout_s: float
+    kill_tree_on_cancel: bool
 
     def command(self) -> str: ...
 
@@ -478,6 +483,8 @@ class AcpCompactMixin:
     """Compact via ACP ``session/prompt`` after capability-gating."""
 
     compact_accepts_instructions: bool = True
+    shutdown_timeout_s: float = 5.0
+    kill_tree_on_cancel: bool = True
 
     def compact_support(self) -> Any:
         from ..compact import CompactSupport

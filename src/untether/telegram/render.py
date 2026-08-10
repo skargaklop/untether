@@ -99,6 +99,7 @@ def _normalize_nested_list_markers(md: str) -> str:
 
     return "".join(lines)
 
+
 def _protect_code_regions(md: str) -> tuple[str, list[str]]:
     """Replace fenced blocks and inline code with placeholders (fences first)."""
     buckets: list[str] = []
@@ -137,9 +138,7 @@ def _apply_chat_markup_extensions(md: str) -> str:
         protected,
     )
     # Reuse GFM strikethrough so sulguk sees <s>.
-    protected = _SINGLE_STRIKE_RE.sub(
-        lambda m: f"~~{m.group('body')}~~", protected
-    )
+    protected = _SINGLE_STRIKE_RE.sub(lambda m: f"~~{m.group('body')}~~", protected)
     return _restore_code_regions(protected, buckets)
 
 

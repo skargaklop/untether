@@ -84,10 +84,12 @@ async def handle_queue_command(
         lines.append("")
         for i, job in enumerate(jobs, start=1):
             flags = []
-            if job.plan:
-                flags.append("plan")
-            if job.goal:
-                flags.append("goal")
+            opts = job.run_options
+            if opts is not None:
+                if opts.plan:
+                    flags.append("plan")
+                if opts.goal:
+                    flags.append("goal")
             flag_s = f" [{', '.join(flags)}]" if flags else ""
             lines.append(f"{i}. {_preview(job.text)}{flag_s}")
     await reply(text="\n".join(lines))

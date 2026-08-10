@@ -28,7 +28,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import anyio
 import msgspec
@@ -62,6 +62,7 @@ from ..utils.env_audit import audit_proc_env
 from ..utils.paths import get_run_base_dir
 from ..utils.streams import drain_stderr
 from ..utils.subprocess import (
+    forced_termination_signal,
     manage_subprocess,
     redact_env_i_args,
     signal_pid_group,
@@ -2911,6 +2912,9 @@ class ClaudeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         # resume / model / effort / allowed-tools / permission so the final
         # prompt position (after `--`) is never displaced (#407).
         args.extend(self.extra_args)
+        # Subagent injection: --agent <name> when run_options.subagent is set.
+        if run_options is not None and run_options.subagent:
+            args.extend(["--agent", str(run_options.subagent)])
 
         if resume is not None:
             if resume.is_continue:
@@ -3427,7 +3431,7 @@ class ClaudeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
                 session_id=sid,
                 pid=proc.pid,
             )
-            signal_pid_group(proc.pid, signal.SIGKILL)
+            signal_pid_group(proc.pid, forced_termination_signal())
         return True
 
     async def _post_result_idle_watchdog(
@@ -4134,7 +4138,7 @@ class ClaudeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
                         pid=proc.pid,
                         session_id=sid,
                     )
-                signal_pid_group(proc.pid, signal.SIGKILL)
+                signal_pid_group(proc.pid, forced_termination_signal())
                 return "reader_done_but_alive_timeout"
 
     def translate(
@@ -4667,15 +4671,18 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
             f"is managed by Untether and cannot be overridden."
         )
 
-    return ClaudeRunner(
-        claude_cmd=claude_cmd,
-        model=model,
-        permission_mode=permission_mode,
-        allowed_tools=allowed_tools,
-        extra_args=extra_args,
-        dangerously_skip_permissions=dangerously_skip_permissions,
-        use_api_billing=use_api_billing,
-        session_title=title,
+    return cast(
+        Runner,
+        ClaudeRunner(
+            claude_cmd=claude_cmd,
+            model=model,
+            permission_mode=permission_mode,
+            allowed_tools=allowed_tools,
+            extra_args=extra_args,
+            dangerously_skip_permissions=dangerously_skip_permissions,
+            use_api_billing=use_api_billing,
+            session_title=title,
+        ),
     )
 
 

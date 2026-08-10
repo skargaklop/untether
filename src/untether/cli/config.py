@@ -155,6 +155,12 @@ def config_path_cmd(
 ) -> None:
     """Print the resolved config path."""
     path = _resolve_config_path_override(config_path)
+    if config_path is not None:
+        typer.echo(str(path))
+        return
+    if path == _resolve_home_config_path():
+        typer.echo("~/.untether/untether.toml")
+        return
     typer.echo(_config_path_display(path))
 
 

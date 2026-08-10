@@ -1,5 +1,14 @@
 # changelog
 
+## Unreleased
+
+### changes
+
+- **telegram:** compact and handoff now use authorization-scoped five-minute confirmation cards, one-card lifecycle updates, safe cancellation, and transactional routing that changes a session only after its destination seed completes.
+- **directives:** add sticky `/plan` and `/subagent` preferences, dual-mode `/plan`/`/goal` classification, and native Claude/OpenCode `--agent` support while retaining one-shot skill data.
+- **runners:** apply lifecycle timeout/tree-cleanup settings to subprocess and ACP paths, distinguish JSONL timeouts from EOF, sanitize exhausted transient failures, and seed Pi goal-list sessions when the extension is installed.
+- **ci:** record that `ty` remains informational until the existing repository-wide diagnostics are resolved; cross-platform test coverage remains mandatory.
+
 ## v0.35.4 (2026-07-22)
 
 <!-- Covers rc1 through rc14 (the full v0.35.4 release-candidate cycle). Date is the

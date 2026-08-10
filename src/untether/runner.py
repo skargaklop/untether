@@ -33,6 +33,15 @@ from .utils.subprocess import manage_subprocess
 _lock_logger = get_logger(__name__)
 
 
+class RunnerTimeoutError(RuntimeError):
+    """Raised when startup or idle timeout expires during JSONL iteration."""
+
+    def __init__(self, kind: str, timeout_s: float) -> None:
+        self.kind = kind
+        self.timeout_s = timeout_s
+        super().__init__(f"{kind} timeout after {timeout_s}s")
+
+
 class ResumeTokenMixin:
     engine: EngineId
     resume_re: re.Pattern[str]
@@ -103,6 +112,7 @@ def _format_delay(seconds: float) -> str:
     if seconds < 1:
         return f"{seconds:.1f}"
     return str(int(seconds))
+
 
 def _rc_label(rc: int) -> str:
     """Format exit code, adding signal name for negative rc values."""
@@ -405,6 +415,8 @@ class JsonlSubprocessRunner(BaseRunner):
     # Lifecycle settings — set by runtime_loader from [runners] config.
     startup_timeout_s: float | None = None
     idle_timeout_s: float | None = None
+    shutdown_timeout_s: float = 5.0
+    kill_tree_on_cancel: bool = True
     retry_max_attempts: int = 1
     retry_base_delay_s: float = 5.0
 
@@ -990,7 +1002,6 @@ class JsonlSubprocessRunner(BaseRunner):
             output.append(evt)
         return output
 
-
     async def _iter_jsonl_with_timeouts(
         self,
         stdout: Any,
@@ -1001,9 +1012,9 @@ class JsonlSubprocessRunner(BaseRunner):
         """Yield JSONL lines, enforcing startup and idle timeouts per read.
 
         The first read uses ``startup_timeout_s``; subsequent reads use
-        ``idle_timeout_s``. If a read times out, iteration stops silently
-        — the caller decides what to emit based on how many lines were
-        produced.
+        ``idle_timeout_s``. Raises :class:`RunnerTimeoutError` on timeout so
+        the caller can surface a deterministic failure instead of silently
+        treating it like EOF.
         """
         first = True
         while True:
@@ -1011,15 +1022,20 @@ class JsonlSubprocessRunner(BaseRunner):
             with anyio.move_on_after(timeout):
                 try:
                     raw_line = await stdout.readline()
-                except Exception:  # noqa: BLE001
+                except (
+                    anyio.BrokenResourceError,
+                    anyio.ClosedResourceError,
+                    anyio.EndOfStream,
+                ):
                     return
                 if not raw_line:
-                    return
+                    return  # clean EOF
                 yield raw_line
                 first = False
                 continue
-            # Timed out
-            return
+            # Timed out — raise a deterministic failure.
+            raise RunnerTimeoutError("startup" if first else "idle", timeout)
+
     async def _iter_jsonl_events(
         self,
         *,
@@ -1040,25 +1056,35 @@ class JsonlSubprocessRunner(BaseRunner):
             )
         else:
             line_source = self.iter_json_lines(stdout)
-        async for raw_line in line_source:
-            for evt in self._handle_jsonl_line(
-                raw_line=raw_line,
-                stream=stream,
-                state=state,
-                resume=resume,
-                logger=logger,
-                pid=pid,
-            ):
-                yield evt
-            # #505 After CompletedEvent, stop reading stdout. Otherwise a
-            # child process inheriting the stdout fd (e.g. MCP server,
-            # backgrounded shell) keeps the pipe open and we block on
-            # iter_json_lines waiting for an EOF that never comes.
-            # Audited 2026-05-10 across codex/opencode/pi/gemini/amp:
-            # each engine emits exactly one terminal event, no
-            # post-completion events. Mirrors Claude's override.
-            if stream.did_emit_completed:
-                break
+        try:
+            async for raw_line in line_source:
+                for evt in self._handle_jsonl_line(
+                    raw_line=raw_line,
+                    stream=stream,
+                    state=state,
+                    resume=resume,
+                    logger=logger,
+                    pid=pid,
+                ):
+                    yield evt
+                # #505 After CompletedEvent, stop reading stdout. Otherwise a
+                # child process inheriting the stdout fd (e.g. MCP server,
+                # backgrounded shell) keeps the pipe open and we block on
+                # iter_json_lines waiting for an EOF that never comes.
+                # Audited 2026-05-10 across codex/opencode/pi/gemini/amp:
+                # each engine emits exactly one terminal event, no
+                # post-completion events. Mirrors Claude's override.
+                if stream.did_emit_completed:
+                    break
+        except RunnerTimeoutError as exc:
+            if not stream.did_emit_completed:
+                yield CompletedEvent(
+                    engine=self.engine,
+                    ok=False,
+                    answer="",
+                    resume=resume,
+                    error=str(exc),
+                )
 
     _WATCHDOG_GRACE_SECONDS: float = 5.0
 
@@ -1313,9 +1339,12 @@ class JsonlSubprocessRunner(BaseRunner):
                             )
                             # #590: descendant-aware — bare killpg missed
                             # grandchildren in separate sessions/pgroups.
-                            from .utils.subprocess import signal_pid_group
+                            from .utils.subprocess import (
+                                forced_termination_signal,
+                                signal_pid_group,
+                            )
 
-                            signal_pid_group(pid, signal.SIGKILL)
+                            signal_pid_group(pid, forced_termination_signal())
                         prev_diag = diag
 
             await anyio.sleep(self._WATCHDOG_POLL_SECONDS)
@@ -1335,9 +1364,9 @@ class JsonlSubprocessRunner(BaseRunner):
         # manage_subprocess uses start_new_session=True, so the process group
         # matches the subprocess PID. #590: descendant-aware so pgroup
         # escapees holding the pipes are also terminated.
-        from .utils.subprocess import signal_pid_group
+        from .utils.subprocess import forced_termination_signal, signal_pid_group
 
-        signal_pid_group(pid, signal.SIGKILL)
+        signal_pid_group(pid, forced_termination_signal())
         logger.warning("subprocess.killed_orphan_group", pid=pid)
 
     async def run_impl(
@@ -1348,6 +1377,7 @@ class JsonlSubprocessRunner(BaseRunner):
         """
         from .utils.transient_failures import (
             classify_transient_failure,
+            format_transient_failure,
         )
 
         max_attempts = max(1, int(self.retry_max_attempts))
@@ -1362,7 +1392,7 @@ class JsonlSubprocessRunner(BaseRunner):
             terminal_error: str | None = None
 
             async for evt in self._run_single_attempt_events(prompt, resume):
-                from ..model import StartedEvent
+                from .model import StartedEvent
 
                 if isinstance(evt, StartedEvent):
                     started_emitted = True
@@ -1389,15 +1419,11 @@ class JsonlSubprocessRunner(BaseRunner):
                             and not started_emitted
                             and not action_emitted
                             and not answer_emitted
-                            and classify_transient_failure(
-                                terminal_error or ""
-                            )
+                            and classify_transient_failure(terminal_error or "")
                             is not None
                         )
                         if can_retry:
-                            failure = classify_transient_failure(
-                                terminal_error or ""
-                            )
+                            failure = classify_transient_failure(terminal_error or "")
                             assert failure is not None
                             delay = base_delay * attempt
                             status = (
@@ -1414,7 +1440,23 @@ class JsonlSubprocessRunner(BaseRunner):
                             )
                             await anyio.sleep(delay)
                             break
-                        # Can't retry — flush collected events
+                        # Can't retry — sanitize transient failures, then
+                        # flush collected events.
+                        failure_cls = classify_transient_failure(terminal_error or "")
+                        if failure_cls is not None:
+                            sanitized_error = format_transient_failure(
+                                engine, failure_cls
+                            )
+                            collected = [
+                                replace(
+                                    buffered,
+                                    error=sanitized_error,
+                                )
+                                if isinstance(buffered, CompletedEvent)
+                                and not buffered.ok
+                                else buffered
+                                for buffered in collected
+                            ]
                         for buffered in collected:
                             yield buffered
                         return
@@ -1470,6 +1512,8 @@ class JsonlSubprocessRunner(BaseRunner):
         async with manage_subprocess(
             cmd,
             reap_orphans=self._reap_orphans,
+            shutdown_timeout_s=self.shutdown_timeout_s,
+            kill_tree_on_cancel=self.kill_tree_on_cancel,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

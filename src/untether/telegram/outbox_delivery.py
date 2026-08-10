@@ -443,7 +443,7 @@ async def _deliver_skipped_dirs_as_zip(
         dir_path = target / name
         # Compression + descriptor IO is CPU/memory-heavy — keep it off the loop.
         try:
-            result = await anyio.to_thread.run_sync(
+            result = await anyio.to_thread.run_sync(  # ty: ignore[unresolved-attribute]
                 functools.partial(
                     _zip_skipped_dir,
                     dir_path,

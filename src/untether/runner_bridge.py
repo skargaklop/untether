@@ -1264,7 +1264,7 @@ class ProgressEdits:
                 return True
             return True
 
-        from .utils.subprocess import signal_pid_group
+        from .utils.subprocess import forced_termination_signal, signal_pid_group
 
         with anyio.CancelScope(shield=True):
             deadline = time.monotonic() + self._CANCEL_ESCALATION_S
@@ -1287,7 +1287,7 @@ class ProgressEdits:
                     return
                 await anyio.sleep(self._CANCEL_ESCALATION_POLL_S)
             if _alive():
-                signal_pid_group(pid, _signal.SIGKILL)
+                signal_pid_group(pid, forced_termination_signal())
 
     async def _stall_monitor(self) -> None:
         """Periodically check for event stalls, log diagnostics, and notify.
@@ -2548,7 +2548,7 @@ class ProgressEdits:
             return f"{a.kind}:{a.title} ({status})"
         return None
 
-    async def _run_loop(self, bg_tg: anyio.abc.TaskGroup) -> None:
+    async def _run_loop(self, bg_tg: anyio.abc.TaskGroup) -> None:  # ty: ignore[unresolved-attribute]
         while True:
             while self.rendered_seq == self.event_seq:
                 try:
@@ -2857,7 +2857,7 @@ class ProgressEdits:
     async def _send_outline(
         self,
         text: str,
-        bg_tg: anyio.abc.TaskGroup,
+        bg_tg: anyio.abc.TaskGroup,  # ty: ignore[unresolved-attribute]
         *,
         approval_keyboard: dict[str, Any] | None = None,
         session_id: str | None = None,
@@ -3286,7 +3286,7 @@ async def handle_message(
     _auto_continued_count: int = 0,
     _empty_resent_count: int = 0,
     _stream_idle_retried_count: int = 0,
-) -> None:
+) -> RunOutcome:
     logger.info(
         "handle.incoming",
         channel_id=incoming.channel_id,
@@ -4064,7 +4064,7 @@ async def handle_message(
                     running_tasks.pop(progress_ref, None)
             if not outcome.cancelled and error is None:
                 # Give pending progress edits a chance to flush if they're ready.
-                await anyio.lowlevel.checkpoint()
+                await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             # Clean up any remaining ephemeral notification messages.
             await edits.delete_ephemeral()
             edits_scope.cancel()
@@ -4072,15 +4072,14 @@ async def handle_message(
     elapsed = clock() - started_at
 
     if error is not None and final_delivery["sent"]:
-        # #591: the answer was already delivered before the teardown error —
-        # don't overwrite the delivered final message with an error render.
+        # #591: the answer was already delivered before the teardown error.
         logger.warning(
             "handle.error_after_final_delivery",
             error=str(error),
             error_type=error.__class__.__name__,
             elapsed_s=round(elapsed, 2),
         )
-        return
+        return outcome
 
     if error is not None:
         sync_resume_token(progress_tracker, outcome.resume)
@@ -4132,7 +4131,7 @@ async def handle_message(
             delete_tag="error",
             thread_id=incoming.thread_id,
         )
-        return
+        return outcome
 
     if outcome.cancelled and final_delivery["sent"]:
         # #591: the run completed and its answer was delivered before the
@@ -4144,7 +4143,7 @@ async def handle_message(
             resume=outcome.resume.value if outcome.resume else None,
             elapsed_s=elapsed,
         )
-        return
+        return outcome
 
     if outcome.cancelled:
         resume = sync_resume_token(progress_tracker, outcome.resume)
@@ -4175,7 +4174,7 @@ async def handle_message(
             delete_tag="cancel",
             thread_id=incoming.thread_id,
         )
-        return
+        return outcome
 
     if outcome.completed is None:
         raise RuntimeError("runner finished without a completed event")
@@ -4237,7 +4236,7 @@ async def handle_message(
                 engine=runner.engine,
                 attempt=_empty_resent_count + 1,
             )
-        await handle_message(
+        return await handle_message(
             cfg,
             runner=runner,
             incoming=IncomingMessage(
@@ -4255,17 +4254,11 @@ async def handle_message(
             on_thread_known=on_thread_known,
             on_resume_failed=on_resume_failed,
             clock=clock,
-            # #631 (T6): thread the resolved store through so an
-            # injected/singleton store survives this recursive re-entry.
             quarantine_store=_qstore,
-            # Carry ALL recovery counters so an alternating empty-resume ↔
-            # auto-continue ↔ stream-idle-retry chain can't reset another
-            # guard and loop.
             _auto_continued_count=_auto_continued_count,
             _empty_resent_count=_empty_resent_count + 1,
             _stream_idle_retried_count=_stream_idle_retried_count,
         )
-        return
     # --- End auto-resend ---
 
     # --- Auto-continue: mitigate Claude Code bug #34142/#30333 ---
@@ -4387,7 +4380,7 @@ async def handle_message(
                 thread_id=incoming.thread_id,
             ),
         )
-        await handle_message(
+        return await handle_message(
             cfg,
             runner=runner,
             incoming=IncomingMessage(
@@ -4405,16 +4398,11 @@ async def handle_message(
             on_thread_known=on_thread_known,
             on_resume_failed=on_resume_failed,
             clock=clock,
-            # #631 (T6): thread the resolved store through so an
-            # injected/singleton store survives this recursive re-entry.
             quarantine_store=_qstore,
             _auto_continued_count=_auto_continued_count + 1,
-            # Carry the other recovery guards so they can't be reset by an
-            # interleaved auto-continue (see #596 auto-resend / #572 retry).
             _empty_resent_count=_empty_resent_count,
             _stream_idle_retried_count=_stream_idle_retried_count,
         )
-        return
     # --- End auto-continue ---
 
     # --- #572: bounded auto-retry for Type-A stream-idle timeouts ---
@@ -4471,7 +4459,7 @@ async def handle_message(
                 thread_id=incoming.thread_id,
             ),
         )
-        await handle_message(
+        return await handle_message(
             cfg,
             runner=runner,
             incoming=IncomingMessage(
@@ -4490,13 +4478,10 @@ async def handle_message(
             on_resume_failed=on_resume_failed,
             clock=clock,
             quarantine_store=_qstore,
-            # Carry the other recovery counters so an alternating chain
-            # can't reset another guard and loop.
             _auto_continued_count=_auto_continued_count,
             _empty_resent_count=_empty_resent_count,
             _stream_idle_retried_count=_stream_idle_retried_count + 1,
         )
-        return
     # --- End #572 stream-idle auto-retry ---
 
     # #591: deliver the final answer unless the early path already did.
@@ -4565,3 +4550,5 @@ async def handle_message(
                     _outbox_result.skipped,
                     _oc,
                 )
+
+    return outcome

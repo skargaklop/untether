@@ -85,6 +85,9 @@ class FakeTopicStore:
     ) -> EngineOverrides | None:
         return self.overrides.get((chat_id, thread_id, engine))
 
+    async def get_plan_mode(self, chat_id: int, thread_id: int) -> bool | None:
+        return None
+
 
 @dataclass
 class FakeChatPrefs:
@@ -94,6 +97,12 @@ class FakeChatPrefs:
         self, chat_id: int, engine: str
     ) -> EngineOverrides | None:
         return self.overrides.get((chat_id, engine))
+
+    async def get_plan_mode(self, chat_id: int) -> bool | None:
+        return None
+
+    async def get_subagent(self, chat_id: int) -> str | None:
+        return None
 
 
 @dataclass

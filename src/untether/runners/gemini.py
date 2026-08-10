@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import msgspec
 
@@ -561,10 +561,13 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
 
     title = str(model) if model is not None else "gemini"
 
-    return GeminiRunner(
-        model=model,
-        session_title=title,
-        skip_trust=skip_trust_value,
+    return cast(
+        Runner,
+        GeminiRunner(
+            model=model,
+            session_title=title,
+            skip_trust=skip_trust_value,
+        ),
     )
 
 

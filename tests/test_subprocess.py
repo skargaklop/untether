@@ -1,3 +1,4 @@
+import os
 import signal
 import sys
 from dataclasses import dataclass
@@ -27,6 +28,19 @@ class _FakeProc:
         self.kill_called += 1
 
 
+def test_kill_process_uses_direct_child_fallback_without_sigkill(
+    monkeypatch,
+) -> None:
+    """Windows cleanup falls back to the process kill method without SIGKILL."""
+    monkeypatch.setattr(subprocess_utils.os, "name", "nt")
+    monkeypatch.delattr(subprocess_utils.signal, "SIGKILL", raising=False)
+
+    proc = _FakeProc()
+    subprocess_utils.kill_process(proc)
+
+    assert proc.kill_called == 1
+
+
 @pytest.mark.anyio
 async def test_manage_subprocess_kills_when_terminate_times_out(
     monkeypatch,
@@ -51,10 +65,11 @@ async def test_manage_subprocess_kills_when_terminate_times_out(
 
 
 @pytest.mark.anyio
-async def test_manage_subprocess_uses_10s_kill_timeout(
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups only")
+async def test_manage_subprocess_uses_configured_shutdown_timeout(
     monkeypatch,
 ) -> None:
-    """Verify the SIGTERM grace period before SIGKILL is 10 seconds."""
+    """POSIX shutdown honors the configured SIGTERM grace period."""
     captured_timeout: list[float] = []
 
     async def capture_wait(_proc, timeout: float) -> bool:
@@ -64,11 +79,11 @@ async def test_manage_subprocess_uses_10s_kill_timeout(
     monkeypatch.setattr(subprocess_utils, "wait_for_process", capture_wait)
 
     async with subprocess_utils.manage_subprocess(
-        [sys.executable, "-c", "pass"]
+        [sys.executable, "-c", "pass"], shutdown_timeout_s=0.25
     ) as proc:
         assert proc.returncode is None
 
-    assert captured_timeout == [10.0]
+    assert captured_timeout == [0.25]
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +280,7 @@ async def test_manage_subprocess_acloses_transport_on_clean_exit(
 
 
 @pytest.mark.anyio
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups only")
 async def test_manage_subprocess_acloses_transport_after_kill_path(
     monkeypatch,
 ) -> None:
@@ -315,6 +331,7 @@ async def test_manage_subprocess_aclose_errors_are_suppressed(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups only")
 def test_signal_pid_group_delivers_to_group_and_descendants(monkeypatch) -> None:
     """signal_pid_group snapshots descendants BEFORE killpg and delivers the
     signal to both — bare killpg missed pgroup escapees."""
@@ -340,6 +357,7 @@ def test_signal_pid_group_delivers_to_group_and_descendants(monkeypatch) -> None
 
 
 @pytest.mark.anyio
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups only")
 async def test_reap_orphaned_group_noop_when_group_empty(monkeypatch) -> None:
     """No group members and no extras — the sweep returns instantly and
     signals nothing (the common clean-teardown case must stay free)."""
@@ -359,6 +377,7 @@ async def test_reap_orphaned_group_noop_when_group_empty(monkeypatch) -> None:
 
 
 @pytest.mark.anyio
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups only")
 async def test_reap_orphaned_group_sigterms_then_sigkills_survivors(
     monkeypatch,
 ) -> None:
@@ -399,6 +418,7 @@ async def test_reap_orphaned_group_sigterms_then_sigkills_survivors(
 
 
 @pytest.mark.anyio
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups only")
 async def test_reap_orphaned_group_kills_snapshot_escapees(monkeypatch) -> None:
     """PIDs captured while the leader was alive (pgroup escapees in their
     own session) are signalled even though killpg can't reach them."""
@@ -475,6 +495,7 @@ async def test_manage_subprocess_reaps_after_clean_exit(monkeypatch) -> None:
 
 
 @pytest.mark.anyio
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups only")
 async def test_reap_orphaned_group_skips_recycled_pid(monkeypatch) -> None:
     """#590 hardening: a captured extra PID whose /proc starttime no longer
     matches (PID recycled by an unrelated process) is NOT signalled."""
@@ -503,6 +524,7 @@ async def test_reap_orphaned_group_skips_recycled_pid(monkeypatch) -> None:
 
 
 @pytest.mark.anyio
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups only")
 async def test_reap_orphaned_group_signals_matching_identity(monkeypatch) -> None:
     """#590 hardening: a captured extra PID whose starttime still matches IS
     signalled (identity verified, not a recycled PID)."""

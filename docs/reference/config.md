@@ -373,6 +373,31 @@ Controls Untether's observation of Claude Code's session-scoped scheduling tools
 
 State is persisted to `active_loops.json` (sibling of your `untether.toml`) so loops survive restarts. The do-not-resume sentinel for `/cancel`-cancelled loops is persisted alongside.
 
+### `[runners]`
+
+Global subprocess lifecycle settings shared by every native runner. Values are validated when configuration loads.
+
+=== "toml"
+
+    ```toml
+    [runners]
+    startup_timeout_s = 60.0
+    idle_timeout_s = 900.0
+    kill_tree_on_cancel = true
+    shutdown_timeout_s = 5.0
+    retry_max_attempts = 3
+    retry_base_delay_s = 5.0
+    ```
+
+| Key | Type | Default | Notes |
+|-----|------|---------|-------|
+| `startup_timeout_s` | float | `60.0` | Positive seconds permitted before the first decoded runner event. ACP request startup uses this value. |
+| `idle_timeout_s` | float | `900.0` | Positive seconds permitted between decoded runner events. |
+| `kill_tree_on_cancel` | bool | `true` | On Windows only, controls the additional descendant-tree kill on cancellation. Direct-child cleanup, POSIX process-group cleanup, stream closure, and orphan reaping always remain enabled. |
+| `shutdown_timeout_s` | float | `5.0` | Positive shutdown wait before escalation. Also sets ACP client close timeout. |
+| `retry_max_attempts` | int | `3` | Total allowed attempts, including the initial attempt. Must be at least one. Only failures before visible output are retried. |
+| `retry_base_delay_s` | float | `5.0` | Non-negative linear retry base: waits are `base × attempt` before attempts two and later. Exhausted transient failures are rendered without provider payloads. |
+
 ### `[auto_continue]`
 
 Auto-continue detects when Claude Code exits after receiving tool results without processing them (upstream bugs [#34142](https://github.com/anthropics/claude-code/issues/34142), [#30333](https://github.com/anthropics/claude-code/issues/30333)) and automatically resumes the session. Detection is based on a protocol invariant: normal sessions always end with `last_event_type=result`, while premature exits show `last_event_type=user`.

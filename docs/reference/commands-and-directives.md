@@ -12,6 +12,10 @@ Untether parses the first non-empty line of a message for a directive prefix.
 | `/<project-alias>` | `/happy-gadgets add escape-pod` | Select a project alias. |
 | `@branch` | `@feat/happy-camera rewind to checkpoint` | Run in a worktree for the branch. |
 | Combined | `/happy-gadgets @feat/flower-pin observe unseen` | Project + branch. |
+| `--plan <prompt>` | `--plan inspect the deployment` | Run this message with a planning instruction. |
+| `--goal <condition>` | `--goal tests pass` | Run autonomously until the stated condition; goal takes precedence over plan. |
+| `--skill <name>` | `--skill reviewer check the diff` | Carry one-shot skill data. Untether does not inject it into native harnesses. |
+| `--subagent <name>` | `--subagent reviewer inspect auth` | Select an agent for engines with a proven native flag (Claude and OpenCode). |
 
 Notes:
 
@@ -46,6 +50,11 @@ This line is parsed from replies and takes precedence over new directives. For b
 | `/ctx set <project> @branch` | Update context binding. |
 | `/ctx clear` | Remove context binding. |
 | `/planmode` | Toggle Claude Code plan mode (on/auto/off/show/clear). Claude Code only — non-Claude engines are directed to `/config` → Approval policy. |
+| `/plan [on|off|clear|show]` | Show or set sticky plan prompting. Other `/plan <prompt>` forms run that prompt one-shot. |
+| `/goal` | Show goal usage. `/goal <condition>` is a one-shot goal run. |
+| `/subagent [show|off|clear]` | Show or clear the sticky subagent; `/subagent set <name>` stores one. `/subagent <name> <prompt>` is one-shot. |
+| `/compact [instructions]` | Compact the active session. Handoff-only, explicit handoff, and cross-engine work require a confirmation card. |
+| `/handoff [engine] [instructions]` | Create a summary, seed a new session, and route future messages only after destination completion succeeds. |
 | `/usage` | Show Claude Code subscription usage (5h window, weekly, per-model). Claude Code only. Requires Claude Code OAuth credentials (see [troubleshooting](../how-to/troubleshooting.md#claude-code-credentials)). `/usage debug` appends a `🔧 debug` block with last-fetch wall time and freshness label, last-error class+message, OAuth token expiry, and the cumulative `claude_usage.schema_mismatch` counter ([#410](https://github.com/littlebearapps/untether/issues/410)). |
 | `/export` | Export last session transcript as Markdown or JSON. |
 | `/browse` | Browse project files with inline keyboard navigation. |
@@ -68,6 +77,9 @@ Notes:
 - `/continue` uses the engine's native "continue" flag: `--continue` (Claude, OpenCode, Pi), `resume --last` (Codex), or `--resume latest` (Gemini).
 - Long-running tools (Bash, BashOutput, ScheduleWakeup, Monitor, …) surface a heartbeat-driven elapsed-time tail (`▸ Bash · 3m 47s · npm run build`) on the progress message after ~60s, regardless of `/verbose` state ([#481](https://github.com/littlebearapps/untether/issues/481)). Tune via `[progress] heartbeat_interval`.
 - Loop mode (Claude only): there is no `/loop` Telegram command — it's a Claude Code feature. Untether observes Claude's `ScheduleWakeup` and `CronCreate` tool calls and re-fires iterations after the subprocess exits. Off by default; opt in per chat via `/config` → 🔁 **Loop mode**. Cost protection lives in `[cost_budget]`, runaway-safety caps in `[loop]` ([#289](https://github.com/littlebearapps/untether/issues/289)).
+- `--goal` overrides `--plan`; sticky plan precedence is topic, then chat, then off. Explicit plan/goal always win over sticky state. Explicit subagent wins over its chat-scoped sticky value. Skill is one-shot only; Pi, OMP, Agy, and Codex have no proven skill/subagent native injection.
+- Compact and handoff use one operation card. Confirm queues it, Cancel or expiry closes it, and a failed destination seed leaves existing session routing untouched. The optional handoff summary is content, not a second status card.
+- Plan and goal appear in the ordinary prompt status/footer. Skill and subagent intentionally have no card badge.
 
 ## CLI
 

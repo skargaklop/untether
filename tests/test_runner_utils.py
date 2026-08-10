@@ -1,6 +1,7 @@
 import re
 from collections.abc import AsyncIterator
 from typing import Any
+import anyio
 
 import pytest
 
@@ -391,6 +392,39 @@ async def test_jsonl_run_impl_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = _RunJsonlRunner()
     events = [evt async for evt in runner.run_impl("hello", None)]
     assert any(isinstance(evt, CompletedEvent) for evt in events)
+
+@pytest.mark.anyio
+async def test_jsonl_timeout_completion_includes_runner_engine() -> None:
+    """Timeouts become terminal events that identify their originating runner."""
+
+    class _NeverReturns:
+        async def readline(self) -> bytes:
+            await anyio.sleep_forever()
+
+    runner = _DummyJsonlRunner()
+    runner.startup_timeout_s = 0.01
+    runner.idle_timeout_s = 0.01
+    stream = runner_module.JsonlStreamState(expected_session=None)
+    events = [
+        event
+        async for event in runner._iter_jsonl_events(
+            stdout=_NeverReturns(),
+            stream=stream,
+            state=runner.new_state("prompt", None),
+            resume=None,
+            logger=runner_module.get_logger(__name__),
+            pid=1,
+        )
+    ]
+
+    assert events == [
+        CompletedEvent(
+            engine="dummy-jsonl",
+            ok=False,
+            answer="",
+            error="startup timeout after 0.01s",
+        )
+    ]
 
 
 @pytest.mark.anyio

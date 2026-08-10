@@ -120,7 +120,7 @@ class MockRunner(SessionLockMixin, ResumeTokenMixin, Runner):
                 ):
                     event_out = replace(event_out, ok=True)
                 yield event_out
-                await anyio.lowlevel.checkpoint()
+                await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
             yield CompletedEvent(
                 engine=self.engine,
@@ -185,7 +185,7 @@ class ScriptRunner(MockRunner):
         async with lock:
             if self._emit_session_start:
                 yield session_evt
-                await anyio.lowlevel.checkpoint()
+                await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
             for step in self._script:
                 if isinstance(step, Emit):
@@ -199,7 +199,7 @@ class ScriptRunner(MockRunner):
                     ):
                         event_out = replace(event_out, ok=True)
                     yield event_out
-                    await anyio.lowlevel.checkpoint()
+                    await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
                     continue
                 if isinstance(step, Advance):
                     self._advance_to(step.now)

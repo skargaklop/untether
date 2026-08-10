@@ -18,6 +18,7 @@ from ...runner import Runner
 from ...runner_bridge import (
     ExecBridgeConfig,
     RunningTasks,
+    RunOutcome,
     handle_message,
 )
 from ...runner_bridge import (
@@ -175,7 +176,7 @@ async def _run_engine(
     show_resume_line: bool = True,
     progress_ref: MessageRef | None = None,
     run_options: EngineRunOptions | None = None,
-) -> None:
+) -> RunOutcome | None:
     reply = partial(
         send_plain,
         exec_cfg.transport,
@@ -189,7 +190,7 @@ async def _run_engine(
 
     if is_shutting_down():
         await reply(text="Untether is restarting — try again shortly.")
-        return
+        return None
 
     logger.debug(
         "handle.engine_start",
@@ -205,7 +206,7 @@ async def _run_engine(
             )
         except RunnerUnavailableError as exc:
             await reply(text=f"error:\n{exc}")
-            return
+            return None
         runner: Runner = entry.runner
         effective_resume = show_resume_line
         if run_options is not None and run_options.show_resume_line is not None:
@@ -226,12 +227,12 @@ async def _run_engine(
                 reason=reason,
                 thread_id=thread_id,
             )
-            return
+            return None
         try:
             cwd = runtime.resolve_run_cwd(context)
         except ConfigError as exc:
             await reply(text=f"error:\n{exc}")
-            return
+            return None
         logger.info(
             "handle.engine_resolved",
             engine=runner.engine,
@@ -262,7 +263,7 @@ async def _run_engine(
                 thread_id=thread_id,
             )
             with apply_run_options(run_options):
-                await handle_message(
+                return await handle_message(
                     exec_cfg,
                     runner=runner,
                     incoming=incoming,

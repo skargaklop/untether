@@ -83,6 +83,9 @@ def build_bot_commands(
         ("compact", "compact current session"),
         ("handoff", "new session with handoff summary"),
         ("queue", "show thread job queue"),
+        ("plan", "plan mode preference"),
+        ("goal", "goal mode help"),
+        ("subagent", "subagent preference"),
     ]:
         if cmd in seen:
             continue

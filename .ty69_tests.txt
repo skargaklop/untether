@@ -1,0 +1,456 @@
+tests/conftest.py: 1 diagnostics
+  error[invalid-return-type] L60: Return type does not match returned value
+tests/test_amp_runner.py: 3 diagnostics
+  error[unresolved-attribute] L198: Attribute `ok` is not defined on `StartedEvent` in union `StartedEvent
+  error[unresolved-attribute] L514: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L545: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+tests/test_ask_user_question.py: 6 diagnostics
+  error[invalid-argument-type] L573: Method `__getitem__` of type `Overload[(i: SupportsIndex, /) -> dict[s
+  error[invalid-argument-type] L761: Argument to function `send_next_ask_question_message` is incorrect
+  error[invalid-argument-type] L803: Argument to function `send_next_ask_question_message` is incorrect
+  error[unresolved-attribute] L393: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L443: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L811: Object of type `object` has no attribute `thread_id`
+tests/test_at_command.py: 15 diagnostics
+  error[invalid-argument-type] L161: Argument is incorrect
+  error[invalid-argument-type] L162: Argument is incorrect
+  error[invalid-argument-type] L187: Argument to function `install` is incorrect
+  error[invalid-argument-type] L200: Argument to function `install` is incorrect
+  error[invalid-argument-type] L224: Argument to function `install` is incorrect
+  error[invalid-argument-type] L245: Argument to function `install` is incorrect
+  error[invalid-argument-type] L279: Argument to function `install` is incorrect
+  error[invalid-argument-type] L304: Argument to function `install` is incorrect
+  error[invalid-argument-type] L313: Argument to function `install` is incorrect
+  error[invalid-argument-type] L324: Argument to function `install` is incorrect
+  error[invalid-argument-type] L335: Argument to function `install` is incorrect
+  error[invalid-argument-type] L350: Argument to function `install` is incorrect
+  error[invalid-argument-type] L368: Argument to function `install` is incorrect
+  error[invalid-assignment] L87: Object of type `None` is not assignable to `list[Any]`
+  error[invalid-assignment] L365: Object of type `Literal[1]` is not assignable to attribute `MIN_DELAY_
+tests/test_auth_command.py: 4 diagnostics
+  error[invalid-argument-type] L94: Argument to bound method `AuthCommand.handle` is incorrect
+  error[invalid-argument-type] L119: Argument to bound method `AuthCommand.handle` is incorrect
+  error[invalid-argument-type] L143: Argument to bound method `AuthCommand.handle` is incorrect
+  error[invalid-argument-type] L175: Argument to bound method `AuthCommand.handle` is incorrect
+tests/test_auto_router.py: 2 diagnostics
+  error[invalid-argument-type] L12: Argument is incorrect
+  error[invalid-argument-type] L13: Argument is incorrect
+tests/test_bridge_config_reload.py: 1 diagnostics
+  error[unresolved-attribute] L49: Unresolved attribute `not_a_real_field` on type `TelegramBridgeConfig`
+tests/test_browse_command.py: 1 diagnostics
+  error[invalid-assignment] L166: Object of type `Literal[3]` is not assignable to attribute `_MAX_REGIS
+tests/test_callback_dispatch.py: 13 diagnostics
+  error[invalid-argument-type] L560: Argument to function `_dispatch_callback` is incorrect
+  error[invalid-argument-type] L603: Argument to function `_dispatch_callback` is incorrect
+  error[invalid-argument-type] L633: Argument to function `_dispatch_callback` is incorrect
+  error[invalid-assignment] L184: Object of type `BotClient` is not assignable to `FakeBot`
+  error[invalid-assignment] L223: Object of type `BotClient` is not assignable to `FakeBot`
+  error[invalid-assignment] L256: Object of type `BotClient` is not assignable to `FakeBot`
+  error[invalid-assignment] L285: Object of type `BotClient` is not assignable to `FakeBot`
+  error[invalid-assignment] L336: Object of type `BotClient` is not assignable to `FakeBot`
+  error[invalid-assignment] L371: Object of type `BotClient` is not assignable to `FakeBot`
+  error[invalid-assignment] L396: Object of type `def _timed_answer(query_id, text=None) -> CoroutineTyp
+  error[invalid-assignment] L429: Object of type `BotClient` is not assignable to `FakeBot`
+  error[invalid-assignment] L457: Object of type `BotClient` is not assignable to `FakeBot`
+  error[invalid-assignment] L544: Object of type `BotClient` is not assignable to `FakeBot`
+tests/test_claude_control.py: 22 diagnostics
+  error[invalid-argument-type] L818: Argument is incorrect
+  error[invalid-argument-type] L819: Argument is incorrect
+  error[invalid-argument-type] L1019: Argument is incorrect
+  error[invalid-argument-type] L1020: Argument is incorrect
+  error[invalid-argument-type] L1058: Argument is incorrect
+  error[invalid-argument-type] L1059: Argument is incorrect
+  error[invalid-argument-type] L1113: Argument is incorrect
+  error[invalid-argument-type] L1114: Argument is incorrect
+  error[invalid-argument-type] L1115: Argument is incorrect
+  error[invalid-argument-type] L1716: Argument is incorrect
+  error[invalid-argument-type] L1717: Argument is incorrect
+  error[invalid-argument-type] L1718: Argument is incorrect
+  error[invalid-argument-type] L1764: Argument is incorrect
+  error[invalid-argument-type] L1765: Argument is incorrect
+  error[invalid-argument-type] L1766: Argument is incorrect
+  error[invalid-argument-type] L1884: Argument is incorrect
+  error[invalid-argument-type] L1930: Argument is incorrect
+  error[invalid-argument-type] L1969: Argument is incorrect
+  error[invalid-argument-type] L1970: Argument is incorrect
+  error[invalid-argument-type] L2016: Argument is incorrect
+  error[unresolved-attribute] L1369: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L1523: Attribute `value` is not defined on `None` in union `ResumeToken | Non
+tests/test_claude_runner.py: 20 diagnostics
+  error[invalid-argument-type] L4184: Argument to function `install` is incorrect
+  error[invalid-argument-type] L4480: Argument is incorrect
+  error[invalid-argument-type] L4481: Argument is incorrect
+  error[invalid-assignment] L2277: Object of type `def run_stub(...) -> Unknown` is not assignable to att
+  error[unresolved-attribute] L1691: Attribute `phase` is not defined on `StartedEvent`, `CompletedEvent` i
+  error[unresolved-attribute] L1692: Attribute `phase` is not defined on `StartedEvent`, `CompletedEvent` i
+  error[unresolved-attribute] L1693: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L1694: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L1695: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L1696: Attribute `ok` is not defined on `StartedEvent` in union `StartedEvent
+  error[unresolved-attribute] L1697: Attribute `level` is not defined on `StartedEvent`, `CompletedEvent` i
+  error[unresolved-attribute] L1702: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L1703: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L1743: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L1745: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L1780: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L1864: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L2287: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L5530: Module `os` has no member `killpg`
+  error[unresolved-attribute] L5530: Module `signal` has no member `SIGKILL`
+tests/test_claude_schema.py: 1 diagnostics
+  error[unresolved-attribute] L215: Attribute `message` is not defined on `StreamSystemMessage`, `StreamRe
+tests/test_cli_auto_router.py: 1 diagnostics
+  error[invalid-argument-type] L65: Argument is incorrect
+tests/test_command_engine_gates.py: 14 diagnostics
+  error[invalid-argument-type] L82: Argument to function `resolve_effective_engine` is incorrect
+  error[invalid-argument-type] L92: Argument to function `resolve_effective_engine` is incorrect
+  error[invalid-argument-type] L108: Argument to bound method `UsageCommand.handle` is incorrect
+  error[invalid-argument-type] L119: Argument to bound method `UsageCommand.handle` is incorrect
+  error[invalid-argument-type] L130: Argument to bound method `UsageCommand.handle` is incorrect
+  error[invalid-argument-type] L142: Argument to bound method `UsageCommand.handle` is incorrect
+  error[invalid-argument-type] L162: Argument to bound method `PlanModeCommand.handle` is incorrect
+  error[invalid-argument-type] L175: Argument to bound method `PlanModeCommand.handle` is incorrect
+  error[invalid-argument-type] L187: Argument to bound method `PlanModeCommand.handle` is incorrect
+  error[invalid-argument-type] L199: Argument to bound method `PlanModeCommand.handle` is incorrect
+  error[invalid-argument-type] L216: Argument to bound method `PlanModeCommand.handle` is incorrect
+  error[invalid-argument-type] L256: Argument to bound method `UsageCommand.handle` is incorrect
+  error[invalid-argument-type] L266: Argument to bound method `UsageCommand.handle` is incorrect
+  error[invalid-assignment] L60: Object of type `None` is not assignable to `dict[Unknown, Unknown]`
+tests/test_compact.py: 1 diagnostics
+  error[invalid-yield] L144: Yield expression type does not match annotation
+tests/test_context.py: 1 diagnostics
+  error[invalid-assignment] L40: Property `project` defined in `RunContext` is read-only
+tests/test_cooldown_bypass.py: 15 diagnostics
+  error[invalid-argument-type] L497: Argument is incorrect
+  error[invalid-argument-type] L498: Argument is incorrect
+  error[invalid-argument-type] L499: Argument is incorrect
+  error[invalid-argument-type] L533: Argument is incorrect
+  error[invalid-argument-type] L534: Argument is incorrect
+  error[invalid-argument-type] L535: Argument is incorrect
+  error[invalid-argument-type] L570: Argument is incorrect
+  error[invalid-argument-type] L571: Argument is incorrect
+  error[invalid-argument-type] L572: Argument is incorrect
+  error[invalid-argument-type] L654: Argument is incorrect
+  error[invalid-argument-type] L655: Argument is incorrect
+  error[invalid-argument-type] L656: Argument is incorrect
+  error[invalid-argument-type] L691: Argument is incorrect
+  error[invalid-argument-type] L692: Argument is incorrect
+  error[invalid-argument-type] L693: Argument is incorrect
+tests/test_exec_bridge.py: 63 diagnostics
+  error[invalid-argument-type] L532: Argument to `ProgressEdits.__init__` is incorrect
+  error[invalid-argument-type] L7424: Argument to function `run_runner_with_cancel` is incorrect
+  error[unresolved-attribute] L189: Module `uuid` has no member `uuid7`
+  error[unresolved-attribute] L445: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L561: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L562: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L568: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L569: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1253: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1254: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1261: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1262: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1655: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1656: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1691: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1692: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1700: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1701: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1735: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1736: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1743: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1744: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1795: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1796: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1800: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1832: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1833: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1840: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1841: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1876: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1877: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1883: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1914: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1915: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1916: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L3335: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L3336: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4459: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4485: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4504: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4524: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4547: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4548: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4557: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4558: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4587: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4588: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4601: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4602: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4686: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4687: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4718: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4719: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4725: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L4726: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L5404: Attribute `is_set` is not defined on `None` in union `Event | None`
+  error[unresolved-attribute] L5434: Attribute `recovery_attempted` is not defined on `None` in union `_Stu
+  error[unresolved-attribute] L5436: Attribute `is_set` is not defined on `None` in union `Event | None`
+  error[unresolved-attribute] L5454: Attribute `recovery_attempted` is not defined on `None` in union `_Stu
+  error[unresolved-attribute] L5462: Attribute `cancelled` is not defined on `None` in union `_StuckAfterTo
+  error[unresolved-attribute] L5463: Attribute `is_set` is not defined on `None` in union `Event | None`
+  error[unresolved-attribute] L5465: Object of type `Transport` has no attribute `send_calls`
+  error[unresolved-attribute] L7444: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+tests/test_exec_runner.py: 9 diagnostics
+  error[invalid-argument-type] L956: Argument is incorrect
+  error[invalid-argument-type] L967: Argument is incorrect
+  error[invalid-assignment] L42: Object of type `def run_stub(...) -> AsyncIterator[UntetherEvent]` is 
+  error[invalid-assignment] L79: Object of type `def run_stub(...) -> AsyncIterator[UntetherEvent]` is 
+  error[invalid-assignment] L115: Object of type `def run_stub(...) -> AsyncIterator[UntetherEvent]` is 
+  error[invalid-assignment] L1019: Object of type `def fake_iter_json_lines(_stream) -> Unknown` is not a
+  error[unresolved-attribute] L52: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L88: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L126: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+tests/test_export_command.py: 5 diagnostics
+  error[invalid-argument-type] L110: Argument to bound method `ExportCommand.handle` is incorrect
+  error[invalid-argument-type] L116: Argument to bound method `ExportCommand.handle` is incorrect
+  error[invalid-argument-type] L141: Argument to bound method `ExportCommand.handle` is incorrect
+  error[invalid-assignment] L102: Object of type `None` is not assignable to `FakeMessage`
+  error[invalid-assignment] L134: Object of type `None` is not assignable to `FakeMessage`
+tests/test_gemini_runner.py: 4 diagnostics
+  error[unresolved-attribute] L198: Attribute `ok` is not defined on `StartedEvent` in union `StartedEvent
+  error[unresolved-attribute] L369: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L370: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L386: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+tests/test_loop_coverage.py: 17 diagnostics
+  error[invalid-argument-type] L164: Argument to function `_resolve_engine_run_options` is incorrect
+  error[invalid-argument-type] L180: Argument to function `_resolve_engine_run_options` is incorrect
+  error[invalid-argument-type] L198: Argument to function `_resolve_engine_run_options` is incorrect
+  error[invalid-argument-type] L199: Argument to function `_resolve_engine_run_options` is incorrect
+  error[invalid-argument-type] L217: Argument to function `_resolve_engine_run_options` is incorrect
+  error[invalid-argument-type] L218: Argument to function `_resolve_engine_run_options` is incorrect
+  error[invalid-argument-type] L237: Argument to function `_resolve_engine_run_options` is incorrect
+  error[invalid-argument-type] L238: Argument to function `_resolve_engine_run_options` is incorrect
+  error[invalid-argument-type] L252: Argument to function `_resolve_engine_run_options` is incorrect
+  error[invalid-argument-type] L253: Argument to function `_resolve_engine_run_options` is incorrect
+  error[invalid-argument-type] L266: Argument to function `_resolve_engine_run_options` is incorrect
+  error[invalid-argument-type] L279: Argument to function `_resolve_engine_run_options` is incorrect
+  error[invalid-argument-type] L296: Argument to function `_drain_backlog` is incorrect
+  error[invalid-argument-type] L310: Argument to function `_drain_backlog` is incorrect
+  error[invalid-argument-type] L318: Argument to function `_drain_backlog` is incorrect
+  error[invalid-argument-type] L330: Argument to function `_drain_backlog` is incorrect
+  error[invalid-argument-type] L338: Argument to function `_drain_backlog` is incorrect
+tests/test_loop_scheduler.py: 38 diagnostics
+  error[invalid-argument-type] L106: Argument to function `install` is incorrect
+  error[invalid-argument-type] L134: Argument to function `install` is incorrect
+  error[invalid-argument-type] L150: Argument to function `install` is incorrect
+  error[invalid-argument-type] L164: Argument to function `install` is incorrect
+  error[invalid-argument-type] L181: Argument to function `install` is incorrect
+  error[invalid-argument-type] L192: Argument to function `install` is incorrect
+  error[invalid-argument-type] L221: Argument to function `install` is incorrect
+  error[invalid-argument-type] L241: Argument to function `install` is incorrect
+  error[invalid-argument-type] L256: Argument to function `install` is incorrect
+  error[invalid-argument-type] L284: Argument to function `install` is incorrect
+  error[invalid-argument-type] L295: Argument to function `install` is incorrect
+  error[invalid-argument-type] L304: Argument to function `install` is incorrect
+  error[invalid-argument-type] L323: Argument to function `install` is incorrect
+  error[invalid-argument-type] L334: Argument to function `install` is incorrect
+  error[invalid-argument-type] L342: Argument to function `install` is incorrect
+  error[invalid-argument-type] L367: Argument to function `install` is incorrect
+  error[invalid-argument-type] L379: Argument to function `install` is incorrect
+  error[invalid-argument-type] L402: Argument to function `install` is incorrect
+  error[invalid-argument-type] L441: Argument to function `install` is incorrect
+  error[invalid-argument-type] L455: Argument to function `install` is incorrect
+  error[invalid-argument-type] L465: Argument to function `install` is incorrect
+  error[invalid-argument-type] L487: Argument to function `install` is incorrect
+  error[invalid-argument-type] L504: Argument to function `install` is incorrect
+  error[invalid-argument-type] L534: Argument to function `install` is incorrect
+  error[invalid-argument-type] L553: Argument to function `install` is incorrect
+  error[invalid-argument-type] L584: Argument to function `install` is incorrect
+  error[invalid-argument-type] L608: Argument to function `install` is incorrect
+  error[invalid-argument-type] L638: Argument to function `install` is incorrect
+  error[invalid-argument-type] L652: Argument to function `install` is incorrect
+  error[invalid-argument-type] L669: Argument to function `install` is incorrect
+  error[invalid-argument-type] L684: Argument to function `install` is incorrect
+  error[invalid-argument-type] L696: Argument to function `install` is incorrect
+  error[invalid-argument-type] L707: Argument to function `install` is incorrect
+  error[invalid-argument-type] L717: Argument to function `install` is incorrect
+  error[invalid-argument-type] L730: Argument to function `install` is incorrect
+  error[invalid-argument-type] L740: Argument to function `install` is incorrect
+  error[invalid-assignment] L31: Object of type `None` is not assignable to `list[Any]`
+  error[unresolved-attribute] L206: Attribute `project` is not defined on `None` in union `RunContext | No
+tests/test_meta_line.py: 1 diagnostics
+  error[unresolved-attribute] L283: Attribute `split` is not defined on `None` in union `str | None`
+tests/test_noop_resume_harness.py: 4 diagnostics
+  error[invalid-argument-type] L145: Argument to function `handle_message` is incorrect
+  error[invalid-argument-type] L199: Argument to function `handle_message` is incorrect
+  error[invalid-argument-type] L386: Argument to function `handle_message` is incorrect
+  error[invalid-argument-type] L454: Argument to function `handle_message` is incorrect
+tests/test_onboarding_interactive.py: 4 diagnostics
+  error[invalid-argument-type] L112: Argument is incorrect
+  error[invalid-argument-type] L159: Argument is incorrect
+  error[invalid-argument-type] L195: Argument is incorrect
+  error[invalid-argument-type] L231: Argument is incorrect
+tests/test_opencode_runner.py: 9 diagnostics
+  error[invalid-assignment] L521: Object of type `def run_stub(...) -> Unknown` is not assignable to att
+  error[unresolved-attribute] L531: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L780: Object of type `Runner` has no attribute `model`
+  error[unresolved-attribute] L781: Object of type `Runner` has no attribute `session_title`
+  error[unresolved-attribute] L794: Object of type `Runner` has no attribute `model`
+  error[unresolved-attribute] L802: Object of type `Runner` has no attribute `model`
+  error[unresolved-attribute] L803: Object of type `Runner` has no attribute `session_title`
+  error[unsupported-operator] L666: Unsupported `in` operation
+  error[unsupported-operator] L677: Unsupported `in` operation
+tests/test_pi_runner.py: 22 diagnostics
+  error[invalid-assignment] L200: Object of type `def run_stub(_prompt: str, resume: ResumeToken | None)
+  error[invalid-assignment] L234: Object of type `def run_stub(...) -> Unknown` is not assignable to att
+  error[unresolved-attribute] L244: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L407: Attribute `error` is not defined on `StartedEvent`, `ActionEvent` in u
+  error[unresolved-attribute] L461: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L474: Attribute `phase` is not defined on `StartedEvent`, `CompletedEvent` i
+  error[unresolved-attribute] L475: Attribute `ok` is not defined on `StartedEvent` in union `StartedEvent
+  error[unresolved-attribute] L476: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L477: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L491: Attribute `phase` is not defined on `StartedEvent`, `CompletedEvent` i
+  error[unresolved-attribute] L492: Attribute `ok` is not defined on `StartedEvent` in union `StartedEvent
+  error[unresolved-attribute] L493: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L510: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L511: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L512: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unresolved-attribute] L513: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` 
+  error[unsupported-operator] L372: Unsupported `in` operation
+  error[unsupported-operator] L374: Unsupported `in` operation
+  error[unsupported-operator] L376: Unsupported `in` operation
+  error[unsupported-operator] L393: Unsupported `in` operation
+  error[unsupported-operator] L394: Unsupported `not in` operation
+  error[unsupported-operator] L407: Unsupported `in` operation
+tests/test_ping_command.py: 11 diagnostics
+  error[unresolved-attribute] L88: Attribute `text` is not defined on `None` in union `CommandResult | No
+  error[unresolved-attribute] L106: Attribute `text` is not defined on `None` in union `CommandResult | No
+  error[unresolved-attribute] L119: Attribute `text` is not defined on `None` in union `CommandResult | No
+  error[unresolved-attribute] L136: Attribute `text` is not defined on `None` in union `CommandResult | No
+  error[unresolved-attribute] L145: Attribute `text` is not defined on `None` in union `CommandResult | No
+  error[unresolved-attribute] L155: Attribute `text` is not defined on `None` in union `CommandResult | No
+  error[unresolved-attribute] L169: Attribute `text` is not defined on `None` in union `CommandResult | No
+  error[unresolved-attribute] L170: Attribute `text` is not defined on `None` in union `CommandResult | No
+  error[unresolved-attribute] L172: Attribute `text` is not defined on `None` in union `CommandResult | No
+  error[unresolved-attribute] L184: Attribute `text` is not defined on `None` in union `CommandResult | No
+  error[unresolved-attribute] L185: Attribute `text` is not defined on `None` in union `CommandResult | No
+tests/test_proc_diag.py: 1 diagnostics
+  error[invalid-assignment] L296: Property `pid` defined in `ProcessDiag` is read-only
+tests/test_run_once_state.py: 5 diagnostics
+  error[invalid-argument-type] L105: Argument to `TriggerManager.__init__` is incorrect
+  error[invalid-argument-type] L116: Argument to `TriggerManager.__init__` is incorrect
+  error[invalid-argument-type] L126: Argument to bound method `TriggerManager.update` is incorrect
+  error[invalid-argument-type] L137: Argument to `TriggerManager.__init__` is incorrect
+  error[invalid-argument-type] L152: Argument to `TriggerManager.__init__` is incorrect
+tests/test_runner_utils.py: 3 diagnostics
+  error[invalid-argument-type] L640: Argument to function `drain_stderr` is incorrect
+  error[invalid-argument-type] L666: Argument to function `drain_stderr` is incorrect
+  error[invalid-return-type] L401: Function always implicitly returns `None`, which is not assignable to 
+tests/test_scheduler_queue.py: 2 diagnostics
+  error[unresolved-attribute] L587: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L611: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+tests/test_sdnotify.py: 1 diagnostics
+  error[unresolved-attribute] L17: Module `socket` has no member `AF_UNIX`
+tests/test_settings.py: 1 diagnostics
+  error[unknown-argument] L988: Argument `budget_per_loop_usd` does not match any known parameter
+tests/test_stateless_mode.py: 3 diagnostics
+  error[invalid-argument-type] L185: Argument to `ResumeResolver.__init__` is incorrect
+  error[invalid-argument-type] L211: Argument to `ResumeResolver.__init__` is incorrect
+  error[invalid-argument-type] L236: Argument to `ResumeResolver.__init__` is incorrect
+tests/test_stats_command.py: 8 diagnostics
+  error[invalid-argument-type] L211: Argument to bound method `StatsCommand.handle` is incorrect
+  error[invalid-argument-type] L242: Argument to bound method `StatsCommand.handle` is incorrect
+  error[invalid-argument-type] L283: Argument to bound method `StatsCommand.handle` is incorrect
+  error[invalid-argument-type] L316: Argument to bound method `StatsCommand.handle` is incorrect
+  error[invalid-assignment] L201: Object of type `None` is not assignable to `dict[Unknown, Unknown]`
+  error[invalid-assignment] L230: Object of type `None` is not assignable to `dict[Unknown, Unknown]`
+  error[invalid-assignment] L270: Object of type `None` is not assignable to `dict[Unknown, Unknown]`
+  error[invalid-assignment] L303: Object of type `None` is not assignable to `dict[Unknown, Unknown]`
+tests/test_subprocess.py: 12 diagnostics
+  error[invalid-argument-type] L39: Argument to function `kill_process` is incorrect
+  error[invalid-argument-type] L115: Argument to function `terminate_process` is incorrect
+  error[invalid-argument-type] L141: Argument to function `kill_process` is incorrect
+  error[invalid-argument-type] L167: Argument to function `terminate_process` is incorrect
+  error[invalid-argument-type] L187: Argument to function `terminate_process` is incorrect
+  error[invalid-argument-type] L210: Argument to function `terminate_process` is incorrect
+  error[invalid-argument-type] L233: Argument to function `terminate_process` is incorrect
+  error[unresolved-attribute] L143: Module `signal` has no member `SIGKILL`
+  error[unresolved-attribute] L144: Module `signal` has no member `SIGKILL`
+  error[unresolved-attribute] L398: Module `signal` has no member `SIGKILL`
+  error[unresolved-attribute] L416: Module `signal` has no member `SIGKILL`
+  error[unresolved-attribute] L417: Module `signal` has no member `SIGKILL`
+tests/test_telegram_bridge.py: 7 diagnostics
+  error[invalid-argument-type] L3974: Argument to `TelegramTransport.__init__` is incorrect
+  error[invalid-argument-type] L4001: Argument to `TelegramTransport.__init__` is incorrect
+  error[invalid-argument-type] L4025: Argument to `TelegramTransport.__init__` is incorrect
+  error[invalid-argument-type] L4050: Argument to `TelegramTransport.__init__` is incorrect
+  error[unresolved-attribute] L1593: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1790: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1794: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+tests/test_telegram_client_api.py: 10 diagnostics
+  error[not-subscriptable] L161: Cannot subscript object of type `None` with no `__getitem__` method
+  error[not-subscriptable] L162: Cannot subscript object of type `None` with no `__getitem__` method
+  error[not-subscriptable] L163: Cannot subscript object of type `None` with no `__getitem__` method
+  error[not-subscriptable] L164: Cannot subscript object of type `None` with no `__getitem__` method
+  error[not-subscriptable] L165: Cannot subscript object of type `None` with no `__getitem__` method
+  error[not-subscriptable] L166: Cannot subscript object of type `None` with no `__getitem__` method
+  error[not-subscriptable] L167: Cannot subscript object of type `None` with no `__getitem__` method
+  error[not-subscriptable] L170: Cannot subscript object of type `None` with no `__getitem__` method
+  error[not-subscriptable] L171: Cannot subscript object of type `None` with no `__getitem__` method
+  error[not-subscriptable] L174: Cannot subscript object of type `None` with no `__getitem__` method
+tests/test_telegram_compact_dispatch.py: 5 diagnostics
+  error[invalid-argument-type] L250: Argument to function `_commit_handoff_routing` is incorrect
+  error[invalid-argument-type] L252: Argument to function `_commit_handoff_routing` is incorrect
+  error[invalid-assignment] L118: Object of type `set[int]` is not assignable to attribute `allowed_user
+  error[invalid-return-type] L232: Return type does not match returned value
+  error[unresolved-attribute] L134: Object of type `BotClient` has no attribute `callback_calls`
+tests/test_telegram_media_command.py: 1 diagnostics
+  error[invalid-argument-type] L127: Argument to function `_handle_media_group` is incorrect
+tests/test_telegram_queue.py: 15 diagnostics
+  error[invalid-assignment] L294: Object of type `def exploding_enqueue(...) -> CoroutineType[Any, Any, 
+  error[unresolved-attribute] L402: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L430: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L462: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L480: Attribute `message_id` is not defined on `_Superseded` in union `Messa
+  error[unresolved-attribute] L586: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L630: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L679: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L723: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L765: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L797: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L842: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1075: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1108: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+  error[unresolved-attribute] L1119: Object of type `type[BrokenWorkerInterpreter]` has no attribute `check
+tests/test_threads_command.py: 1 diagnostics
+  error[invalid-argument-type] L71: Argument is incorrect
+tests/test_transient_failures.py: 1 diagnostics
+  error[invalid-argument-type] L15: Argument to function `classify_transient_failure` is incorrect
+tests/test_trigger_actions.py: 4 diagnostics
+  error[invalid-argument-type] L33: Argument is incorrect
+  error[invalid-argument-type] L33: Argument is incorrect
+  error[invalid-argument-type] L33: Argument is incorrect
+  error[invalid-argument-type] L33: Argument is incorrect
+tests/test_trigger_dispatcher.py: 6 diagnostics
+  error[invalid-argument-type] L88: Argument is incorrect
+  error[invalid-argument-type] L88: Argument is incorrect
+  error[invalid-argument-type] L88: Argument is incorrect
+  error[invalid-argument-type] L88: Argument is incorrect
+  error[invalid-argument-type] L88: Argument is incorrect
+  error[invalid-argument-type] L98: Argument is incorrect
+tests/test_trigger_fetch.py: 5 diagnostics
+  error[invalid-argument-type] L22: Argument is incorrect
+  error[invalid-argument-type] L22: Argument is incorrect
+  error[invalid-argument-type] L22: Argument is incorrect
+  error[invalid-argument-type] L22: Argument is incorrect
+  error[invalid-argument-type] L22: Argument is incorrect
+tests/test_trigger_manager.py: 2 diagnostics
+  error[invalid-argument-type] L96: Argument is incorrect
+  error[invalid-argument-type] L485: Argument to function `build_webhook_app` is incorrect
+tests/test_trigger_server.py: 3 diagnostics
+  error[invalid-argument-type] L84: Argument is incorrect
+  error[invalid-argument-type] L267: Argument to function `build_webhook_app` is incorrect
+  error[invalid-argument-type] L573: Argument to function `build_webhook_app` is incorrect
+tests/test_verbose_progress.py: 1 diagnostics
+  error[invalid-argument-type] L183: Argument is incorrect

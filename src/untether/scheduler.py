@@ -12,6 +12,7 @@ import anyio
 from .context import RunContext
 from .logging import get_logger
 from .model import EngineId, ResumeToken
+from .runners.run_options import EngineRunOptions
 from .transport import ChannelId, MessageId, MessageRef, ThreadId
 
 logger = get_logger(__name__)
@@ -27,10 +28,9 @@ class ThreadJob:
     thread_id: ThreadId | None = None
     session_key: tuple[int, int | None] | None = None
     progress_ref: MessageRef | None = None
-    plan: bool = False
-    goal: str | None = None
-    skill: str | None = None
-    subagent: str | None = None
+    # #294: Directive-derived run options carried as one object to avoid
+    # positional plan/goal/skill/subagent divergence across dispatch paths.
+    run_options: EngineRunOptions | None = None
     kind: Literal["prompt", "compact", "handoff"] = "prompt"
     compact_instructions: str | None = None
     handoff_target: EngineId | None = None
@@ -167,10 +167,7 @@ class ThreadScheduler:
         thread_id: ThreadId | None = None,
         session_key: tuple[int, int | None] | None = None,
         progress_ref: MessageRef | None = None,
-        plan: bool = False,
-        goal: str | None = None,
-        skill: str | None = None,
-        subagent: str | None = None,
+        run_options: EngineRunOptions | None = None,
     ) -> EnqueueDisposition:
         return await self.enqueue(
             ThreadJob(
@@ -182,10 +179,7 @@ class ThreadScheduler:
                 thread_id=thread_id,
                 session_key=session_key,
                 progress_ref=progress_ref,
-                plan=plan,
-                goal=goal,
-                skill=skill,
-                subagent=subagent,
+                run_options=run_options,
             )
         )
 

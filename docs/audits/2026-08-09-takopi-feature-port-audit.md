@@ -1,15 +1,14 @@
 # Takopi Feature Port Audit — Takopi → Untether
 
-**Date:** 2026-08-09
-**Untether HEAD:** `daca548c5ab4c5d7c0b9962a25772fe32331f625` (baseline `4285dad5a12e4e4113c9cc5240972a67bbb5e218` + migration commit `daca548c`)
-**Takopi HEAD:** `e51e256850d9a3b1bde447690a1c9fc6db6474cf`
-**Comparison baseline doc:** `D:/Projects/takopi/docs/reference/untether-comparison.md` (snapshots `481f0c7` / `4285dad`, pre-migration)
+**Date:** 2026-08-10
+**Untether baseline:** `f23881123522a5336201934d7c0b9962a25772fe32331f625`; gap-closure work is uncommitted on `takopi-gap-closure`.
+**Takopi reference:** `3fea288a8aed5fd30f08fdc8dd5c9fbb716192ac`.
+**Authoritative execution plan:** `D:/Projects/takopi/docs/plans/2026-08-10-takopi-untether-gap-closure-plan.md`.
+**Historical comparison:** `D:/Projects/takopi/docs/reference/untether-comparison.md` remains evidence only; its pre-migration conclusions are not current truth.
 
 ## Method
 
-Every Takopi commit since the shared ancestry fork point (`54073ec` / `8c44a69` / `25b8ec6` and later), every file under `D:/Projects/takopi/docs/`, `changelog.md`, and `ROADMAP.md` was inspected. Each row in `untether-comparison.md` was re-evaluated against current Untether HEAD source rather than copying baseline status. Dispositions: `present` (behavior exists and is wired in current Untether source), `ported` (ported by this audit's changes), `superseded` (replaced by an Untether mechanism), `not-applicable` (namespace chore or speculative roadmap), `unverified` (requires live CLI/credentials to confirm).
-
-Evidence citations use local `path:line`. Status literals are exact: `present`, `ported`, `superseded`, `not-applicable`, `unverified`.
+Source behavior and deterministic tests in the Untether tree override earlier completion prose. Classifications are `implemented`, `partial`, `missing`, `runtime-unverified`, `superseded`, `not-applicable`, and `stale`. This ledger separates source behavior, deterministic proof, live-runtime evidence, and roadmap-only work; it does not print credentials, identifiers, or state values.
 
 ---
 
@@ -24,7 +23,7 @@ These were ported by `daca548c` and are confirmed wired in current Untether sour
 | A3 | Job lifecycle observers (`on_job_claimed`/`on_job_failed`) | `src/takopi/scheduler.py:38-39,97-103` | `src/untether/scheduler.py:37-39,83-99` (`JobClaimed`/`JobFailed` callables, `_noop_*` defaults, constructor params) | present |
 | A4 | Enqueue disposition (`EnqueueDisposition` QUEUED/CLAIMABLE) | `src/takopi/scheduler.py:42-46` | `src/untether/scheduler.py:42-47` | present |
 | A5 | Prompt batching | `src/takopi/telegram/prompt_batch.py` | `src/untether/telegram/prompt_batch.py` | present |
-| A6 | Run-options `attachments`, `plan`, `goal`, `skill`, `subagent` (data fields) | `src/takopi/runners/run_options.py` | `src/untether/runners/run_options.py` (`EngineRunOptions`), `scheduler.py:30-34` (`ThreadJob.plan`/`goal`) | present |
+| A6 | `EngineRunOptions`/`ThreadJob` directive transport | `EngineRunOptions`, `ThreadJob.run_options`, queue and loop dispatch | implemented — directives now cross queued/resumed paths as one options object; no positional propagation remains |
 | A7 | Pi unknown-event decoding (`PiUnknownEvent`) | `src/takopi/schemas/pi.py:95-103` | `src/untether/schemas/pi.py` (`PiUnknownEvent` + peek-decode) | present |
 | A8 | Pi numeric retry delay (`AutoRetryStart.delayMs: int|float|None`) | `src/takopi/schemas/pi.py` | `src/untether/schemas/pi.py` | present |
 | A9 | OMP full session IDs (`shorten_session_id=False`) | `src/takopi/runners/omp.py:152-159` | `src/untether/runners/omp.py` (`OmpRunner.new_state` sets `shorten_session_id=False`) | present |
@@ -34,22 +33,23 @@ These were ported by `daca548c` and are confirmed wired in current Untether sour
 | A13 | Three-OS CI test matrix | `takopi/.github/workflows/ci.yml` | `untether/.github/workflows/ci.yml` `test-cross-os` job (ubuntu/macos/windows) | present |
 | A14 | 81% coverage gate | `takopi/pyproject.toml --cov-fail-under=81` | `untether/pyproject.toml:108 --cov-fail-under=81`; ci.yml coverage-gate step | present |
 | A15 | Transient failure classifier + clean formatter | `src/takopi/utils/transient_failures.py` | `src/untether/utils/transient_failures.py` (`classify_transient_failure`, `format_transient_failure`, `_BARE_STATUS_PREFIX_RE`) | present |
-| A16 | subagent `--agent` injection (grok/claude/opencode) | `src/takopi/runners/{grok,claude,opencode}.py build_args` | `src/untether/runners/{grok,claude,opencode}.py` (attribute-based wiring consumes `run_options.subagent`) | present |
+| A16 | Subagent injection | Grok, Claude, and OpenCode runner argument construction | implemented — Claude/OpenCode consume `run_options.subagent`; no unsupported-engine injection is claimed |
 
 ## B. Untether-only features to preserve (not regressed)
 
 Triggers (`triggers/`), cost tracking (`cost_tracker.py`), quarantine (`session_quarantine.py`), hot reload/migrations (`config_watch.py`, `config_migrations.py`), outbox delivery (`outbox_delivery.py`), stats/health/browse/auth/config commands, environment policy/audit (`utils/env_policy.py`, `utils/env_audit.py`), diagnostics (`utils/proc_diag.py`), persistence (`progress_persistence.py`), systemd notify (`sdnotify.py`), security/release CI jobs, Gemini/Amp runners. All `present` in Untether and untouched by this audit.
 
-## C. `not-applicable`
+## C. Superseded / not applicable
 
-| # | Item | Reason |
-|---|---|---|
-| C1 | Takopi namespace/package entry-point migration (`takopi.*` → `untether.*`) | Untether already uses `untether.*` groups; no migration needed. |
-| C2 | Release chores (`chore(release): v0.2x.x`) | Per-version tags; not behavior. |
-| C3 | ROADMAP Task 4 (Droid/Cline/Kilo/Warp/Open Interpreter/Mimo/ZCode/Kimi) | Speculative; no source implementation in Takopi. |
-| C4 | ROADMAP Task 20 | Speculative; no source implementation. |
+| # | Item | Disposition | Reason |
+|---|---|---|---|
+| C1 | Takopi namespace/package entry-point migration | not-applicable | Untether already owns its namespace and entry points. |
+| C2 | Takopi release chores | not-applicable | Per-version release management, not migration behavior. |
+| C3 | `[[takopi-send: path]]` | superseded | `.untether-outbox/` delivery is the live contract. |
+| C4 | `pi.plan_flag` | superseded | Extension detection is the live contract. |
+| C5 | Removed image configuration keys | not-applicable | No corresponding Untether configuration surface. |
 
-## D. `superseded`
+## D. Superseded configuration
 
 | # | Item | Superseded by |
 |---|---|---|
@@ -57,73 +57,29 @@ Triggers (`triggers/`), cost tracking (`cost_tracker.py`), quarantine (`session_
 | D2 | Takopi `[logging]` config table | Untether logging env controls (already richer). |
 | D3 | `pi.plan_flag` config flag | Extension detection (see E4). |
 
-## E. Gaps requiring `ported` changes (this audit's work)
+## E. Gap-closure ledger
 
-| # | Capability | Takopi evidence | Untether gap (current HEAD) | Disposition | Plan section |
-|---|---|---|---|---|---|
-| E1 | Compact/handoff **dispatch consumers** in `telegram/loop.py` | `src/takopi/telegram/loop.py` `run_compact_job`/`run_handoff_job`, `_make_scheduler_observers`, `dispatch_prompt_run` enqueue reconciliation | `telegram/loop.py` has ZERO references to `compact`/`handoff`/`job.kind`/`run_compact`/`run_handoff`/`on_job_claimed`/`on_job_failed` (grep returned no matches). `ThreadJob.kind`, `compact_instructions`, `handoff_target` are dead data. | ported | §2 |
-| E2 | Directive parser: `plan`/`goal`/`subagent`/`skill` with goal-over-plan precedence | `src/takopi/directives.py:9-202` (`_MODE_PLAN`/`_MODE_GOAL`, `--skill`/`--subagent`, `plan = plan and goal is None`) | `src/untether/directives.py:10-95` `ParsedDirectives` has only `prompt`/`engine`/`project`/`branch` — no plan/goal/skill/subagent fields or parsing. | ported | §2 |
-| E3 | `format_mode_badge` + `compose_context_line` footer composition | `src/takopi/directives.py:256-285` | No `format_mode_badge` or mode-badge composition anywhere in Untether (`grep` for `format_mode_badge` = 0 matches). | ported | §5 |
-| E4 | Pi plan-mode extension detection (`detect_plan_mode_extension`) | `src/takopi/runners/pi.py` | `src/untether/runners/pi.py` has no `detect_plan_mode_extension`; `build_args` (L524-545) never appends `--plan`. | ported | §4 |
-| E5 | Pi `pi-goal-list-loop-audit` extension seeding via `<task-goal>` directive | `src/takopi/runners/pi.py` | Not present in Untether. | ported | §4 |
-| E6 | Pi `stdin_payload` Windows-safe newline-terminated bytes | `src/takopi/runners/pi.py stdin_payload` | `src/untether/runners/pi.py:547-554` `stdin_payload` returns `None`. | ported | §4 |
-| E7 | Code-region-safe markup (`||spoiler||`, `++underline++`, `~strike~`, `~~strike~~`) | `src/takopi/telegram/render.py` | Untether renderer (`telegram/render.py`, `markdown.py`) lacks these preprocessors (to confirm exact location during port). | ported | §5 |
-| E8 | File-task annotation `Execute the task specified in this file: \`<path>\`.` | `src/takopi/telegram/loop.py` (commit `8127158`) | Not present; Untether uses `[uploaded file: ...]`-style markers. | ported | §5 |
-| E9 | `RunnerSettings` (startup_timeout_s, idle_timeout_s, kill_tree_on_cancel, shutdown_timeout_s, retry_max_attempts, retry_base_delay_s) | `src/takopi/settings.py` `[runners]` | No `RunnerSettings` model in `src/untether/settings.py` (`grep` for `RunnerSettings`/`retry_max_attempts` = 0 matches in settings). | ported | §3 |
-| E10 | Transient **retry loop** in `JsonlSubprocessRunner` (pre-event-only, linear backoff) | `src/takopi/runner.py` | `src/untether/runner.py` (1464 lines) has the classifier imported but no retry loop around the stream read (to confirm during port; `transient_failures` is only consumed in `runners/agy.py:282-293` for message formatting, not retry). | ported | §3 |
-| E11 | startup/idle guards in `JsonlSubprocessRunner` | `src/takopi/runner.py` | Untether has watchdogs in `runner_bridge.py` but not the per-read startup/idle timeout guards from Takopi's `manage_subprocess` integration (to confirm during port). | ported | §3 |
-| E12 | `ty` hard gate (remove `allow_failure: true`) | `takopi/.github/workflows/ci.yml` (no allow_failure) | `untether/.github/workflows/ci.yml:31` `allow_failure: true` on ty job; current `ty check src tests` = **346 diagnostics**. | ported | §6 |
-| E13 | `checks` job 3-OS matrix (format/ruff/ty) | `takopi ci.yml` (9 lint cells) | Untether `checks` job is `ubuntu-latest` only; `test-cross-os` is already 3-OS. | ported | §6 |
+| Item | Current classification | Deterministic evidence | Runtime evidence |
+|---|---|---|---|
+| Compact/handoff approval and lifecycle | implemented | `test_telegram_compact_dispatch.py`, `test_scheduler_queue.py`; opaque scoped callbacks, expiry, allowlist gate, one-card queue/cancel/failure rendering | runtime-unverified — needs authorized Telegram smoke |
+| Transactional handoff routing | implemented | focused rollback test; destination `RunOutcome` validates before route commit | runtime-unverified — needs successful and failed destination probes |
+| Meta commands and directive consumers | implemented | meta form classification, stores, runner argument and queue tests | runtime-unverified — needs Telegram menu/prompt smoke |
+| Runner lifecycle and ACP timeout ownership | implemented | subprocess, settings, runner/ACP tests | runtime-unverified — native ACP probe unavailable |
+| Retry and timeout terminal semantics | implemented | retry/timeout contract tests, including a terminal timeout event with the runner engine | runtime-unverified — provider transient probe unavailable |
+| Pi goal-list extension seeding | implemented | Pi runner tests cover fresh XML seeding, escaping, fallback, and plan precedence | runtime-unverified — installed extension probe unavailable |
+| CI hard type gate and 3-OS static matrix | partial | `ty check src tests` reports 363 diagnostics on Windows; CI correctly keeps it informational | missing until diagnostics are fixed and the matrix is enforced |
+| Live config/state/poller cutover | runtime-unverified | restricted backup made; only obsolete top-level `[logging]` removed; config loader and `untether doctor` passed; no competing process observed | needs authorized running-poller ownership check and Telegram smoke |
 
-## F. `unverified` (requires live CLI/credentials)
+## F. Verification snapshot
 
-| # | Item | Reason |
-|---|---|---|
-| F1 | Native OMP/Grok/Agy/ACP live compaction interception | Requires installed CLIs + session IDs. Deterministic fixtures cover the contract. |
-| F2 | Service/task launcher inventory for runtime cutover | Must be confirmed with read-only `sc`/`schtasks` queries immediately before cutover. |
+- Focused migration validation passed: **529 passed, 15 skipped**. The later timeout-event regression also passed. The resolver fixture suite was refreshed for the new sticky plan/subagent store methods: **9 passed**.
+- Formatting, Ruff, compilation, lockfile, Bandit, and `pip-audit` passed. Bandit reported only the existing scoped `# nosec` findings; `pip-audit` found no known vulnerabilities.
+- `uv build`, `twine check`, `check-wheel-contents`, and a clean-wheel import smoke passed. A fresh Windows full-suite run completed but failed: **61 failed, 3163 passed, 34 skipped**. Eight failures were stale resolver test doubles and now pass in their focused suite; the remaining failures are cross-platform fixture/path assumptions, POSIX-only socket/process behavior, and unavailable timezone data. Full site generation remains unavailable because Zensical is absent from the active dependency environment; `scripts/docs_prebuild.py` passed.
 
----
+## G. Roadmap-only carryover
 
-## Re-evaluation of `untether-comparison.md` rows
+Tasks 4, 20, and 23 appear exactly once under Untether’s **Future** roadmap section. They are requested future work, not shipped migration claims. Task 24 and E12/E13 are intentionally absent from the roadmap.
 
-The comparison doc (snapshots `481f0c7`/`4285dad`, pre-migration) claimed Untether LACKS: scheduler hardening, Pi/OMP compatibility, OMP/Grok/Agy, Windows cleanup, 3-OS CI, 81% threshold. Against current HEAD `daca548c`, rows A1-A16 above prove these claims are **stale** — all are `present`. The comparison's "Critical" annotations (adopt `CancelQueuedResult`, port `PiUnknownEvent`, preserve `shorten_session_id=False`) are satisfied.
+## H. Historical claims corrected
 
-The comparison's claims that remain accurate and require this audit's `ported` work: E1-E13 above (compact dispatch wiring, directive parser, mode badge, Pi plan/stdin, markup, file annotation, RunnerSettings, retry loop, startup/idle guards, ty hard gate).
-
-## Test mapping (Takopi → Untether)
-
-Adapted during port (behavior tests, not source-text assertions). Destination filenames recorded as tests are added:
-
-| Takopi test | Untether destination | Coverage |
-|---|---|---|
-| `test_scheduler_queue.py` | already present | A1-A4 |
-| `test_telegram_compact_dispatch.py` | `tests/test_telegram_compact_dispatch.py` (new) | E1 |
-| `test_compact_event_invariants.py` | already present | A11 |
-| directives/plan/goal tests | `tests/test_directives.py` (extend) | E2, E3 |
-| `test_pi_schema.py` | already present | A7, A8 |
-| Pi plan/stdin tests | `tests/test_pi_runner.py` (extend) | E4, E5, E6 |
-| renderer markup tests | `tests/test_telegram_render.py` (extend) | E7 |
-| file annotation tests | `tests/test_telegram_files.py` (extend) | E8 |
-| retry safety tests | `tests/test_runner_retry.py` (new) | E10 |
-| runner timeout tests | `tests/test_runner_timeouts.py` (new) | E11 |
-
-## Commit reconciliation
-
-Post-ancestry Takopi commits (skargaklop authorship, `54073ec`..`e51e256`) reconciled against changelog aggregate. All feat/fix commits map to a row above. Doc-only commits (`docs:` prefix) and the `chore(release)`/`fix(...)` upstream banteg commits are accounted for as ancestry or `not-applicable`. No commit body was left unreconciled.
-
-
-## Port completion status (2026-08-09)
-
-All ported items verified via `tests/test_takopi_ported_behaviors.py` (36 tests, all passing) and targeted test runs on affected modules (369 tests passing, 2 pre-existing Windows path failures unrelated to ports).
-
-| Item | Status | Evidence |
-|---|---|---|
-| E1 (compact/handoff dispatch) | ported | `telegram/commands/compact.py`, `telegram/commands/queue_cmd.py`, `loop.py` job.kind branching, `commands/parse.py` invocation parser |
-| E2/E3 (directive parser) | ported | `directives.py` plan/goal/skill/subagent fields, `transport_runtime.py` ResolvedMessage propagation |
-| E4-E6 (Pi plan-mode) | ported | `runners/pi.py` detect_plan_mode_extension, _final_prompt, --plan flag |
-| E6 (Pi stdin_payload) | ported | `runners/pi.py` newline-terminated bytes for multi-line prompts |
-| E7 (markup preprocessing) | ported | `telegram/render.py` spoiler/underline/strike with code-region protection |
-| E8 (file-task annotation) | ported | `telegram/files.py` is_image_document, format_image_prompt_annotation; `loop.py` handle_prompt_upload |
-| E10 (transient retry) | ported | `runner.py` retry-aware run_impl with classify_transient_failure |
-| E11 (startup/idle guards) | ported | `runner.py` _iter_jsonl_with_timeouts, RunnerSettings class, runtime_loader wiring |
-| Queue command | ported | `telegram/commands/queue_cmd.py`, menu.py, loop.py dispatch |
+Earlier blanket-completion language was stale: parser/data-field presence did not prove meta dispatch, sticky plan behavior, one-card compact/handoff lifecycle, or Claude/OpenCode agent injection. The implemented source is covered by focused tests; the runtime-only and CI-type-gate limitations remain recorded in sections E–F. Skill is intentionally one-shot carried data; source-backed badges/context show plan and goal only.

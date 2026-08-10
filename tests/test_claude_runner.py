@@ -1,6 +1,7 @@
 import contextlib
 import json
 import signal
+import sys
 import time
 from datetime import UTC
 from pathlib import Path
@@ -2283,7 +2284,7 @@ async def test_run_serializes_same_session() -> None:
     async with anyio.create_task_group() as tg:
         tg.start_soon(drain, "a", token)
         tg.start_soon(drain, "b", token)
-        await anyio.lowlevel.checkpoint()
+        await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
         gate.set()
     assert max_in_flight == 1
 
@@ -2298,7 +2299,7 @@ async def test_run_serializes_new_session_after_session_is_known(
 
     claude_path = tmp_path / "claude"
     claude_path.write_text(
-        "#!/usr/bin/env python3\n"
+        f"#!{sys.executable}\n"
         "import json\n"
         "import os\n"
         "import sys\n"
@@ -2385,7 +2386,7 @@ async def test_run_serializes_new_session_after_session_is_known(
 async def test_run_strips_anthropic_api_key_by_default(tmp_path, monkeypatch) -> None:
     claude_path = tmp_path / "claude"
     claude_path.write_text(
-        "#!/usr/bin/env python3\n"
+        f"#!{sys.executable}\n"
         "import json\n"
         "import os\n"
         "\n"
@@ -2950,7 +2951,7 @@ def test_wrap_with_env_i_prefixes_cmd_with_env_i_kvs() -> None:
     wrapped = wrap_with_env_i(cmd, env)
 
     # First arg is path to env, second is "-i", then KEY=VAL pairs, then cmd.
-    assert wrapped[0].endswith("env")
+    assert Path(wrapped[0]).name.lower() in {"env", "env.exe"}
     assert wrapped[1] == "-i"
     assert "PATH=/usr/bin" in wrapped[2:4]
     assert "HOME=/home/u" in wrapped[2:4]
@@ -4557,17 +4558,17 @@ async def test_333_reader_done_but_alive_triggers_subcountdown(monkeypatch) -> N
 
     proc = _FakeProc(pid=42424, returncode=None)
     killed_signals: list[int] = []
+    force_signal = getattr(signal, "SIGKILL", signal.SIGTERM)
 
-    def _fake_killpg(pgid: int, sig: int) -> None:
+    def _fake_signal_pid_group(pgid: int, sig: int) -> None:
         killed_signals.append(sig)
-        # Simulate SIGTERM not stopping the process (so SIGKILL follows).
-        if sig == signal.SIGKILL:
+        # Windows uses SIGTERM for both phases; the second signal is forced.
+        if len(killed_signals) == 2:
             proc.returncode = -9
 
-    monkeypatch.setattr("os.killpg", _fake_killpg)
-    # #590: signal_pid_group snapshots real /proc descendants before
-    # signalling — neutralise it so tests never touch live processes.
-    monkeypatch.setattr("untether.utils.subprocess.find_descendants", lambda pid: [])
+    monkeypatch.setattr(
+        "untether.runners.claude.signal_pid_group", _fake_signal_pid_group
+    )
 
     logger = _RecordingLogger()
     reader_done = anyio.Event()
@@ -4591,16 +4592,17 @@ async def test_333_reader_done_but_alive_triggers_subcountdown(monkeypatch) -> N
             proc,
             stream,
         )
-        # Wait for the subcountdown to fire SIGTERM (or until timeout).
+        # Wait for the forced-termination fallback (or until timeout).
         with anyio.move_on_after(3.0):
-            while signal.SIGKILL not in killed_signals:
+            while len(killed_signals) < 2:
                 await anyio.sleep(0.02)
         tg.cancel_scope.cancel()
 
     events = logger.events()
     assert "claude.post_result_idle.reader_done_but_alive" in events
     assert signal.SIGTERM in killed_signals
-    assert signal.SIGKILL in killed_signals  # SIGTERM didn't stop our fake proc
+    assert killed_signals[-1] == force_signal
+    assert len(killed_signals) == 2  # Graceful termination did not stop it.
     exit_reasons = [
         kw.get("reason")
         for lvl, e, kw in logger.records
@@ -4637,7 +4639,9 @@ async def test_333_subprocess_exits_during_subcountdown(monkeypatch) -> None:
     proc = _FakeProc(pid=42425, returncode=None)
     killed_signals: list[int] = []
 
-    monkeypatch.setattr("os.killpg", lambda pgid, sig: killed_signals.append(sig))
+    monkeypatch.setattr(
+        "os.killpg", lambda pgid, sig: killed_signals.append(sig), raising=False
+    )
     # #590: signal_pid_group snapshots real /proc descendants before
     # signalling — neutralise it so tests never touch live processes.
     monkeypatch.setattr("untether.utils.subprocess.find_descendants", lambda pid: [])
@@ -4711,7 +4715,9 @@ async def test_333_subcountdown_defers_on_pending_request(monkeypatch) -> None:
         proc = _FakeProc(pid=42426, returncode=None)
         killed_signals: list[int] = []
 
-        monkeypatch.setattr("os.killpg", lambda pgid, sig: killed_signals.append(sig))
+        monkeypatch.setattr(
+            "os.killpg", lambda pgid, sig: killed_signals.append(sig), raising=False
+        )
         # #590: signal_pid_group snapshots real /proc descendants before
         # signalling — neutralise it so tests never touch live processes.
         monkeypatch.setattr(
@@ -4789,7 +4795,7 @@ async def test_333_lifecycle_state_transitions_logged(monkeypatch) -> None:
         if sig == signal.SIGTERM:
             proc.returncode = -15  # exit on SIGTERM
 
-    monkeypatch.setattr("os.killpg", _fake_killpg)
+    monkeypatch.setattr("os.killpg", _fake_killpg, raising=False)
     # #590: signal_pid_group snapshots real /proc descendants before
     # signalling — neutralise it so tests never touch live processes.
     monkeypatch.setattr("untether.utils.subprocess.find_descendants", lambda pid: [])
@@ -4873,7 +4879,7 @@ async def test_632_forced_teardown_after_result_quarantines(
             if sig == signal.SIGTERM:
                 proc.returncode = -15  # clean stop, no SIGKILL follow-up
 
-        monkeypatch.setattr("os.killpg", _fake_killpg)
+        monkeypatch.setattr("os.killpg", _fake_killpg, raising=False)
         # #590: signal_pid_group snapshots real /proc descendants before
         # signalling — neutralise it so tests never touch live processes.
         monkeypatch.setattr(
@@ -4962,7 +4968,7 @@ async def test_632_forced_teardown_without_result_does_not_quarantine(
             if sig == signal.SIGTERM:
                 proc.returncode = -15
 
-        monkeypatch.setattr("os.killpg", _fake_killpg)
+        monkeypatch.setattr("os.killpg", _fake_killpg, raising=False)
         monkeypatch.setattr(
             "untether.utils.subprocess.find_descendants", lambda pid: []
         )
@@ -5055,7 +5061,7 @@ async def test_632_forced_teardown_flag_off_does_not_quarantine(
             if sig == signal.SIGTERM:
                 proc.returncode = -15
 
-        monkeypatch.setattr("os.killpg", _fake_killpg)
+        monkeypatch.setattr("os.killpg", _fake_killpg, raising=False)
         monkeypatch.setattr(
             "untether.utils.subprocess.find_descendants", lambda pid: []
         )
@@ -5140,7 +5146,7 @@ async def test_591_limbo_grace_short_circuits_subcountdown(monkeypatch) -> None:
         # SIGTERM stops the fake process cleanly.
         proc.returncode = -15
 
-    monkeypatch.setattr("os.killpg", _fake_killpg)
+    monkeypatch.setattr("os.killpg", _fake_killpg, raising=False)
     # #590: signal_pid_group snapshots real /proc descendants before
     # signalling — neutralise it so tests never touch live processes.
     monkeypatch.setattr("untether.utils.subprocess.find_descendants", lambda pid: [])
@@ -5210,7 +5216,9 @@ async def test_591_limbo_grace_deferred_by_live_background_work(monkeypatch) -> 
 
     proc = _FakeProc(pid=52425, returncode=None)
     killed_signals: list[int] = []
-    monkeypatch.setattr("os.killpg", lambda pgid, sig: killed_signals.append(sig))
+    monkeypatch.setattr(
+        "os.killpg", lambda pgid, sig: killed_signals.append(sig), raising=False
+    )
     # #590: signal_pid_group snapshots real /proc descendants before
     # signalling — neutralise it so tests never touch live processes.
     monkeypatch.setattr("untether.utils.subprocess.find_descendants", lambda pid: [])
@@ -5274,7 +5282,9 @@ async def test_655_limbo_grace_deferred_by_cpu_active(monkeypatch) -> None:
 
     proc = _FakeProc(pid=52427, returncode=None)
     killed_signals: list[int] = []
-    monkeypatch.setattr("os.killpg", lambda pgid, sig: killed_signals.append(sig))
+    monkeypatch.setattr(
+        "os.killpg", lambda pgid, sig: killed_signals.append(sig), raising=False
+    )
     # #590: signal_pid_group snapshots real /proc descendants before
     # signalling — neutralise it so tests never touch live processes.
     monkeypatch.setattr("untether.utils.subprocess.find_descendants", lambda pid: [])
@@ -5368,7 +5378,7 @@ async def test_655_limbo_grace_still_applies_when_cpu_inactive(monkeypatch) -> N
         killed_signals.append(sig)
         proc.returncode = -15
 
-    monkeypatch.setattr("os.killpg", _fake_killpg)
+    monkeypatch.setattr("os.killpg", _fake_killpg, raising=False)
     # #590: signal_pid_group snapshots real /proc descendants before
     # signalling — neutralise it so tests never touch live processes.
     monkeypatch.setattr("untether.utils.subprocess.find_descendants", lambda pid: [])
@@ -5424,6 +5434,7 @@ async def test_655_limbo_grace_still_applies_when_cpu_inactive(monkeypatch) -> N
 
 
 @pytest.mark.anyio
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX shell process group only")
 async def test_655_limbo_grace_real_busy_subprocess_survives() -> None:
     """End-to-end #655 with a REAL subprocess and REAL /proc CPU accounting —
     no monkeypatched diag. A genuinely busy process with no registered
@@ -5572,7 +5583,7 @@ async def _run_limbo_level_scenario(
     stream = JsonlStreamState(expected_session=None)
 
     proc = _FakeProc(pid=pid, returncode=None)
-    monkeypatch.setattr("os.killpg", lambda pgid, sig: None)
+    monkeypatch.setattr("os.killpg", lambda pgid, sig: None, raising=False)
     monkeypatch.setattr("untether.utils.subprocess.find_descendants", lambda pid: [])
 
     calls = {"n": 0}
@@ -5695,7 +5706,9 @@ async def test_591_limbo_grace_zero_disables_shortcut(monkeypatch) -> None:
 
     proc = _FakeProc(pid=52426, returncode=None)
     killed_signals: list[int] = []
-    monkeypatch.setattr("os.killpg", lambda pgid, sig: killed_signals.append(sig))
+    monkeypatch.setattr(
+        "os.killpg", lambda pgid, sig: killed_signals.append(sig), raising=False
+    )
     # #590: signal_pid_group snapshots real /proc descendants before
     # signalling — neutralise it so tests never touch live processes.
     monkeypatch.setattr("untether.utils.subprocess.find_descendants", lambda pid: [])
@@ -5846,7 +5859,7 @@ async def test_592_pre_result_silence_cap_kills_silent_run(monkeypatch) -> None:
         killed_signals.append(sig)
         proc.returncode = -15  # SIGTERM obeyed
 
-    monkeypatch.setattr("os.killpg", _fake_killpg)
+    monkeypatch.setattr("os.killpg", _fake_killpg, raising=False)
     monkeypatch.setattr("untether.utils.subprocess.find_descendants", lambda pid: [])
 
     logger = _RecordingLogger()
@@ -5910,7 +5923,9 @@ async def test_592_silence_cap_suppressed_by_pending_request(monkeypatch) -> Non
 
         proc = _FakeProc(pid=72425, returncode=None)
         killed_signals: list[int] = []
-        monkeypatch.setattr("os.killpg", lambda pgid, sig: killed_signals.append(sig))
+        monkeypatch.setattr(
+            "os.killpg", lambda pgid, sig: killed_signals.append(sig), raising=False
+        )
 
         logger = _RecordingLogger()
         reader_done = anyio.Event()
@@ -5966,7 +5981,9 @@ async def test_592_silence_cap_suppressed_by_live_background_work(
 
     proc = _FakeProc(pid=72426, returncode=None)
     killed_signals: list[int] = []
-    monkeypatch.setattr("os.killpg", lambda pgid, sig: killed_signals.append(sig))
+    monkeypatch.setattr(
+        "os.killpg", lambda pgid, sig: killed_signals.append(sig), raising=False
+    )
 
     logger = _RecordingLogger()
     reader_done = anyio.Event()
@@ -6016,7 +6033,9 @@ async def test_592_silence_cap_zero_disables(monkeypatch) -> None:
 
     proc = _FakeProc(pid=72427, returncode=None)
     killed_signals: list[int] = []
-    monkeypatch.setattr("os.killpg", lambda pgid, sig: killed_signals.append(sig))
+    monkeypatch.setattr(
+        "os.killpg", lambda pgid, sig: killed_signals.append(sig), raising=False
+    )
 
     logger = _RecordingLogger()
     reader_done = anyio.Event()
@@ -6165,7 +6184,7 @@ async def test_647_subcountdown_extends_ceiling_while_bg_work_live(
         killed_signals.append(sig)
         proc.returncode = -15
 
-    monkeypatch.setattr("os.killpg", _fake_killpg)
+    monkeypatch.setattr("os.killpg", _fake_killpg, raising=False)
     monkeypatch.setattr("untether.utils.subprocess.find_descendants", lambda pid: [])
     monkeypatch.setattr("untether.utils.proc_diag.collect_proc_diag", _bg_diag)
 
@@ -6248,7 +6267,7 @@ async def test_647_subcountdown_bg_hold_cap_bounds_extension(monkeypatch) -> Non
         killed_signals.append(sig)
         proc.returncode = -15
 
-    monkeypatch.setattr("os.killpg", _fake_killpg)
+    monkeypatch.setattr("os.killpg", _fake_killpg, raising=False)
     monkeypatch.setattr("untether.utils.subprocess.find_descendants", lambda pid: [])
     monkeypatch.setattr("untether.utils.proc_diag.collect_proc_diag", _bg_diag)
 

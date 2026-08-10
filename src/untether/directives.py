@@ -28,6 +28,7 @@ _RESERVED_MODE_TOKENS = frozenset({_MODE_PLAN, _MODE_GOAL})
 class DirectiveError(RuntimeError):
     pass
 
+
 def parse_directives(
     text: str,
     *,
@@ -248,6 +249,7 @@ def format_context_line(
     if context.branch:
         return f"dir: {alias} @{context.branch}"
     return f"dir: {alias}"
+
 
 def format_mode_badge(*, plan: bool, goal: str | None) -> str | None:
     """Return the plan/goal footer badge, or None when no mode is active.

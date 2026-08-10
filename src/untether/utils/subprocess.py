@@ -80,6 +80,11 @@ async def wait_for_process(proc: Process, timeout: float) -> bool:  # noqa: ASYN
     return scope.cancel_called
 
 
+def forced_termination_signal() -> signal.Signals:
+    """Return the strongest signal available on the current platform."""
+    return getattr(signal, "SIGKILL", signal.SIGTERM)
+
+
 def terminate_process(proc: Process) -> None:
     _signal_process(
         proc,
@@ -92,7 +97,7 @@ def terminate_process(proc: Process) -> None:
 def kill_process(proc: Process) -> None:
     _signal_process(
         proc,
-        signal.SIGKILL,
+        forced_termination_signal(),
         fallback=proc.kill,
         log_event="subprocess.kill.failed",
     )
@@ -224,16 +229,21 @@ def _signal_descendants(pids: list[int], sig: signal.Signals, log_event: str) ->
 
 
 def signal_pid_group(pid: int, sig: signal.Signals) -> None:
-    """Deliver *sig* to a bare pid's process group AND its captured
-    descendants (#590).
+    """Deliver *sig* to a bare pid's process group AND descendants.
 
-    The pid-based twin of :func:`_signal_process` for callers that hold a
-    pid rather than an anyio ``Process`` (the Claude post-result watchdog).
-    Bare ``os.killpg`` misses grandchildren that re-parented into separate
-    sessions/pgroups (e.g. MCP ``node`` → ``mcp-remote`` chains), so the
-    descendant tree is snapshotted BEFORE signalling the group.
+    On Windows, process groups and ``SIGKILL`` do not exist. Use the native
+    direct-PID signal operation; callers select the available force signal.
     """
     if os.name != "posix":
+        # Native Windows has no killpg. The dynamic lookup also keeps the
+        # platform seam observable with test doubles without changing native
+        # runtime behavior.
+        killpg = getattr(os, "killpg", None)
+        with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
+            if killpg is not None:
+                killpg(pid, sig)
+            else:
+                os.kill(pid, sig)
         return
     descendants: list[int] = []
     if sys.platform == "linux":
@@ -407,9 +417,18 @@ async def manage_subprocess(
     reap_orphans: bool = True,
     orphan_pid_snapshot: Sequence[int] | None = None,
     orphan_pid_starttimes: Mapping[int, int] | None = None,
+    shutdown_timeout_s: float = DEFAULT_SHUTDOWN_TIMEOUT_S,
+    kill_tree_on_cancel: bool = True,
     **kwargs: Any,
 ) -> AsyncIterator[Process]:
-    """Ensure subprocesses receive SIGTERM, then SIGKILL after a 10s timeout.
+    """Ensure subprocesses receive SIGTERM, then SIGKILL after a timeout.
+
+    ``shutdown_timeout_s`` replaces the hard-coded POSIX wait (POSIX only;
+    Windows tree-kill is immediate). ``kill_tree_on_cancel`` is Windows-only:
+    ``True`` (default) retains ``taskkill /T /F`` which walks the full OS
+    descendant tree; ``False`` terminates the direct child only, waits, then
+    kills and waits again. On POSIX, ``kill_tree_on_cancel`` has no effect —
+    process-group termination always applies.
 
     ``reap_orphans`` (#590, ``[watchdog] reap_orphans``): after the leader
     has exited — including clean rc=0 — sweep surviving process-group
@@ -417,7 +436,8 @@ async def manage_subprocess(
     while the leader was alive (a mutable list works: it is read only at
     teardown time). *orphan_pid_starttimes* carries each captured PID's
     ``/proc`` start time so the sweep can reject a recycled PID before
-    signalling (see ``reap_orphaned_group``).
+    signalling (see ``reap_orphaned_group``). Stream/transport
+    ``aclose()`` (#599) runs unconditionally on every path.
     """
     if os.name == "posix":
         kwargs.setdefault("start_new_session", True)
@@ -430,13 +450,22 @@ async def manage_subprocess(
         if proc.returncode is None:
             with anyio.CancelScope(shield=True):
                 if os.name == "nt":
-                    # On Windows, terminate() only kills the direct child.
-                    # Kill the entire tree immediately via taskkill /T /F.
-                    await kill_process_tree(proc)
-                    await proc.wait()
+                    if kill_tree_on_cancel:
+                        # Full OS descendant tree via taskkill /T /F.
+                        await kill_process_tree(proc)
+                        await proc.wait()
+                    else:
+                        # Direct child only: terminate, wait, kill, wait.
+                        terminate_process(proc)
+                        timed_out = await wait_for_process(
+                            proc, timeout=shutdown_timeout_s
+                        )
+                        if timed_out:
+                            kill_process(proc)
+                            await proc.wait()
                 else:
                     terminate_process(proc)
-                    timed_out = await wait_for_process(proc, timeout=10.0)
+                    timed_out = await wait_for_process(proc, timeout=shutdown_timeout_s)
                     if timed_out:
                         kill_process(proc)
                         await proc.wait()

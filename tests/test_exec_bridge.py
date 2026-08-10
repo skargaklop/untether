@@ -442,7 +442,7 @@ async def test_handle_message_cancelled_renders_cancelled_state() -> None:
         for _ in range(100):
             if running_tasks:
                 break
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
         assert running_tasks
         running_task = running_tasks[next(iter(running_tasks))]
         with anyio.fail_after(1):
@@ -558,15 +558,15 @@ async def test_progress_edits_deletes_approval_notification_on_button_disappear(
 
         async def run_one_cycle() -> None:
             # Let the edit loop run one iteration
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             # Now remove approval buttons and trigger another iteration
             presenter.set_no_approval()
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             # Close the signal to end the loop
             edits.signal_send.close()
 
@@ -1250,16 +1250,16 @@ async def test_progress_edits_survives_transport_error() -> None:
             edits.event_seq = 1
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
             # Second edit — transport succeeds this time
             presenter.set_no_approval()  # change rendered text to trigger an edit
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
             edits.signal_send.close()
 
@@ -1652,8 +1652,8 @@ async def test_progress_edits_debounce_skips_first_render() -> None:
             edits.event_seq = 1
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             edits.signal_send.close()
 
         tg.start_soon(edits.run)
@@ -1688,8 +1688,8 @@ async def test_progress_edits_debounce_delays_second_render() -> None:
             edits.event_seq = 1
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
             # Advance clock by 0.5s — less than the 2.0s interval
             clock.set(0.5)
@@ -1697,8 +1697,8 @@ async def test_progress_edits_debounce_delays_second_render() -> None:
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
             edits.signal_send.close()
 
@@ -1732,16 +1732,16 @@ async def test_progress_edits_debounce_zero_interval_no_delay() -> None:
             edits.event_seq = 1
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
             # Advance clock so the rendered text changes (elapsed_s differs)
             clock.set(5.0)
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
             edits.signal_send.close()
 
@@ -1792,12 +1792,12 @@ async def test_progress_edits_notification_does_not_block_render() -> None:
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
             # Unblock the slow send and close
             send_proceed.set()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             edits.signal_send.close()
 
         tg.start_soon(edits.run)
@@ -1829,16 +1829,16 @@ async def test_progress_edits_debounce_no_delay_when_interval_elapsed() -> None:
             edits.event_seq = 1
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
             # Advance clock well past the interval
             clock.set(10.0)
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
             edits.signal_send.close()
 
@@ -1873,14 +1873,14 @@ async def test_progress_edits_end_of_stream_exits_during_debounce() -> None:
             edits.event_seq = 1
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
             # Second event, then immediately cancel the scope
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             edits_scope.cancel()
 
         tg.start_soon(run_edits)
@@ -1911,9 +1911,9 @@ async def test_progress_edits_notification_failure_does_not_crash() -> None:
             edits.event_seq = 1
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
             edits.signal_send.close()
 
@@ -3332,8 +3332,8 @@ async def test_keyboard_edit_failure_logged() -> None:
     async with anyio.create_task_group() as tg:
 
         async def drive() -> None:
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             edits.signal_send.close()
 
         tg.start_soon(edits.run)
@@ -4456,7 +4456,7 @@ async def test_outline_messages_rendered_with_entities() -> None:
     async with anyio.create_task_group() as tg:
         await edits._send_outline(outline, tg)
         # Let the background task complete
-        await anyio.lowlevel.checkpoint()
+        await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
     # Should have sent one message (short text)
     outline_sends = [
@@ -4482,7 +4482,7 @@ async def test_outline_last_message_has_approval_keyboard() -> None:
     outline = "## Plan\n\nStep 1.\n\nStep 2."
     async with anyio.create_task_group() as tg:
         await edits._send_outline(outline, tg, approval_keyboard=approval_kb)
-        await anyio.lowlevel.checkpoint()
+        await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
     # The last sent message should have the approval keyboard
     last_send = transport.send_calls[-1]
@@ -4501,7 +4501,7 @@ async def test_outline_multi_chunk_keyboard_only_on_last() -> None:
     outline = "## Section\n\n" + "x" * 3000 + "\n\n## Section 2\n\n" + "y" * 3000
     async with anyio.create_task_group() as tg:
         await edits._send_outline(outline, tg, approval_keyboard=approval_kb)
-        await anyio.lowlevel.checkpoint()
+        await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
     outline_sends = list(transport.send_calls)
     assert len(outline_sends) >= 2
@@ -4521,7 +4521,7 @@ async def test_outline_refs_tracked() -> None:
     outline = "## Plan\n\nDo things."
     async with anyio.create_task_group() as tg:
         await edits._send_outline(outline, tg)
-        await anyio.lowlevel.checkpoint()
+        await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
 
     assert len(edits._outline_refs) == 1
     assert edits._outline_refs[0] == transport.send_calls[-1]["ref"]
@@ -4544,8 +4544,8 @@ async def test_outline_messages_deleted_on_approval_transition() -> None:
 
         async def run_cycle() -> None:
             # Let first render (with approval) complete
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             # Manually inject outline refs (simulating _send_outline)
             outline_ref = MessageRef(channel_id=123, message_id=999)
             edits._outline_refs.append(outline_ref)
@@ -4554,8 +4554,8 @@ async def test_outline_messages_deleted_on_approval_transition() -> None:
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             edits.signal_send.close()
 
         tg.start_soon(edits.run)
@@ -4584,8 +4584,8 @@ async def test_outline_deleted_on_keyboard_change() -> None:
 
         async def run_cycle() -> None:
             # Let first render (with approval) complete
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             # Inject outline refs
             outline_ref = MessageRef(channel_id=123, message_id=888)
             edits._outline_refs.append(outline_ref)
@@ -4598,8 +4598,8 @@ async def test_outline_deleted_on_keyboard_change() -> None:
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             edits.signal_send.close()
 
         tg.start_soon(edits.run)
@@ -4683,8 +4683,8 @@ async def test_outline_sent_strips_approval_from_progress() -> None:
     async with anyio.create_task_group() as tg:
 
         async def run_cycle() -> None:
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             edits.signal_send.close()
 
         tg.start_soon(edits.run)
@@ -4715,15 +4715,15 @@ async def test_outline_state_resets_on_approval_disappear() -> None:
 
         async def run_cycle() -> None:
             # First cycle: approval with outline_sent → stripped
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             # Now buttons disappear (approval resolved)
             presenter.set_no_approval()
             edits.event_seq = 2
             with contextlib.suppress(anyio.WouldBlock):
                 edits.signal_send.send_nowait(None)
-            await anyio.lowlevel.checkpoint()
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             edits.signal_send.close()
 
         tg.start_soon(edits.run)
@@ -6556,7 +6556,7 @@ async def test_596_auto_resend_delivers_answer_on_retry(quarantine_store) -> Non
     )
 
     with capture_logs() as logs:
-        await handle_message(
+        outcome = await handle_message(
             cfg,
             runner=runner,
             incoming=IncomingMessage(
@@ -6577,6 +6577,8 @@ async def test_596_auto_resend_delivers_answer_on_retry(quarantine_store) -> Non
     )
     assert "retrying" in all_text
     assert "Here is the real result." in all_text
+    assert outcome.completed is not None
+    assert outcome.completed.answer == "Here is the real result."
 
 
 @pytest.mark.anyio
@@ -7439,7 +7441,7 @@ async def _drive_cancel_mid_delivery(
         # releasing the delivery, so the pre-fix behaviour (delivery
         # cancelled mid-flight) is exercised deterministically.
         for _ in range(20):
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
         blocking_deliver.release.set()
 
     assert outcome_box, "run_runner_with_cancel did not return"
@@ -8370,7 +8372,7 @@ async def test_572_type_a_auto_retry_resumes_once(monkeypatch) -> None:
     )
 
     with capture_logs() as logs:
-        await handle_message(
+        outcome = await handle_message(
             cfg,
             runner=runner,
             incoming=IncomingMessage(channel_id=123, message_id=10, text="do it"),
@@ -8391,6 +8393,69 @@ async def test_572_type_a_auto_retry_resumes_once(monkeypatch) -> None:
     assert "Recovered after retry." in all_text
     # The terminal Type-A error final was suppressed.
     assert "Stream idle timeout" not in all_text
+    assert outcome.completed is not None
+    assert outcome.completed.answer == "Recovered after retry."
+
+
+@pytest.mark.anyio
+async def test_auto_continue_returns_resumed_run_outcome(monkeypatch) -> None:
+    """The recursive auto-continue path returns its successful resumed outcome."""
+    from untether.settings import AutoContinueSettings
+
+    class AutoContinueThenAnswerRunner(MockRunner):
+        def __init__(self) -> None:
+            super().__init__(events=[], engine="claude", resume_value="sess-auto")
+            self.calls: list[tuple[str, ResumeToken | None]] = []
+            self.current_stream = _572_stream(None)
+            self.current_stream.last_event_type = "user"
+
+        async def run(self, prompt, resume):
+            from untether.model import StartedEvent
+            from untether.runners.mock import _resume_token
+
+            self.calls.append((prompt, resume))
+            token = _resume_token(self.engine, resume.value if resume else "sess-auto")
+            async with self.lock_for(token):
+                yield StartedEvent(engine=self.engine, resume=token, title=self.title)
+                if len(self.calls) == 1:
+                    yield CompletedEvent(
+                        engine=self.engine,
+                        resume=token,
+                        ok=False,
+                        answer="",
+                        error="upstream stopped after tool results",
+                    )
+                else:
+                    yield CompletedEvent(
+                        engine=self.engine,
+                        resume=token,
+                        ok=True,
+                        answer="Recovered after auto-continue.",
+                    )
+
+    monkeypatch.setattr(
+        "untether.runner_bridge._load_auto_continue_settings",
+        lambda: AutoContinueSettings(enabled=True, max_retries=1),
+    )
+    transport = FakeTransport()
+    runner = AutoContinueThenAnswerRunner()
+    cfg = ExecBridgeConfig(
+        transport=transport, presenter=MarkdownPresenter(), final_notify=False
+    )
+
+    outcome = await handle_message(
+        cfg,
+        runner=runner,
+        incoming=IncomingMessage(channel_id=123, message_id=12, text="do it"),
+        resume_token=ResumeToken(engine="claude", value="sess-auto"),
+    )
+
+    assert len(runner.calls) == 2
+    assert runner.calls[1][0].endswith("continue")
+    assert runner.calls[1][1] == ResumeToken(engine="claude", value="sess-auto")
+    assert outcome.completed is not None
+    assert outcome.completed.ok is True
+    assert outcome.completed.answer == "Recovered after auto-continue."
 
 
 @pytest.mark.anyio

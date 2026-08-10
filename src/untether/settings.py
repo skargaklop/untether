@@ -663,6 +663,7 @@ class SecuritySettings(BaseModel):
             cleaned.append(stripped)
         return cleaned
 
+
 class RunnerSettings(BaseModel):
     """Global lifecycle settings applied to ALL runners.
 
@@ -672,10 +673,10 @@ class RunnerSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    startup_timeout_s: float = 60.0
-    idle_timeout_s: float = 900.0
+    startup_timeout_s: float = Field(default=60.0, gt=0)
+    idle_timeout_s: float = Field(default=900.0, gt=0)
     kill_tree_on_cancel: bool = True
-    shutdown_timeout_s: float = 5.0
+    shutdown_timeout_s: float = Field(default=5.0, gt=0)
     retry_max_attempts: int = Field(default=3, ge=1)
     retry_base_delay_s: float = Field(default=5.0, ge=0.0)
 

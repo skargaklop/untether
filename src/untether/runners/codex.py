@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import msgspec
 
@@ -771,7 +771,7 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
         extra_args.extend(["--profile", profile_value])
         title = profile_value
 
-    return CodexRunner(codex_cmd=codex_cmd, extra_args=extra_args, title=title)
+    return cast(Runner, CodexRunner(codex_cmd=codex_cmd, extra_args=extra_args, title=title))
 
 
 BACKEND = EngineBackend(

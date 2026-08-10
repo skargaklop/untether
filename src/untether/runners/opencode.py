@@ -17,7 +17,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import msgspec
 
@@ -442,6 +442,9 @@ class OpenCodeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
             model = run_options.model
         if model is not None:
             args.extend(["--model", str(model)])
+        # Subagent injection: --agent <name> replaces plan-agent selection.
+        if run_options is not None and run_options.subagent:
+            args.extend(["--agent", str(run_options.subagent)])
         args.extend(["--", prompt])
         return args
 
@@ -673,10 +676,13 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
 
     title = str(model) if model is not None else "opencode"
 
-    return OpenCodeRunner(
-        opencode_cmd=opencode_cmd,
-        model=model,
-        session_title=title,
+    return cast(
+        Runner,
+        OpenCodeRunner(
+            opencode_cmd=opencode_cmd,
+            model=model,
+            session_title=title,
+        ),
     )
 
 

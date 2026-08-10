@@ -203,7 +203,7 @@ class TransportRuntime:
         return ResolvedMessage(
             prompt=directives.prompt,
             resume_token=resume_token,
-            engine_override=engine_override,
+            engine_override=directives.engine,
             context=context,
             context_source=context_source,
             plan=directives.plan,

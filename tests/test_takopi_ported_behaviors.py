@@ -11,11 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from untether.model import EngineId, ResumeToken
+from untether.model import EngineId
 from untether.telegram.commands.parse import (
-    CompactInvocation,
     parse_compact_invocation,
-    parse_command_invocation,
     parse_handoff_invocation,
 )
 from untether.telegram.files import (
@@ -23,7 +21,6 @@ from untether.telegram.files import (
     is_image_document,
 )
 from untether.telegram.render import render_markdown
-
 
 # ─── Markup preprocessing ────────────────────────────────────────────
 
@@ -92,30 +89,22 @@ class TestCompactHandoffParsing:
         assert r.instructions == "focus on auth"
 
     def test_compact_with_engine_selector(self) -> None:
-        r = parse_compact_invocation(
-            "/pi /compact", engine_ids=self.ENGINE_IDS
-        )
+        r = parse_compact_invocation("/pi /compact", engine_ids=self.ENGINE_IDS)
         assert r is not None
         assert r.engine == "pi"
 
     def test_compact_engine_before_flag(self) -> None:
-        r = parse_compact_invocation(
-            "/compact /pi", engine_ids=self.ENGINE_IDS
-        )
+        r = parse_compact_invocation("/compact /pi", engine_ids=self.ENGINE_IDS)
         assert r is not None
         assert r.engine == "pi"
 
     def test_compact_cross_engine_destination(self) -> None:
-        r = parse_compact_invocation(
-            "/compact to claude", engine_ids=self.ENGINE_IDS
-        )
+        r = parse_compact_invocation("/compact to claude", engine_ids=self.ENGINE_IDS)
         assert r is not None
         assert r.destination_engine == "claude"
 
     def test_compact_cross_engine_with_slash(self) -> None:
-        r = parse_compact_invocation(
-            "/compact to /claude", engine_ids=self.ENGINE_IDS
-        )
+        r = parse_compact_invocation("/compact to /claude", engine_ids=self.ENGINE_IDS)
         assert r is not None
         assert r.destination_engine == "claude"
 
@@ -133,9 +122,7 @@ class TestCompactHandoffParsing:
         assert r.instructions is None
 
     def test_handoff_with_destination(self) -> None:
-        r = parse_handoff_invocation(
-            "/handoff to agy", engine_ids=self.ENGINE_IDS
-        )
+        r = parse_handoff_invocation("/handoff to agy", engine_ids=self.ENGINE_IDS)
         assert r is not None
         assert r.destination_engine == "agy"
 
@@ -144,23 +131,17 @@ class TestCompactHandoffParsing:
         assert r is None
 
     def test_to_unknown_engine_is_instructions(self) -> None:
-        r = parse_compact_invocation(
-            "/compact to unknown", engine_ids=self.ENGINE_IDS
-        )
+        r = parse_compact_invocation("/compact to unknown", engine_ids=self.ENGINE_IDS)
         assert r is not None
         assert r.destination_engine is None
         assert "to unknown" in (r.instructions or "")
 
     def test_multiple_engine_selectors_raises(self) -> None:
         with pytest.raises(ValueError, match="multiple engine selectors"):
-            parse_compact_invocation(
-                "/pi /agy /compact", engine_ids=self.ENGINE_IDS
-            )
+            parse_compact_invocation("/pi /agy /compact", engine_ids=self.ENGINE_IDS)
 
     def test_compact_at_bot_username(self) -> None:
-        r = parse_compact_invocation(
-            "/compact@mybot", engine_ids=self.ENGINE_IDS
-        )
+        r = parse_compact_invocation("/compact@mybot", engine_ids=self.ENGINE_IDS)
         assert r is not None
 
 
@@ -183,14 +164,10 @@ class TestFileTaskAnnotation:
         )
 
     def test_not_image_text(self) -> None:
-        assert not is_image_document(
-            mime_type="text/plain", file_name="doc.txt"
-        )
+        assert not is_image_document(mime_type="text/plain", file_name="doc.txt")
 
     def test_not_image_no_indicators(self) -> None:
-        assert not is_image_document(
-            mime_type=None, file_name="data.json"
-        )
+        assert not is_image_document(mime_type=None, file_name="data.json")
 
     def test_format_single_image_annotation(self) -> None:
         result = format_image_prompt_annotation(["uploads/img.png"])
@@ -232,18 +209,14 @@ class TestPiPlanMode:
     def test_pi_runner_init_defaults(self) -> None:
         from untether.runners.pi import PiRunner
 
-        r = PiRunner(
-            extra_args=[], model=None, provider=None
-        )
+        r = PiRunner(extra_args=[], model=None, provider=None)
         assert r.plan_mode_extension is False
         assert r._plan_warning_logged is False
 
     def test_pi_runner_plan_extension_param(self) -> None:
         from untether.runners.pi import PiRunner
 
-        r = PiRunner(
-            extra_args=[], model=None, provider=None, plan_mode_extension=True
-        )
+        r = PiRunner(extra_args=[], model=None, provider=None, plan_mode_extension=True)
         assert r.plan_mode_extension is True
 
 

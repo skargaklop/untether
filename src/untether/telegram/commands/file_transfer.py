@@ -600,7 +600,7 @@ async def _handle_file_get(
                 return f.read(max_bytes + 1)
 
         try:
-            payload = await anyio.to_thread.run_sync(_read_capped)
+            payload = await anyio.to_thread.run_sync(_read_capped)  # ty: ignore[unresolved-attribute]
         except OSError as exc:
             await reply(text=f"failed to read file: {exc}")
             return

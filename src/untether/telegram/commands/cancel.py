@@ -73,6 +73,8 @@ async def handle_cancel(
         ]
         if len(matches) == 1:
             ref, task = matches[0]
+            if not isinstance(ref.message_id, int):
+                return
             if not _claim_cancel(chat_id, ref.message_id):
                 logger.debug(
                     "cancel.deduped",
@@ -96,15 +98,16 @@ async def handle_cancel(
         if scheduler is not None:
             queued = scheduler.queued_for_chat(chat_id)
             if len(queued) == 1:
-                result = await scheduler.cancel_queued(
-                    chat_id, queued[0].progress_ref.message_id
-                )
+                queued_ref = queued[0].progress_ref
+                if queued_ref is None or not isinstance(queued_ref.message_id, int):
+                    return
+                result = await scheduler.cancel_queued(chat_id, queued_ref.message_id)
                 if (
                     result.status is CancelQueuedStatus.CANCELLED
                     and result.job is not None
                 ):
-                    await _edit_cancelled_message(
-                        cfg, queued[0].progress_ref, result.job
+                    await _edit_cancelled_message(cfg, queued_ref, result.job)
+                    return
                     )
                     return
                 if result.status is CancelQueuedStatus.ALREADY_CLAIMED:
@@ -287,6 +290,13 @@ async def _edit_labelled_message(
     *,
     label: str,
 ) -> None:
+    if job.kind in {"compact", "handoff"}:
+        from .compact import _card
+
+        await cfg.exec_cfg.transport.edit(
+            ref=progress_ref, message=_card(label.strip("`"))
+        )
+        return
     tracker = ProgressTracker(engine=job.resume_token.engine)
     tracker.set_resume(job.resume_token)
     context_line = cfg.runtime.format_context_line(job.context)

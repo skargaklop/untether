@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+from typing import Any
 
 import anyio
 from aiohttp import streams, web
-from aiohttp.multipart import MultipartReader
+from aiohttp.base_protocol import BaseProtocol
+from aiohttp.multipart import BodyPartReader, MultipartReader
 
 from ..logging import get_logger
 from .actions import _deny_reason, _resolve_file_path
@@ -78,7 +80,7 @@ def _multipart_reader_from_bytes(
     """
     loop = asyncio.get_event_loop()
     stream = streams.StreamReader(
-        _NullProtocol(),  # type: ignore[arg-type]
+        BaseProtocol(loop),
         limit=2**16,
         loop=loop,
     )
@@ -126,12 +128,14 @@ async def _parse_multipart(
 
     from .templating import render_template_fields
 
-    form_fields: dict[str, str] = {}
+    form_fields: dict[str, Any] = {}
     saved_path: str | None = None
 
     reader = _multipart_reader_from_bytes(raw_body, content_type)
 
     async for part in reader:
+        if not isinstance(part, BodyPartReader):
+            continue
         if part.filename:
             # File part — sanitise filename and save.
             raw_name = part.filename or "upload.bin"
@@ -378,6 +382,7 @@ def build_webhook_app(
         # therefore the rate limiter, #281) isn't gated on slow downstream
         # work like Telegram outbox pacing or http_forward network calls.
         if webhook.action == "agent_run":
+            assert webhook.prompt_template is not None
             prompt = render_prompt(webhook.prompt_template, payload)
 
             async def _run_agent() -> None:

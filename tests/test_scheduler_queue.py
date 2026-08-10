@@ -584,7 +584,7 @@ async def test_claim_queued_removes_from_pending_and_returns_job() -> None:
     async with anyio.create_task_group() as tg:
         scheduler = ThreadScheduler(
             task_group=tg,
-            run_job=lambda job: anyio.lowlevel.checkpoint(),  # never actually reached
+            run_job=lambda job: anyio.lowlevel.checkpoint(),  # never actually reached  # ty: ignore[unresolved-attribute]
         )
         async with scheduler._lock:
             job = _job(msg_id=10, progress_id=50, text="steer-me")
@@ -608,7 +608,8 @@ async def test_claim_queued_returns_none_for_unknown_job() -> None:
     """claim_queued returns None for a job that was never queued."""
     async with anyio.create_task_group() as tg:
         scheduler = ThreadScheduler(
-            task_group=tg, run_job=lambda job: anyio.lowlevel.checkpoint()
+            task_group=tg,
+            run_job=lambda job: anyio.lowlevel.checkpoint(),  # ty: ignore[unresolved-attribute]
         )
         claimed = await scheduler.claim_queued(123, 999)
         assert claimed is None
