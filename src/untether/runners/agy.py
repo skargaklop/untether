@@ -9,7 +9,7 @@ import subprocess
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import anyio
@@ -354,14 +354,17 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
 
     title = str(model) if model is not None else "agy"
 
-    return AgyRunner(
-        agy_cmd=agy_cmd,
-        model=model,
-        yolo=yolo,
-        sandbox=sandbox,
-        mode=mode,
-        extra_args=extra_args,
-        session_title=title,
+    return cast(
+        Runner,
+        AgyRunner(
+            agy_cmd=agy_cmd,
+            model=model,
+            yolo=yolo,
+            sandbox=sandbox,
+            mode=mode,
+            extra_args=extra_args,
+            session_title=title,
+        ),
     )
 
 

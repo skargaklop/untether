@@ -15,7 +15,7 @@ import os
 import re
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from ..backends import EngineBackend, EngineConfig
 from ..config import ConfigError
@@ -272,11 +272,14 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
             f"Invalid `omp.plan_mode` in {config_path}; expected `off`, `soft`, or `yolo`."
         )
 
-    return OmpRunner(
-        extra_args=extra_args,
-        model=model,
-        provider=provider,
-        plan_mode=plan_mode_s,
+    return cast(
+        Runner,
+        OmpRunner(
+            extra_args=extra_args,
+            model=model,
+            provider=provider,
+            plan_mode=plan_mode_s,
+        ),
     )
 
 

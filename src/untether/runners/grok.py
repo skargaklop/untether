@@ -5,7 +5,7 @@ import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import msgspec
@@ -701,16 +701,19 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
 
     title = str(model) if model is not None else "grok"
 
-    return GrokRunner(
-        grok_cmd=grok_cmd,
-        model=model,
-        yolo=yolo,
-        tools=tools,
-        disallowed_tools=disallowed_tools,
-        reasoning_effort=reasoning_effort,
-        max_turns=max_turns,
-        extra_args=extra_args,
-        session_title=title,
+    return cast(
+        Runner,
+        GrokRunner(
+            grok_cmd=grok_cmd,
+            model=model,
+            yolo=yolo,
+            tools=tools,
+            disallowed_tools=disallowed_tools,
+            reasoning_effort=reasoning_effort,
+            max_turns=max_turns,
+            extra_args=extra_args,
+            session_title=title,
+        ),
     )
 
 
