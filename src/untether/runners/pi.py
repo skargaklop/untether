@@ -37,6 +37,7 @@ from ..runner import (
 )
 from ..schemas import pi as pi_schema
 from ..utils.paths import get_run_base_dir
+from .modes import apply_soft_plan_prompt, run_modes
 from .run_options import get_run_options
 from .tool_actions import tool_kind_and_title
 
@@ -487,10 +488,13 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         extra_args: list[str],
         model: str | None,
         provider: str | None,
+        plan_mode_extension: bool = False,
     ) -> None:
         self.extra_args = extra_args
         self.model = model
         self.provider = provider
+        self.plan_mode_extension = plan_mode_extension
+        self._plan_warning_logged = False
 
     def format_resume(self, token: ResumeToken) -> str:
         if token.engine != ENGINE:
@@ -518,8 +522,39 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
             return None
         return ResumeToken(engine=self.engine, value=found)
 
-    def command(self) -> str:
-        return "pi"
+    def _final_prompt(self, prompt: str) -> str:
+        """Apply goal/plan mode mutations to the prompt.
+
+        - Goal mode: injects the autonomous-goal prefix (unchanged).
+        - Plan mode + extension: delegates to the extension via ``--plan``,
+          no prompt mutation.
+        - Plan mode + no extension: applies the soft-plan prompt prefix
+          (graceful fallback) and logs a one-time warning.
+        """
+        run_options = get_run_options()
+        plan, goal = run_modes(run_options)
+        if goal is not None:
+            body = prompt.strip()
+            note = f"(autonomous goal — work until: {goal})"
+            return f"{note}\n\n{body}" if body else note
+        if plan and not self.plan_mode_extension:
+            if not self._plan_warning_logged:
+                logger.warning("pi.plan_mode_extension_missing")
+                self._plan_warning_logged = True
+            return apply_soft_plan_prompt(prompt)
+        return prompt
+
+    @staticmethod
+    def _prompt_needs_stdin(prompt: str) -> bool:
+        """True when the prompt must be sent via stdin instead of a CLI arg.
+
+        ``pi.cmd`` (the Windows batch wrapper) rejects argv elements containing
+        newlines with "batch file arguments are invalid" (rc=126). The
+        autonomous-goal prefix and any multi-line user prompt inject newlines,
+        so they are piped through stdin; single-line prompts keep the argv
+        path to match the existing session/attachment ordering contract.
+        """
+        return "\n" in prompt
 
     def build_args(
         self,
@@ -529,6 +564,8 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         state: PiStreamState,
     ) -> list[str]:
         run_options = get_run_options()
+        plan, _goal = run_modes(run_options)
+        final_prompt = self._final_prompt(prompt)
         args: list[str] = [*self.extra_args, "--print", "--mode", "json"]
         if self.provider:
             args.extend(["--provider", self.provider])
@@ -537,11 +574,21 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
             model = run_options.model
         if model:
             args.extend(["--model", model])
+        if plan and self.plan_mode_extension:
+            args.append("--plan")
         if state.resume.is_continue:
             args.append("--continue")
         else:
             args.extend(["--session", state.resume.value])
-        args.append(self.sanitize_prompt(prompt))
+        # Layer B: pi accepts @file references in the initial message list.
+        if run_options is not None:
+            args.extend(
+                f"@{attachment.rel_path}"
+                for attachment in run_options.attachments
+                if attachment.kind == "image" and attachment.rel_path
+            )
+        if not self._prompt_needs_stdin(final_prompt):
+            args.append(self.sanitize_prompt(final_prompt))
         return args
 
     def stdin_payload(
@@ -551,7 +598,11 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         *,
         state: PiStreamState,
     ) -> bytes | None:
-        return None
+        final_prompt = self._final_prompt(prompt)
+        if not self._prompt_needs_stdin(final_prompt):
+            return None
+        # Newline-terminated UTF-8 bytes for the multi-line/Windows-safe path.
+        return (final_prompt + "\n").encode()
 
     def env(self, *, state: PiStreamState) -> dict[str, str] | None:
         # #198: allowlist filter — Pi subprocess no longer inherits the
@@ -750,6 +801,25 @@ def _default_session_dir(cwd: PurePath) -> Path:
     return base / "sessions" / safe_path
 
 
+_PLAN_MODE_EXTENSION_PACKAGE = "@narumitw/pi-plan-mode"
+
+
+def detect_plan_mode_extension(root: Path | None = None) -> bool:
+    """True when the ``@narumitw/pi-plan-mode`` extension is installed.
+
+    Checks ``<root>/@narumitw/pi-plan-mode`` (directory existence). The
+    default root is the conventional pi extension install path
+    ``~/.pi/agent/npm/node_modules``. Injectable ``root`` for tests; no
+    config key because the path is a pi-ecosystem convention.
+    """
+    if root is None:
+        agent_dir = os.environ.get("PI_CODING_AGENT_DIR")
+        base = (
+            Path(agent_dir).expanduser() if agent_dir else Path.home() / ".pi" / "agent"
+        )
+        root = base / "npm" / "node_modules"
+    return (root / _PLAN_MODE_EXTENSION_PACKAGE).is_dir()
+
 def build_runner(config: EngineConfig, config_path: Path) -> Runner:
     extra_args_value = config.get("extra_args")
     if extra_args_value is None:
@@ -790,6 +860,7 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
         extra_args=extra_args,
         model=model,
         provider=provider,
+        plan_mode_extension=detect_plan_mode_extension(),
     )
 
 

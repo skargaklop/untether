@@ -663,6 +663,22 @@ class SecuritySettings(BaseModel):
             cleaned.append(stripped)
         return cleaned
 
+class RunnerSettings(BaseModel):
+    """Global lifecycle settings applied to ALL runners.
+
+    Lives under the ``[runners]`` table in the global Untether config.
+    Never duplicated per engine.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    startup_timeout_s: float = 60.0
+    idle_timeout_s: float = 900.0
+    kill_tree_on_cancel: bool = True
+    shutdown_timeout_s: float = 5.0
+    retry_max_attempts: int = Field(default=3, ge=1)
+    retry_base_delay_s: float = Field(default=5.0, ge=0.0)
+
 
 class UntetherSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -689,6 +705,7 @@ class UntetherSettings(BaseSettings):
     watchdog: WatchdogSettings = Field(default_factory=WatchdogSettings)
     auto_continue: AutoContinueSettings = Field(default_factory=AutoContinueSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
+    runners: RunnerSettings = Field(default_factory=RunnerSettings)
 
     @model_validator(mode="before")
     @classmethod

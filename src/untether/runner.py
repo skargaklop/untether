@@ -98,6 +98,12 @@ class SessionLockMixin:
                 yield evt
 
 
+def _format_delay(seconds: float) -> str:
+    """Format a retry delay for user-facing messages."""
+    if seconds < 1:
+        return f"{seconds:.1f}"
+    return str(int(seconds))
+
 def _rc_label(rc: int) -> str:
     """Format exit code, adding signal name for negative rc values."""
     if rc < 0:
@@ -396,6 +402,11 @@ class JsonlSubprocessRunner(BaseRunner):
     # Exposed for diagnostics — set during run_impl, cleared on exit
     current_stream: JsonlStreamState | None = None
     last_pid: int | None = None
+    # Lifecycle settings — set by runtime_loader from [runners] config.
+    startup_timeout_s: float | None = None
+    idle_timeout_s: float | None = None
+    retry_max_attempts: int = 1
+    retry_base_delay_s: float = 5.0
 
     def get_logger(self) -> Any:
         return getattr(self, "logger", get_logger(__name__))
@@ -979,6 +990,36 @@ class JsonlSubprocessRunner(BaseRunner):
             output.append(evt)
         return output
 
+
+    async def _iter_jsonl_with_timeouts(
+        self,
+        stdout: Any,
+        *,
+        startup_timeout_s: float,
+        idle_timeout_s: float,
+    ) -> AsyncIterator[bytes]:
+        """Yield JSONL lines, enforcing startup and idle timeouts per read.
+
+        The first read uses ``startup_timeout_s``; subsequent reads use
+        ``idle_timeout_s``. If a read times out, iteration stops silently
+        — the caller decides what to emit based on how many lines were
+        produced.
+        """
+        first = True
+        while True:
+            timeout = startup_timeout_s if first else idle_timeout_s
+            with anyio.move_on_after(timeout):
+                try:
+                    raw_line = await stdout.readline()
+                except Exception:  # noqa: BLE001
+                    return
+                if not raw_line:
+                    return
+                yield raw_line
+                first = False
+                continue
+            # Timed out
+            return
     async def _iter_jsonl_events(
         self,
         *,
@@ -989,7 +1030,17 @@ class JsonlSubprocessRunner(BaseRunner):
         logger: Any,
         pid: int,
     ) -> AsyncIterator[UntetherEvent]:
-        async for raw_line in self.iter_json_lines(stdout):
+        startup = self.startup_timeout_s
+        idle = self.idle_timeout_s
+        if startup is not None and idle is not None:
+            line_source = self._iter_jsonl_with_timeouts(
+                stdout,
+                startup_timeout_s=startup,
+                idle_timeout_s=idle,
+            )
+        else:
+            line_source = self.iter_json_lines(stdout)
+        async for raw_line in line_source:
             for evt in self._handle_jsonl_line(
                 raw_line=raw_line,
                 stream=stream,
@@ -1292,6 +1343,96 @@ class JsonlSubprocessRunner(BaseRunner):
     async def run_impl(
         self, prompt: str, resume: ResumeToken | None
     ) -> AsyncIterator[UntetherEvent]:
+        """Retry-aware entry: wraps _run_single_attempt_events with transient
+        failure retry before any user-visible events are emitted.
+        """
+        from .utils.transient_failures import (
+            classify_transient_failure,
+        )
+
+        max_attempts = max(1, int(self.retry_max_attempts))
+        base_delay = float(self.retry_base_delay_s)
+        engine = self.engine
+
+        for attempt in range(1, max_attempts + 1):
+            started_emitted = False
+            action_emitted = False
+            answer_emitted = False
+            collected: list[UntetherEvent] = []
+            terminal_error: str | None = None
+
+            async for evt in self._run_single_attempt_events(prompt, resume):
+                from ..model import StartedEvent
+
+                if isinstance(evt, StartedEvent):
+                    started_emitted = True
+                elif isinstance(evt, ActionEvent):
+                    action_emitted = True
+                elif isinstance(evt, CompletedEvent):
+                    if evt.ok:
+                        yield evt
+                        return
+                    terminal_error = evt.error
+                    if evt.answer.strip():
+                        answer_emitted = True
+
+                # Stream events live once we know we can't retry.
+                # Before any user-visible event, buffer to allow retry.
+                if started_emitted or action_emitted or answer_emitted:
+                    yield evt
+                else:
+                    collected.append(evt)
+                    # If this is a failed CompletedEvent, check retry.
+                    if isinstance(evt, CompletedEvent) and not evt.ok:
+                        can_retry = (
+                            attempt < max_attempts
+                            and not started_emitted
+                            and not action_emitted
+                            and not answer_emitted
+                            and classify_transient_failure(
+                                terminal_error or ""
+                            )
+                            is not None
+                        )
+                        if can_retry:
+                            failure = classify_transient_failure(
+                                terminal_error or ""
+                            )
+                            assert failure is not None
+                            delay = base_delay * attempt
+                            status = (
+                                f" (HTTP {failure.http_status})"
+                                if failure.http_status in (429, 503)
+                                else ""
+                            )
+                            state = self.new_state(prompt, resume)
+                            yield self.note_event(
+                                f"{engine} upstream busy{status}; "
+                                f"retrying in {_format_delay(delay)}s "
+                                f"(attempt {attempt + 1}/{max_attempts})",
+                                state=state,
+                            )
+                            await anyio.sleep(delay)
+                            break
+                        # Can't retry — flush collected events
+                        for buffered in collected:
+                            yield buffered
+                        return
+            else:
+                # Attempt completed without a CompletedEvent (shouldn't
+                # normally happen, but flush collected events).
+                for buffered in collected:
+                    yield buffered
+                return
+            # If we broke out of the inner loop (retry), continue to next attempt
+            if not (started_emitted or action_emitted or answer_emitted):
+                continue
+            # Should not reach here — events already yielded
+            return
+
+    async def _run_single_attempt_events(
+        self, prompt: str, resume: ResumeToken | None
+    ) -> AsyncIterator[UntetherEvent]:
         state = self.new_state(prompt, resume)
         self.start_run(prompt, resume, state=state)
 
@@ -1455,6 +1596,12 @@ class Runner(Protocol):
         self,
         prompt: str,
         resume: ResumeToken | None,
+    ) -> AsyncIterator[UntetherEvent]: ...
+
+    def compact(
+        self,
+        resume: ResumeToken,
+        instructions: str | None,
     ) -> AsyncIterator[UntetherEvent]: ...
 
 

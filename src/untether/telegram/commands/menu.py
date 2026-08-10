@@ -80,6 +80,9 @@ def build_bot_commands(
         # #297: renamed from "trigger" → "listen". /trigger still works as
         # a deprecated alias but does not appear in the command menu.
         ("listen", "set listen mode (all/mentions)"),
+        ("compact", "compact current session"),
+        ("handoff", "new session with handoff summary"),
+        ("queue", "show thread job queue"),
     ]:
         if cmd in seen:
             continue

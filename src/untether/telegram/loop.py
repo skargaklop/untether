@@ -25,6 +25,7 @@ from ..scheduler import ThreadJob, ThreadScheduler
 from ..settings import TelegramTransportSettings
 from ..transport import MessageRef, RenderedMessage, SendOptions
 from ..transport_runtime import ResolvedMessage
+from ..utils.error_display import user_safe_error
 from .bridge import (
     CANCEL_CALLBACK_DATA,
     STEER_CALLBACK_DATA,
@@ -39,6 +40,7 @@ from .commands.cancel import (
     handle_callback_steer,
     handle_cancel,
 )
+from .commands.compact import handle_compact_command
 from .commands.file_transfer import FILE_PUT_USAGE
 from .commands.handlers import (
     dispatch_callback,
@@ -68,6 +70,7 @@ from .commands.reply import make_reply
 from .context import _merge_topic_context, _usage_ctx_set, _usage_topic
 from .engine_defaults import resolve_engine_for_message
 from .engine_overrides import merge_overrides
+from .files import format_image_prompt_annotation, is_image_document
 from .listen_mode import resolve_listen_mode, should_trigger_run
 from .prompt_batch import (
     PromptBatchPart,
@@ -505,6 +508,22 @@ def _dispatch_builtin_command(
         task_group.start_soon(handler)
         return True
 
+    if command_id == "queue":
+
+        from .commands.queue_cmd import handle_queue_command
+
+        task_group.start_soon(
+            partial(
+                handle_queue_command,
+                cfg,
+                msg,
+                scheduler=ctx.scheduler,
+                running_tasks=ctx.running_tasks,
+                reply=reply,
+            )
+        )
+        return True
+
     return False
 
 
@@ -712,6 +731,7 @@ class TelegramCommandContext:
     running_tasks: RunningTasks | None = None
     chat_session_store: ChatSessionStore | None = None
     chat_session_key: tuple[int, int | None] | None = None
+    scheduler: ThreadScheduler | None = None
 
 
 def _classify_message(
@@ -2068,6 +2088,10 @@ async def run_main_loop(
                 | None = None,
                 engine_override: EngineId | None = None,
                 progress_ref: MessageRef | None = None,
+                plan: bool = False,
+                goal: str | None = None,
+                skill: str | None = None,
+                subagent: str | None = None,
             ) -> None:
                 topic_key = (
                     (chat_id, thread_id)
@@ -2110,6 +2134,23 @@ async def run_main_loop(
                 run_options = _apply_trigger_permission_override(
                     run_options, context, engine=engine_for_overrides
                 )
+                # Directive-derived plan/goal/skill/subagent override the
+                # resolved chat/topic preferences for this run.
+                from dataclasses import replace as _replace_options
+
+                if plan or goal is not None or skill is not None or subagent is not None:
+                    base = (
+                        run_options
+                        if run_options is not None
+                        else EngineRunOptions()
+                    )
+                    run_options = _replace_options(
+                        base,
+                        plan=plan or base.plan,
+                        goal=goal if goal is not None else base.goal,
+                        skill=skill if skill is not None else base.skill,
+                        subagent=subagent if subagent is not None else base.subagent,
+                    )
                 await run_engine(
                     exec_cfg=cfg.exec_cfg,
                     runtime=cfg.runtime,
@@ -2131,7 +2172,204 @@ async def run_main_loop(
                     run_options=run_options,
                 )
 
+
+            async def run_compact_job(job: ThreadJob) -> None:
+                """Execute a compact job; surface lifecycle feedback."""
+                from ..compact import get_compact_support
+                from ..model import CompletedEvent
+
+                entry = cfg.runtime.resolve_runner(
+                    resume_token=job.resume_token,
+                    engine_override=job.resume_token.engine,
+                )
+                runner = entry.runner
+                instructions = job.compact_instructions
+                support = get_compact_support(runner)
+                final_event: CompletedEvent | None = None
+                try:
+                    async for event in runner.compact(job.resume_token, instructions):
+                        if isinstance(event, CompletedEvent):
+                            final_event = event
+                except (RuntimeError, OSError, ValueError) as exc:
+                    logger.error("compact.job_failed", error=str(exc))
+                    await send_plain(
+                        cfg.exec_cfg.transport,
+                        chat_id=cast(int, job.chat_id),
+                        user_msg_id=cast(int, job.user_msg_id),
+                        text=f"compact failed: {exc}",
+                        notify=True,
+                        thread_id=cast(int | None, job.thread_id),
+                    )
+                    return
+                if final_event is not None and not final_event.ok:
+                    error_text = final_event.error or "unknown error"
+                    logger.error("compact.job_failed", error=error_text)
+                    await send_plain(
+                        cfg.exec_cfg.transport,
+                        chat_id=cast(int, job.chat_id),
+                        user_msg_id=cast(int, job.user_msg_id),
+                        text=f"compact failed: {error_text}",
+                        notify=True,
+                        thread_id=cast(int | None, job.thread_id),
+                    )
+                    return
+                status = (
+                    "compaction completed."
+                    if support.true_compaction
+                    else "handoff summary finished."
+                )
+                await send_plain(
+                    cfg.exec_cfg.transport,
+                    chat_id=cast(int, job.chat_id),
+                    user_msg_id=cast(int, job.user_msg_id),
+                    text=status,
+                    notify=True,
+                    thread_id=cast(int | None, job.thread_id),
+                )
+
+            async def run_handoff_job(job: ThreadJob) -> None:
+                """Phase 1: handoff summary in OLD session.
+                Phase 2: seed NEW session with summary; routing flips.
+                """
+                from ..compact import handoff_seed_prompt
+                from ..markdown import MarkdownParts
+                from ..model import CompletedEvent
+                from .render import MAX_BODY_CHARS, prepare_telegram_multi
+
+                chat_id = cast(int, job.chat_id)
+                user_msg_id = cast(int, job.user_msg_id)
+                thread_id = cast(int | None, job.thread_id)
+
+                # --- Phase 1: produce handoff summary in OLD session ---
+                entry = cfg.runtime.resolve_runner(
+                    resume_token=job.resume_token,
+                    engine_override=job.resume_token.engine,
+                )
+                runner = entry.runner
+                final_event: CompletedEvent | None = None
+                try:
+                    async for event in runner.compact(
+                        job.resume_token, job.compact_instructions
+                    ):
+                        if isinstance(event, CompletedEvent):
+                            final_event = event
+                except (RuntimeError, OSError, ValueError) as exc:
+                    logger.error("handoff.phase1_failed", error=str(exc))
+                    await send_plain(
+                        cfg.exec_cfg.transport,
+                        chat_id=chat_id,
+                        user_msg_id=user_msg_id,
+                        text=f"handoff failed: {exc}",
+                        notify=True,
+                        thread_id=thread_id,
+                    )
+                    return
+
+                if final_event is not None and not final_event.ok:
+                    error_text = final_event.error or "unknown error"
+                    logger.error("handoff.phase1_failed", error=error_text)
+                    await send_plain(
+                        cfg.exec_cfg.transport,
+                        chat_id=chat_id,
+                        user_msg_id=user_msg_id,
+                        text=f"handoff failed: {error_text}",
+                        notify=True,
+                        thread_id=thread_id,
+                    )
+                    return
+
+                summary = (final_event.answer if final_event else "") or ""
+                if not summary.strip():
+                    logger.error("handoff.phase1_empty_answer")
+                    await send_plain(
+                        cfg.exec_cfg.transport,
+                        chat_id=chat_id,
+                        user_msg_id=user_msg_id,
+                        text="handoff failed: summary was empty.",
+                        notify=True,
+                        thread_id=thread_id,
+                    )
+                    return
+
+                # --- Phase 2: seed a NEW session with the summary ---
+                target_engine = job.handoff_target or job.resume_token.engine
+                seed_prompt = handoff_seed_prompt(summary)
+                await send_plain(
+                    cfg.exec_cfg.transport,
+                    chat_id=chat_id,
+                    user_msg_id=user_msg_id,
+                    text=f"creating handoff summary for {target_engine} session…",
+                    notify=False,
+                    thread_id=thread_id,
+                )
+                try:
+                    await run_job(
+                        chat_id,
+                        user_msg_id,
+                        seed_prompt,
+                        None,  # resume_token=None -> NEW session
+                        None,  # context
+                        thread_id,
+                        job.session_key,
+                        None,
+                        scheduler.note_thread_known,
+                        target_engine,  # engine_override -> destination
+                        None,
+                    )
+                except (RuntimeError, OSError, ValueError) as exc:
+                    logger.error("handoff.phase2_failed", error=str(exc))
+                    await send_plain(
+                        cfg.exec_cfg.transport,
+                        chat_id=chat_id,
+                        user_msg_id=user_msg_id,
+                        text=f"handoff failed to start new session: {exc}",
+                        notify=True,
+                        thread_id=thread_id,
+                    )
+                    return
+
+                completion = (
+                    f"handoff complete — new {target_engine} session "
+                    f"started with the summary.\n"
+                    "Send your next message to continue. "
+                    "Do not reply to pre-handoff messages; "
+                    "they still point to the old session."
+                )
+                await send_plain(
+                    cfg.exec_cfg.transport,
+                    chat_id=chat_id,
+                    user_msg_id=user_msg_id,
+                    text=completion,
+                    notify=True,
+                    thread_id=thread_id,
+                )
+
+                # Echo the summary (truncated for display; full prompt already sent).
+                parts = MarkdownParts(header="handoff summary", body=summary)
+                for rendered_text, entities in prepare_telegram_multi(
+                    parts, max_body_chars=MAX_BODY_CHARS
+                ):
+                    await cfg.exec_cfg.transport.send(
+                        channel_id=chat_id,
+                        message=RenderedMessage(
+                            text=rendered_text, extra={"entities": entities}
+                        ),
+                        options=SendOptions(
+                            reply_to=MessageRef(
+                                channel_id=chat_id, message_id=user_msg_id
+                            ),
+                            notify=False,
+                            thread_id=thread_id,
+                        ),
+                    )
+
             async def run_thread_job(job: ThreadJob) -> None:
+                if job.kind == "compact":
+                    await run_compact_job(job)
+                    return
+                if job.kind == "handoff":
+                    await run_handoff_job(job)
+                    return
                 await run_job(
                     cast(int, job.chat_id),
                     cast(int, job.user_msg_id),
@@ -2144,9 +2382,45 @@ async def run_main_loop(
                     scheduler.note_thread_known,
                     None,
                     job.progress_ref,
+                    job.plan,
+                    job.goal,
+                    job.skill,
+                    job.subagent,
                 )
 
-            scheduler = ThreadScheduler(task_group=tg, run_job=run_thread_job)
+            async def _on_job_claimed(job: ThreadJob) -> None:
+                if job.progress_ref is None:
+                    return
+                try:
+                    tracker = ProgressTracker(engine=job.resume_token.engine)
+                    tracker.set_resume(job.resume_token)
+                    context_line = cfg.runtime.format_context_line(job.context)
+                    st = tracker.snapshot(context_line=context_line)
+                    msg = cfg.exec_cfg.presenter.render_progress(
+                        st, elapsed_s=0.0, label="starting"
+                    )
+                    await cfg.exec_cfg.transport.edit(ref=job.progress_ref, message=msg)
+                except Exception:  # noqa: BLE001 — observer must never break a run
+                    logger.debug("scheduler.observer.claim.edit_failed", exc_info=True)
+
+            async def _on_job_failed(job: ThreadJob, exc: BaseException) -> None:
+                if job.progress_ref is None:
+                    return
+                try:
+                    detail = user_safe_error(exc, fallback="run failed")
+                    preview = job.text[:80].replace("\n", " ")
+                    text = f"`failed`\n{detail}\n\n> {preview}"
+                    msg = RenderedMessage(text=text)
+                    await cfg.exec_cfg.transport.edit(ref=job.progress_ref, message=msg)
+                except Exception:  # noqa: BLE001 — observer must never break a run
+                    logger.debug("scheduler.observer.fail.edit_failed", exc_info=True)
+
+            scheduler = ThreadScheduler(
+                task_group=tg,
+                run_job=run_thread_job,
+                on_job_claimed=_on_job_claimed,
+                on_job_failed=_on_job_failed,
+            )
 
             # --- /at one-shot delayed runs (#288) ---
             from . import at_scheduler
@@ -2398,6 +2672,11 @@ async def run_main_loop(
                         reply_ref,
                         scheduler.note_thread_known,
                         engine_override,
+                        None,
+                        resolved.plan,
+                        resolved.goal,
+                        resolved.skill,
+                        resolved.subagent,
                     )
                     return
                 progress_ref = await _send_queued_progress(
@@ -2417,6 +2696,10 @@ async def run_main_loop(
                     msg.thread_id,
                     chat_session_key,
                     progress_ref,
+                    resolved.plan,
+                    resolved.goal,
+                    resolved.skill,
+                    resolved.subagent,
                 )
 
             async def run_prompt_from_upload(
@@ -2622,7 +2905,16 @@ async def run_main_loop(
                 )
                 if saved is None:
                     return
-                annotation = f"[uploaded file: {saved.rel_path.as_posix()}]"
+                rel = saved.rel_path.as_posix()
+                is_img = msg.document is not None and is_image_document(
+                    mime_type=msg.document.mime_type,
+                    file_name=msg.document.file_name,
+                    raw=msg.document.raw,
+                )
+                if is_img:
+                    annotation = format_image_prompt_annotation([rel])
+                else:
+                    annotation = f"Execute the task specified in this file: `{rel}`."
                 prompt = _build_upload_prompt(resolved.prompt, annotation)
                 await run_prompt_from_upload(msg, prompt, resolved)
 
@@ -2726,6 +3018,79 @@ async def run_main_loop(
                     )
                     return
 
+                # --- Compact/handoff: intercept before normal command dispatch ---
+                from .commands.parse import (
+                    parse_compact_invocation,
+                    parse_handoff_invocation,
+                )
+
+                compact_invocation = parse_compact_invocation(
+                    text, engine_ids=cfg.runtime.engine_ids
+                )
+                if compact_invocation is not None:
+                    prompt_batcher.cancel(
+                        prompt_batcher.key_for_message(
+                            msg,
+                            topic_key=topic_key,
+                            chat_session_key=chat_session_key,
+                        )
+                    )
+                    forward_coalescer.cancel(forward_key)
+                    tg.start_soon(
+                        handle_compact_command,
+                        compact_invocation.instructions,
+                        compact_invocation.engine,
+                        cfg,
+                        msg,
+                        reply,
+                        scheduler,
+                        resume_resolver,
+                        state.topic_store,
+                        state.chat_session_store,
+                        topic_key,
+                        chat_session_key,
+                        reply_id,
+                        state.running_tasks,
+                        state,
+                        ambient_context,
+                        False,
+                        compact_invocation.destination_engine,
+                    )
+                    return
+                handoff_invocation = parse_handoff_invocation(
+                    text, engine_ids=cfg.runtime.engine_ids
+                )
+                if handoff_invocation is not None:
+                    prompt_batcher.cancel(
+                        prompt_batcher.key_for_message(
+                            msg,
+                            topic_key=topic_key,
+                            chat_session_key=chat_session_key,
+                        )
+                    )
+                    forward_coalescer.cancel(forward_key)
+                    tg.start_soon(
+                        handle_compact_command,
+                        handoff_invocation.instructions,
+                        handoff_invocation.engine,
+                        cfg,
+                        msg,
+                        reply,
+                        scheduler,
+                        resume_resolver,
+                        state.topic_store,
+                        state.chat_session_store,
+                        topic_key,
+                        chat_session_key,
+                        reply_id,
+                        state.running_tasks,
+                        state,
+                        ambient_context,
+                        True,
+                        handoff_invocation.destination_engine,
+                    )
+                    return
+
                 command_id = classification.command_id
                 args_text = classification.args_text
                 if command_id == "continue":
@@ -2783,8 +3148,8 @@ async def run_main_loop(
                         reply=reply,
                         task_group=tg,
                         running_tasks=state.running_tasks,
-                        chat_session_store=state.chat_session_store,
                         chat_session_key=chat_session_key,
+                        scheduler=scheduler,
                     ),
                     command_id=command_id,
                 ):

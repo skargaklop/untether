@@ -29,6 +29,8 @@ class ThreadJob:
     progress_ref: MessageRef | None = None
     plan: bool = False
     goal: str | None = None
+    skill: str | None = None
+    subagent: str | None = None
     kind: Literal["prompt", "compact", "handoff"] = "prompt"
     compact_instructions: str | None = None
     handoff_target: EngineId | None = None
@@ -167,6 +169,8 @@ class ThreadScheduler:
         progress_ref: MessageRef | None = None,
         plan: bool = False,
         goal: str | None = None,
+        skill: str | None = None,
+        subagent: str | None = None,
     ) -> EnqueueDisposition:
         return await self.enqueue(
             ThreadJob(
@@ -180,6 +184,8 @@ class ThreadScheduler:
                 progress_ref=progress_ref,
                 plan=plan,
                 goal=goal,
+                skill=skill,
+                subagent=subagent,
             )
         )
 

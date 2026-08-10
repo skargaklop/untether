@@ -124,6 +124,22 @@ def build_router(
                 issues.append((engine_id, issue, had_user_config))
                 continue
 
+        # Apply global [runners] lifecycle settings to runners exposing the
+        # corresponding attributes (Takopi's attribute-based wiring).
+        rs = settings.runners
+        if hasattr(runner, "startup_timeout_s"):
+            runner.startup_timeout_s = rs.startup_timeout_s  # type: ignore[attr-defined]
+        if hasattr(runner, "idle_timeout_s"):
+            runner.idle_timeout_s = rs.idle_timeout_s  # type: ignore[attr-defined]
+        if hasattr(runner, "shutdown_timeout_s"):
+            runner.shutdown_timeout_s = rs.shutdown_timeout_s  # type: ignore[attr-defined]
+        if hasattr(runner, "kill_tree_on_cancel"):
+            runner.kill_tree_on_cancel = rs.kill_tree_on_cancel  # type: ignore[attr-defined]
+        if hasattr(runner, "retry_max_attempts"):
+            runner.retry_max_attempts = rs.retry_max_attempts  # type: ignore[attr-defined]
+        if hasattr(runner, "retry_base_delay_s"):
+            runner.retry_base_delay_s = rs.retry_base_delay_s  # type: ignore[attr-defined]
+
         cmd = backend.cli_cmd or backend.id
         if shutil.which(cmd) is None:
             status = "missing_cli"

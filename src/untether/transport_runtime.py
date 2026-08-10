@@ -35,6 +35,10 @@ class ResolvedMessage:
     engine_override: EngineId | None
     context: RunContext | None
     context_source: ContextSource = "none"
+    plan: bool = False
+    goal: str | None = None
+    skill: str | None = None
+    subagent: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,16 +200,16 @@ class TransportRuntime:
             ambient_context=ambient_context,
             default_project=default_project,
         )
-        engine_override = self._resolve_engine_override(
-            directives_engine=directives.engine,
-        )
-
         return ResolvedMessage(
             prompt=directives.prompt,
             resume_token=resume_token,
             engine_override=engine_override,
             context=context,
             context_source=context_source,
+            plan=directives.plan,
+            goal=directives.goal,
+            skill=directives.skill,
+            subagent=directives.subagent,
         )
 
     def project_default_engine(self, context: RunContext | None) -> EngineId | None:

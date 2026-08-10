@@ -5,8 +5,10 @@ import os
 import shlex
 import tempfile
 import zipfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
+from typing import Any
+from uuid import uuid4
 
 from ..logging import get_logger
 
@@ -20,6 +22,9 @@ __all__ = [
     "deny_reason",
     "file_usage",
     "format_bytes",
+    "format_image_prompt_annotation",
+    "image_upload_path",
+    "is_image_document",
     "normalize_relative_path",
     "parse_file_command",
     "parse_file_prompt",
@@ -28,6 +33,84 @@ __all__ = [
     "write_bytes_atomic",
     "zip_directory",
 ]
+
+_IMAGE_EXTENSIONS = frozenset(
+    {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".bmp",
+        ".heic",
+        ".heif",
+        ".tif",
+        ".tiff",
+    }
+)
+
+
+def is_image_document(
+    *,
+    mime_type: str | None,
+    file_name: str | None,
+    file_path: str | None = None,
+    raw: Mapping[str, Any] | None = None,
+) -> bool:
+    """Return True for Telegram photos and image/* documents."""
+    if isinstance(mime_type, str) and mime_type.lower().startswith("image/"):
+        return True
+    for candidate in (file_name, file_path):
+        if not candidate:
+            continue
+        if Path(candidate).suffix.lower() in _IMAGE_EXTENSIONS:
+            return True
+    # Telegram photos are PhotoSize objects: no name/mime, but have width/height.
+    return bool(
+        raw
+        and file_name is None
+        and mime_type is None
+        and "width" in raw
+        and "height" in raw
+    )
+
+
+def image_upload_path(
+    uploads_dir: str,
+    image_subdir: str,
+    filename: str | None,
+    file_path: str | None,
+) -> Path:
+    """Unique path under uploads_dir/image_subdir for agent-visible images."""
+    name = default_upload_name(filename, file_path)
+    suffix = Path(name).suffix.lower()
+    if suffix not in _IMAGE_EXTENSIONS:
+        # Telegram photo downloads often end in .jpg
+        if file_path and Path(file_path).suffix.lower() in _IMAGE_EXTENSIONS:
+            suffix = Path(file_path).suffix.lower()
+        else:
+            suffix = ".jpg"
+        stem = Path(name).stem or "photo"
+        name = f"{stem}{suffix}"
+    unique = f"{Path(name).stem}_{uuid4().hex[:8]}{Path(name).suffix}"
+    return Path(uploads_dir) / image_subdir / unique
+
+
+def format_image_prompt_annotation(rel_paths: Sequence[str]) -> str:
+    paths = [p for p in rel_paths if p]
+    if not paths:
+        return ""
+    if len(paths) == 1:
+        return (
+            f"[image]\n"
+            f"- {paths[0]}\n\n"
+            f"Read the image file above and answer based on what you see."
+        )
+    body = "\n".join(f"- {path}" for path in paths)
+    return (
+        f"[images]\n{body}\n\n"
+        f"Read the image files above and answer based on what you see."
+    )
 
 
 def split_command_args(text: str) -> tuple[str, ...]:
