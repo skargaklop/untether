@@ -14,6 +14,30 @@ from untether.settings import (
 )
 
 
+def test_logging_settings_load_from_toml(tmp_path: Path) -> None:
+    config_path = tmp_path / "untether.toml"
+    config_path.write_text(
+        'transport = "telegram"\n'
+        '[transports.telegram]\n'
+        'bot_token = "token"\nchat_id = 123\nallow_any_user = true\n'
+        '[logging]\nlevel = "warning"\nfile = "run.log"\nformat = "json"\n',
+        encoding="utf-8",
+    )
+    settings, _ = load_settings(config_path)
+    assert settings.logging.level == "warning"
+    assert settings.logging.file == "run.log"
+    assert settings.logging.format == "json"
+
+
+def test_logging_settings_reject_invalid_values(tmp_path: Path) -> None:
+    data = {
+        "transport": "telegram",
+        "transports": {"telegram": {"bot_token": "token", "chat_id": 123, "allow_any_user": True}},
+        "logging": {"level": "verbose", "format": "plain"},
+    }
+    with pytest.raises(ConfigError):
+        validate_settings_data(data, config_path=tmp_path / "untether.toml")
+
 def test_load_settings_from_toml(tmp_path: Path) -> None:
     config_path = tmp_path / "untether.toml"
     config_path.write_text(

@@ -689,6 +689,14 @@ class RunnerSettings(BaseModel):
     retry_base_delay_s: float = Field(default=5.0, ge=0.0)
 
 
+
+class LoggingSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    level: Literal["debug", "info", "warning", "error", "critical"] = "info"
+    file: NonEmptyStr | None = None
+    format: Literal["console", "json"] = "console"
+
 class UntetherSettings(BaseSettings):
     model_config = SettingsConfigDict(
         extra="allow",
@@ -715,6 +723,7 @@ class UntetherSettings(BaseSettings):
     auto_continue: AutoContinueSettings = Field(default_factory=AutoContinueSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     runners: RunnerSettings = Field(default_factory=RunnerSettings)
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
 
     @model_validator(mode="before")
     @classmethod

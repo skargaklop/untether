@@ -5,6 +5,7 @@ import io
 import os
 import re
 import sys
+from pathlib import Path
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, TextIO, cast
@@ -216,12 +217,16 @@ class SafeWriter(io.TextIOBase):
 
 
 def setup_logging(
-    *, debug: bool = False, cache_logger_on_first_use: bool = False
+    *,
+    debug: bool = False,
+    cache_logger_on_first_use: bool = False,
+    settings: Any | None = None,
 ) -> None:
     global _MIN_LEVEL, _PIPELINE_LEVEL_NAME
     global _log_file_handle
 
-    level_name = os.environ.get("TAKOPI_LOG_LEVEL")
+    configured_level = getattr(settings, "level", None)
+    level_name = os.environ.get("TAKOPI_LOG_LEVEL", configured_level)
     if debug:
         level_name = "debug"
     _MIN_LEVEL = _level_value(level_name, default="info")
@@ -229,7 +234,8 @@ def setup_logging(
     trace_pipeline = _truthy(os.environ.get("TAKOPI_TRACE_PIPELINE"))
     _PIPELINE_LEVEL_NAME = "info" if trace_pipeline else "debug"
 
-    format_value = os.environ.get("TAKOPI_LOG_FORMAT", "console").strip().lower()
+    configured_format = getattr(settings, "format", None)
+    format_value = os.environ.get("TAKOPI_LOG_FORMAT", configured_format or "console").strip().lower()
     color_override = os.environ.get("TAKOPI_LOG_COLOR")
     is_tty = sys.stdout.isatty() if color_override is None else _truthy(color_override)
     if format_value == "json":
@@ -238,7 +244,7 @@ def setup_logging(
         renderer = structlog.dev.ConsoleRenderer(colors=is_tty)
 
     safe_stream = cast(TextIO, SafeWriter(sys.stdout))
-    log_file = os.environ.get("TAKOPI_LOG_FILE")
+    log_file = os.environ.get("TAKOPI_LOG_FILE", getattr(settings, "file", None))
     if _log_file_handle is not None:
         try:
             _log_file_handle.close()
@@ -248,11 +254,14 @@ def setup_logging(
             _log_file_handle = None
     if log_file:
         try:
-            _log_file_handle = open(  # noqa: SIM115
-                log_file, "a", encoding="utf-8"
-            )
-        except OSError:
+            path = os.path.expanduser(log_file)
+            if not os.path.isabs(path):
+                path = str(Path.home() / ".untether" / path)
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            _log_file_handle = open(path, "a", encoding="utf-8")  # noqa: SIM115
+        except OSError as exc:
             _log_file_handle = None
+            print(f"warning: unable to open log file ({type(exc).__name__})", file=sys.stderr)
 
     processors = cast(
         list[Processor],

@@ -202,9 +202,17 @@ def _run_auto_router(
         _resolve_cli_attr("acquire_config_lock") or acquire_config_lock,
     )
 
+    load_settings_optional_for_logging = cast(
+        Callable[[], tuple[UntetherSettings | None, Path | None]],
+        _resolve_cli_attr("_load_settings_optional") or _load_settings_optional,
+    )
+    settings_hint, _config_hint = load_settings_optional_for_logging()
     if debug:
         os.environ.setdefault("TAKOPI_LOG_FILE", "debug.log")
-    setup_logging_fn(debug=debug)
+    setup_logging_fn(
+        debug=debug,
+        settings=settings_hint.logging if settings_hint is not None else None,
+    )
     lock_handle: LockHandle | None = None
     try:
         (
