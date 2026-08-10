@@ -1,0 +1,3461 @@
+error[call-non-callable]: Object of type `object` is not callable
+  --> src\untether\cli\doctor.py:71:11
+   |
+71 |     bot = client_factory(token)
+   |           ^^^^^^^^^^^^^^^^^^^^^
+info: Union variant `~AlwaysFalsy` is incompatible with this call site
+info: Attempted to call union type `~AlwaysFalsy | <class 'TelegramClient'>`
+
+error[call-non-callable]: Object of type `~AlwaysFalsy` is not callable
+  --> src\untether\cli\doctor.py:93:23
+   |
+93 |                   await validate_topics(
+   |  _______________________^
+94 | |                     bot=bot,
+95 | |                     topics=topics,
+96 | |                     chat_id=chat_id,
+97 | |                     project_chat_ids=project_chat_ids,
+98 | |                 )
+   | |_________________^
+
+error[unresolved-attribute]: Object of type `BotClient` has no attribute `flush_outbox`
+   --> src\untether\telegram\bridge.py:292:15
+    |
+292 |         await self._bot.flush_outbox(timeout=timeout)
+    |               ^^^^^^^^^^^^^^^^^^^^^^
+
+error[invalid-return-type]: Return type does not match returned value
+  --> tests\conftest.py:60:30
+   |
+60 | def _clear_cancel_dedup() -> None:
+   |                              ^^^^ expected `None`, found `types.GeneratorType`
+info: Function is inferred as returning `types.GeneratorType` because it is a generator function
+info: See https://docs.python.org/3/glossary.html#term-generator for more details
+
+error[unresolved-attribute]: Attribute `ok` is not defined on `StartedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_amp_runner.py:198:12
+    |
+198 |     assert events[0].ok is False
+    |            ^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_amp_runner.py:514:12
+    |
+514 |     assert result_events[0].action.detail["parent_tool_use_id"] == "toolu_parent_01"
+    |            ^^^^^^^^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_amp_runner.py:545:40
+    |
+545 |     assert "parent_tool_use_id" not in events[0].action.detail
+    |                                        ^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_ask_user_question.py:393:24
+    |
+393 |     assert "1 of 2" in events[0].action.title
+    |                        ^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_ask_user_question.py:443:14
+    |
+443 |     detail = events[0].action.detail
+    |              ^^^^^^^^^^^^^^^^
+
+error[invalid-argument-type]: Method `__getitem__` of type `Overload[(i: SupportsIndex, /) -> dict[str, str | list[dict[str, str]]], (s: slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None], /) -> list[dict[str, str | list[dict[str, str]]]]]` cannot be called with key of type `Literal["Colour?"]` on object of type `list[dict[str, str | list[dict[str, str]]]]`
+   --> tests\test_ask_user_question.py:573:12
+    |
+573 |     assert stored_input["answers"]["Colour?"] == "Red"
+    |            ^^^^^^^^^^^^^^^^^^^^^^^
+
+error[invalid-argument-type]: Argument to function `send_next_ask_question_message` is incorrect
+   --> tests\test_ask_user_question.py:761:9
+    |
+761 |         transport,  # type: ignore[arg-type]
+    |         ^^^^^^^^^ Expected `Transport`, found `_RecordingTransport`
+info: type `_RecordingTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `_RecordingTransport`
+info: Function defined here
+  --> src\untether\telegram\commands\ask_question.py:22:11
+   |
+22 | async def send_next_ask_question_message(
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+23 |     transport: Transport,
+   |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `send_next_ask_question_message` is incorrect
+   --> tests\test_ask_user_question.py:803:9
+    |
+803 |         transport,  # type: ignore[arg-type]
+    |         ^^^^^^^^^ Expected `Transport`, found `_RecordingTransport`
+info: type `_RecordingTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `_RecordingTransport`
+info: Function defined here
+  --> src\untether\telegram\commands\ask_question.py:22:11
+   |
+22 | async def send_next_ask_question_message(
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+23 |     transport: Transport,
+   |     -------------------- Parameter declared here
+
+error[unresolved-attribute]: Object of type `object` has no attribute `thread_id`
+   --> tests\test_ask_user_question.py:811:12
+    |
+811 |     assert options.thread_id is None
+    |            ^^^^^^^^^^^^^^^^^
+
+error[invalid-assignment]: Object of type `None` is not assignable to `list[Any]`
+  --> tests\test_at_command.py:87:23
+   |
+87 |     sent: list[Any] = None  # type: ignore[assignment]
+   |           ---------   ^^^^ Incompatible value of type `None`
+   |           |
+   |           Declared type
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_at_command.py:161:9
+    |
+161 |         runtime=runtime if runtime is not None else _FakeRuntime(),
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `TransportRuntime`, found `(Any & ~None) | _FakeRuntime`
+info: element `_FakeRuntime` of union `(Any & ~None) | _FakeRuntime` is not assignable to `TransportRuntime`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_at_command.py:162:9
+    |
+162 |         executor=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^^ Expected `CommandExecutor`, found `None`
+info: type `None` is not assignable to protocol `CommandExecutor`
+info: └── protocol member `edit` is not defined on type `None`
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_at_command.py:187:53
+    |
+187 |             at_scheduler.install(tg, _fake_run_job, FakeTransport(), 999)
+    |                                                     ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+  --> src\untether\telegram\at_scheduler.py:78:5
+   |
+78 | def install(
+   |     ^^^^^^^
+79 |     task_group: TaskGroup,
+80 |     run_job: RunJobFn,
+81 |     transport: Transport,
+   |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_at_command.py:200:52
+    |
+200 |             at_scheduler.install(tg, run_recorder, transport, 12345)
+    |                                                    ^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+  --> src\untether\telegram\at_scheduler.py:78:5
+   |
+78 | def install(
+   |     ^^^^^^^
+79 |     task_group: TaskGroup,
+80 |     run_job: RunJobFn,
+81 |     transport: Transport,
+   |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_at_command.py:224:52
+    |
+224 |             at_scheduler.install(tg, run_recorder, transport, 12345)
+    |                                                    ^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+  --> src\untether\telegram\at_scheduler.py:78:5
+   |
+78 | def install(
+   |     ^^^^^^^
+79 |     task_group: TaskGroup,
+80 |     run_job: RunJobFn,
+81 |     transport: Transport,
+   |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_at_command.py:245:52
+    |
+245 |             at_scheduler.install(tg, run_recorder, transport, 99999)
+    |                                                    ^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+  --> src\untether\telegram\at_scheduler.py:78:5
+   |
+78 | def install(
+   |     ^^^^^^^
+79 |     task_group: TaskGroup,
+80 |     run_job: RunJobFn,
+81 |     transport: Transport,
+   |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_at_command.py:279:52
+    |
+279 |             at_scheduler.install(tg, run_recorder, transport, 12345)
+    |                                                    ^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+  --> src\untether\telegram\at_scheduler.py:78:5
+   |
+78 | def install(
+   |     ^^^^^^^
+79 |     task_group: TaskGroup,
+80 |     run_job: RunJobFn,
+81 |     transport: Transport,
+   |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_at_command.py:304:53
+    |
+304 |             at_scheduler.install(tg, _fake_run_job, FakeTransport(), 1)
+    |                                                     ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+  --> src\untether\telegram\at_scheduler.py:78:5
+   |
+78 | def install(
+   |     ^^^^^^^
+79 |     task_group: TaskGroup,
+80 |     run_job: RunJobFn,
+81 |     transport: Transport,
+   |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_at_command.py:313:53
+    |
+313 |             at_scheduler.install(tg, _fake_run_job, FakeTransport(), 1)
+    |                                                     ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+  --> src\untether\telegram\at_scheduler.py:78:5
+   |
+78 | def install(
+   |     ^^^^^^^
+79 |     task_group: TaskGroup,
+80 |     run_job: RunJobFn,
+81 |     transport: Transport,
+   |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_at_command.py:324:53
+    |
+324 |             at_scheduler.install(tg, _fake_run_job, FakeTransport(), 1)
+    |                                                     ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+  --> src\untether\telegram\at_scheduler.py:78:5
+   |
+78 | def install(
+   |     ^^^^^^^
+79 |     task_group: TaskGroup,
+80 |     run_job: RunJobFn,
+81 |     transport: Transport,
+   |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_at_command.py:335:53
+    |
+335 |             at_scheduler.install(tg, _fake_run_job, FakeTransport(), 1)
+    |                                                     ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+  --> src\untether\telegram\at_scheduler.py:78:5
+   |
+78 | def install(
+   |     ^^^^^^^
+79 |     task_group: TaskGroup,
+80 |     run_job: RunJobFn,
+81 |     transport: Transport,
+   |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_at_command.py:350:53
+    |
+350 |             at_scheduler.install(tg, _fake_run_job, FakeTransport(), 1)
+    |                                                     ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+  --> src\untether\telegram\at_scheduler.py:78:5
+   |
+78 | def install(
+   |     ^^^^^^^
+79 |     task_group: TaskGroup,
+80 |     run_job: RunJobFn,
+81 |     transport: Transport,
+   |     -------------------- Parameter declared here
+
+error[invalid-assignment]: Object of type `Literal[1]` is not assignable to attribute `MIN_DELAY_SECONDS` of type `Literal[60]`
+   --> tests\test_at_command.py:365:9
+    |
+365 |         at_scheduler.MIN_DELAY_SECONDS = 1
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_at_command.py:368:52
+    |
+368 |                 at_scheduler.install(tg, recorder, transport, 555)
+    |                                                    ^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+  --> src\untether\telegram\at_scheduler.py:78:5
+   |
+78 | def install(
+   |     ^^^^^^^
+79 |     task_group: TaskGroup,
+80 |     run_job: RunJobFn,
+81 |     transport: Transport,
+   |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `AuthCommand.handle` is incorrect
+  --> tests\test_auth_command.py:94:31
+   |
+94 |     result = await cmd.handle(FakeCtx())
+   |                               ^^^^^^^^^ Expected `CommandContext`, found `FakeCtx`
+info: Method defined here
+  --> src\untether\telegram\commands\auth.py:67:15
+   |
+67 |     async def handle(self, ctx: CommandContext) -> CommandResult:
+   |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `AuthCommand.handle` is incorrect
+   --> tests\test_auth_command.py:119:31
+    |
+119 |     result = await cmd.handle(FakeCtx())
+    |                               ^^^^^^^^^ Expected `CommandContext`, found `FakeCtx`
+info: Method defined here
+  --> src\untether\telegram\commands\auth.py:67:15
+   |
+67 |     async def handle(self, ctx: CommandContext) -> CommandResult:
+   |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `AuthCommand.handle` is incorrect
+   --> tests\test_auth_command.py:143:35
+    |
+143 |         result = await cmd.handle(FakeCtx())
+    |                                   ^^^^^^^^^ Expected `CommandContext`, found `FakeCtx`
+info: Method defined here
+  --> src\untether\telegram\commands\auth.py:67:15
+   |
+67 |     async def handle(self, ctx: CommandContext) -> CommandResult:
+   |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `AuthCommand.handle` is incorrect
+   --> tests\test_auth_command.py:175:39
+    |
+175 |             result = await cmd.handle(FakeCtx())
+    |                                       ^^^^^^^^^ Expected `CommandContext`, found `FakeCtx`
+info: Method defined here
+  --> src\untether\telegram\commands\auth.py:67:15
+   |
+67 |     async def handle(self, ctx: CommandContext) -> CommandResult:
+   |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_auto_router.py:12:47
+   |
+12 |             RunnerEntry(engine=claude.engine, runner=claude),
+   |                                               ^^^^^^^^^^^^^ Expected `Runner`, found `ClaudeRunner`
+info: type `ClaudeRunner` is not assignable to protocol `Runner`
+info: └── protocol member `compact` is not defined on type `ClaudeRunner`
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_auto_router.py:13:46
+   |
+13 |             RunnerEntry(engine=codex.engine, runner=codex),
+   |                                              ^^^^^^^^^^^^ Expected `Runner`, found `CodexRunner`
+info: type `CodexRunner` is not assignable to protocol `Runner`
+info: └── protocol member `compact` is not defined on type `CodexRunner`
+
+error[unresolved-attribute]: Unresolved attribute `not_a_real_field` on type `TelegramBridgeConfig`
+  --> tests\test_bridge_config_reload.py:49:13
+   |
+49 |             cfg.not_a_real_field = 42  # type: ignore[attr-defined]
+   |             ^^^^^^^^^^^^^^^^^^^^
+
+error[invalid-assignment]: Object of type `Literal[3]` is not assignable to attribute `_MAX_REGISTRY` of type `Literal[500]`
+   --> tests\test_browse_command.py:166:9
+    |
+166 |         mod._MAX_REGISTRY = 3  # type: ignore[assignment]
+    |         ^^^^^^^^^^^^^^^^^
+
+error[invalid-assignment]: Object of type `BotClient` is not assignable to `FakeBot`
+   --> tests\test_callback_dispatch.py:184:20
+    |
+184 |     bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    |          -------   ^^^^^^^ Incompatible value of type `BotClient`
+    |          |
+    |          Declared type
+
+error[invalid-assignment]: Object of type `BotClient` is not assignable to `FakeBot`
+   --> tests\test_callback_dispatch.py:223:20
+    |
+223 |     bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    |          -------   ^^^^^^^ Incompatible value of type `BotClient`
+    |          |
+    |          Declared type
+
+error[invalid-assignment]: Object of type `BotClient` is not assignable to `FakeBot`
+   --> tests\test_callback_dispatch.py:256:20
+    |
+256 |     bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    |          -------   ^^^^^^^ Incompatible value of type `BotClient`
+    |          |
+    |          Declared type
+
+error[invalid-assignment]: Object of type `BotClient` is not assignable to `FakeBot`
+   --> tests\test_callback_dispatch.py:285:20
+    |
+285 |     bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    |          -------   ^^^^^^^ Incompatible value of type `BotClient`
+    |          |
+    |          Declared type
+
+error[invalid-assignment]: Object of type `BotClient` is not assignable to `FakeBot`
+   --> tests\test_callback_dispatch.py:336:20
+    |
+336 |     bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    |          -------   ^^^^^^^ Incompatible value of type `BotClient`
+    |          |
+    |          Declared type
+
+error[invalid-assignment]: Object of type `BotClient` is not assignable to `FakeBot`
+   --> tests\test_callback_dispatch.py:371:20
+    |
+371 |     bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    |          -------   ^^^^^^^ Incompatible value of type `BotClient`
+    |          |
+    |          Declared type
+
+error[invalid-assignment]: Object of type `def _timed_answer(query_id, text=None) -> CoroutineType[Any, Any, Unknown]` is not assignable to attribute `answer_callback_query` of type `def answer_callback_query(self, callback_query_id: str, text: str | None = None, show_alert: bool | None = None) -> CoroutineType[Any, Any, bool]`
+   --> tests\test_callback_dispatch.py:396:5
+    |
+396 |     bot.answer_callback_query = _timed_answer  # type: ignore[assignment]
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[invalid-assignment]: Object of type `BotClient` is not assignable to `FakeBot`
+   --> tests\test_callback_dispatch.py:429:20
+    |
+429 |     bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    |          -------   ^^^^^^^ Incompatible value of type `BotClient`
+    |          |
+    |          Declared type
+
+error[invalid-assignment]: Object of type `BotClient` is not assignable to `FakeBot`
+   --> tests\test_callback_dispatch.py:457:20
+    |
+457 |     bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    |          -------   ^^^^^^^ Incompatible value of type `BotClient`
+    |          |
+    |          Declared type
+
+error[invalid-assignment]: Object of type `BotClient` is not assignable to `FakeBot`
+   --> tests\test_callback_dispatch.py:544:20
+    |
+544 |     bot: FakeBot = cfg.bot  # type: ignore[assignment]
+    |          -------   ^^^^^^^ Incompatible value of type `BotClient`
+    |          |
+    |          Declared type
+
+error[invalid-argument-type]: Argument to function `_dispatch_callback` is incorrect
+   --> tests\test_callback_dispatch.py:560:13
+    |
+560 |             scheduler=_StubScheduler(),
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `ThreadScheduler`, found `_StubScheduler`
+info: Function defined here
+   --> src\untether\telegram\commands\dispatch.py:164:11
+    |
+164 | async def _dispatch_callback(
+    |           ^^^^^^^^^^^^^^^^^^
+    |
+   ::: src\untether\telegram\commands\dispatch.py:171:5
+    |
+171 |     scheduler: ThreadScheduler,
+    |     -------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_dispatch_callback` is incorrect
+   --> tests\test_callback_dispatch.py:603:13
+    |
+603 |             scheduler=_StubScheduler(),
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `ThreadScheduler`, found `_StubScheduler`
+info: Function defined here
+   --> src\untether\telegram\commands\dispatch.py:164:11
+    |
+164 | async def _dispatch_callback(
+    |           ^^^^^^^^^^^^^^^^^^
+    |
+   ::: src\untether\telegram\commands\dispatch.py:171:5
+    |
+171 |     scheduler: ThreadScheduler,
+    |     -------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_dispatch_callback` is incorrect
+   --> tests\test_callback_dispatch.py:633:13
+    |
+633 |             scheduler=_StubScheduler(),
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `ThreadScheduler`, found `_StubScheduler`
+info: Function defined here
+   --> src\untether\telegram\commands\dispatch.py:164:11
+    |
+164 | async def _dispatch_callback(
+    |           ^^^^^^^^^^^^^^^^^^
+    |
+   ::: src\untether\telegram\commands\dispatch.py:171:5
+    |
+171 |     scheduler: ThreadScheduler,
+    |     -------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_claude_control.py:818:9
+    |
+818 |         plugin_config=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^^^^^^^ Expected `dict[str, Any]`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_claude_control.py:819:9
+    |
+819 |         runtime=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^ Expected `TransportRuntime`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1019:9
+     |
+1019 |         plugin_config=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^^^^^^^ Expected `dict[str, Any]`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1020:9
+     |
+1020 |         runtime=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^ Expected `TransportRuntime`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1058:9
+     |
+1058 |         plugin_config=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^^^^^^^ Expected `dict[str, Any]`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1059:9
+     |
+1059 |         runtime=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^ Expected `TransportRuntime`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1113:9
+     |
+1113 |         plugin_config=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^^^^^^^ Expected `dict[str, Any]`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1114:9
+     |
+1114 |         runtime=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^ Expected `TransportRuntime`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1115:9
+     |
+1115 |         executor=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^^ Expected `CommandExecutor`, found `None`
+info: type `None` is not assignable to protocol `CommandExecutor`
+info: └── protocol member `edit` is not defined on type `None`
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+    --> tests\test_claude_control.py:1369:17
+     |
+1369 |     action_id = started_events[0].action.id
+     |                 ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `value` is not defined on `None` in union `ResumeToken | None`
+    --> tests\test_claude_control.py:1523:18
+     |
+1523 |     session_id = factory.resume.value
+     |                  ^^^^^^^^^^^^^^^^^^^^
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1716:9
+     |
+1716 |         plugin_config=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^^^^^^^ Expected `dict[str, Any]`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1717:9
+     |
+1717 |         runtime=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^ Expected `TransportRuntime`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1718:9
+     |
+1718 |         executor=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^^ Expected `CommandExecutor`, found `None`
+info: type `None` is not assignable to protocol `CommandExecutor`
+info: └── protocol member `edit` is not defined on type `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1764:9
+     |
+1764 |         plugin_config=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^^^^^^^ Expected `dict[str, Any]`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1765:9
+     |
+1765 |         runtime=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^ Expected `TransportRuntime`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1766:9
+     |
+1766 |         executor=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^^ Expected `CommandExecutor`, found `None`
+info: type `None` is not assignable to protocol `CommandExecutor`
+info: └── protocol member `edit` is not defined on type `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1884:9
+     |
+1884 |         runtime=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^ Expected `TransportRuntime`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1930:9
+     |
+1930 |         runtime=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^ Expected `TransportRuntime`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1969:9
+     |
+1969 |         runtime=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^ Expected `TransportRuntime`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:1970:9
+     |
+1970 |         executor=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^^ Expected `CommandExecutor`, found `None`
+info: type `None` is not assignable to protocol `CommandExecutor`
+info: └── protocol member `edit` is not defined on type `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_control.py:2016:9
+     |
+2016 |         runtime=None,  # type: ignore[arg-type]
+     |         ^^^^^^^^^^^^ Expected `TransportRuntime`, found `None`
+
+error[unresolved-attribute]: Attribute `phase` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+    --> tests\test_claude_runner.py:1691:12
+     |
+1691 |     assert events[0].phase == "started"
+     |            ^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `phase` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+    --> tests\test_claude_runner.py:1692:12
+     |
+1692 |     assert events[1].phase == "completed"
+     |            ^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+    --> tests\test_claude_runner.py:1693:12
+     |
+1693 |     assert events[0].action.kind == "note"
+     |            ^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+    --> tests\test_claude_runner.py:1694:19
+     |
+1694 |     assert "⏳" in events[0].action.title
+     |                    ^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+    --> tests\test_claude_runner.py:1695:33
+     |
+1695 |     assert "retrying in 47s" in events[0].action.title
+     |                                 ^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `ok` is not defined on `StartedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+    --> tests\test_claude_runner.py:1696:12
+     |
+1696 |     assert events[1].ok is True
+     |            ^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `level` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+    --> tests\test_claude_runner.py:1697:12
+     |
+1697 |     assert events[1].level == "info"
+     |            ^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+    --> tests\test_claude_runner.py:1702:12
+     |
+1702 |     assert events[0].action.detail.get("retry_after_ms") == 47_000
+     |            ^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+    --> tests\test_claude_runner.py:1703:12
+     |
+1703 |     assert events[0].action.detail.get("tokens_remaining") == 0
+     |            ^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+    --> tests\test_claude_runner.py:1743:19
+     |
+1743 |     assert "⏳" in events[0].action.title
+     |                    ^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+    --> tests\test_claude_runner.py:1745:19
+     |
+1745 |     assert "~" in events[0].action.title
+     |                   ^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+    --> tests\test_claude_runner.py:1780:29
+     |
+1780 |     assert "retrying in" in events[0].action.title
+     |                             ^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+    --> tests\test_claude_runner.py:1864:19
+     |
+1864 |     assert "~" in events[0].action.title
+     |                   ^^^^^^^^^^^^^^^^
+
+error[invalid-assignment]: Object of type `def run_stub(...) -> Unknown` is not assignable to attribute `run_impl` of type `def run_impl(self, prompt: str, resume: ResumeToken | None) -> AsyncIterator[UntetherEvent]`
+    --> tests\test_claude_runner.py:2277:5
+     |
+2277 |     runner.run_impl = run_stub  # type: ignore[assignment]
+     |     ^^^^^^^^^^^^^^^
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+    --> tests\test_claude_runner.py:4184:47
+     |
+4184 |             loop_scheduler.install(tg, _noop, _Transport(), 1)
+     |                                               ^^^^^^^^^^^^ Expected `Transport`, found `_Transport`
+info: type `_Transport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `_Transport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_runner.py:4480:9
+     |
+4480 |         use_api_billing=None,
+     |         ^^^^^^^^^^^^^^^^^^^^ Expected `bool`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+    --> tests\test_claude_runner.py:4481:9
+     |
+4481 |         session_title=None,
+     |         ^^^^^^^^^^^^^^^^^^ Expected `str`, found `None`
+
+error[unresolved-attribute]: Module `os` has no member `killpg`
+    --> tests\test_claude_runner.py:5530:13
+     |
+5530 |             os.killpg(proc.pid, signal.SIGKILL)
+     |             ^^^^^^^^^
+info: The member may be available on other Python versions or platforms
+info: Python 3.12 was assumed when resolving the `killpg` attribute
+  --> pyproject.toml:11:19
+   |
+11 | requires-python = ">=3.12"
+   |                   ^^^^^^^^ Python version configuration
+
+error[unresolved-attribute]: Module `signal` has no member `SIGKILL`
+    --> tests\test_claude_runner.py:5530:33
+     |
+5530 |             os.killpg(proc.pid, signal.SIGKILL)
+     |                                 ^^^^^^^^^^^^^^
+info: The member may be available on other Python versions or platforms
+info: Python 3.12 was assumed when resolving the `SIGKILL` attribute
+  --> pyproject.toml:11:19
+   |
+11 | requires-python = ">=3.12"
+   |                   ^^^^^^^^ Python version configuration
+
+error[unresolved-attribute]: Attribute `message` is not defined on `StreamSystemMessage`, `StreamResultMessage`, `StreamEventMessage`, `StreamControlRequest`, `StreamControlResponse`, `StreamControlCancelRequest`, `StreamRateLimitMessage`, `StreamToolProgressMessage` in union `StreamJsonMessage`
+   --> tests\test_claude_schema.py:215:13
+    |
+215 |     block = decoded.message.content[0]
+    |             ^^^^^^^^^^^^^^^
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_cli_auto_router.py:65:38
+   |
+65 |     return EngineBackend(id="codex", build_runner=lambda _cfg, _path: None)
+   |                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `(dict[str, Any], Path, /) -> Runner`, found `(_cfg: dict[str, Any], _path: Path) -> None`
+info: incompatible return types: `None` is not assignable to `Runner`
+info: └── type `None` is not assignable to protocol `Runner`
+info:     └── protocol member `compact` is not defined on type `None`
+
+error[invalid-assignment]: Object of type `None` is not assignable to `dict[Unknown, Unknown]`
+  --> tests\test_command_engine_gates.py:60:27
+   |
+60 |     plugin_config: dict = None  # type: ignore[assignment]
+   |                    ----   ^^^^ Incompatible value of type `None`
+   |                    |
+   |                    Declared type
+
+error[invalid-argument-type]: Argument to function `resolve_effective_engine` is incorrect
+  --> tests\test_command_engine_gates.py:82:49
+   |
+82 |         result = await resolve_effective_engine(ctx)  # type: ignore[arg-type]
+   |                                                 ^^^ Expected `CommandContext`, found `FakeCommandContext`
+info: Function defined here
+ --> src\untether\telegram\commands\_resolve_engine.py:8:11
+  |
+8 | async def resolve_effective_engine(ctx: CommandContext) -> str:
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^ ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `resolve_effective_engine` is incorrect
+  --> tests\test_command_engine_gates.py:92:49
+   |
+92 |         result = await resolve_effective_engine(ctx)  # type: ignore[arg-type]
+   |                                                 ^^^ Expected `CommandContext`, found `FakeCommandContext`
+info: Function defined here
+ --> src\untether\telegram\commands\_resolve_engine.py:8:11
+  |
+8 | async def resolve_effective_engine(ctx: CommandContext) -> str:
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^ ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `UsageCommand.handle` is incorrect
+   --> tests\test_command_engine_gates.py:108:35
+    |
+108 |         result = await cmd.handle(ctx)  # type: ignore[arg-type]
+    |                                   ^^^ Expected `CommandContext`, found `FakeCommandContext`
+info: Method defined here
+   --> src\untether\telegram\commands\usage.py:306:15
+    |
+306 |     async def handle(self, ctx: CommandContext) -> CommandResult | None:
+    |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `UsageCommand.handle` is incorrect
+   --> tests\test_command_engine_gates.py:119:35
+    |
+119 |         result = await cmd.handle(ctx)  # type: ignore[arg-type]
+    |                                   ^^^ Expected `CommandContext`, found `FakeCommandContext`
+info: Method defined here
+   --> src\untether\telegram\commands\usage.py:306:15
+    |
+306 |     async def handle(self, ctx: CommandContext) -> CommandResult | None:
+    |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `UsageCommand.handle` is incorrect
+   --> tests\test_command_engine_gates.py:130:35
+    |
+130 |         result = await cmd.handle(ctx)  # type: ignore[arg-type]
+    |                                   ^^^ Expected `CommandContext`, found `FakeCommandContext`
+info: Method defined here
+   --> src\untether\telegram\commands\usage.py:306:15
+    |
+306 |     async def handle(self, ctx: CommandContext) -> CommandResult | None:
+    |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `UsageCommand.handle` is incorrect
+   --> tests\test_command_engine_gates.py:142:35
+    |
+142 |         result = await cmd.handle(ctx)  # type: ignore[arg-type]
+    |                                   ^^^ Expected `CommandContext`, found `FakeCommandContext`
+info: Method defined here
+   --> src\untether\telegram\commands\usage.py:306:15
+    |
+306 |     async def handle(self, ctx: CommandContext) -> CommandResult | None:
+    |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `PlanModeCommand.handle` is incorrect
+   --> tests\test_command_engine_gates.py:162:35
+    |
+162 |         result = await cmd.handle(ctx)  # type: ignore[arg-type]
+    |                                   ^^^ Expected `CommandContext`, found `FakeCommandContext`
+info: Method defined here
+  --> src\untether\telegram\commands\planmode.py:33:15
+   |
+33 |     async def handle(self, ctx: CommandContext) -> CommandResult | None:
+   |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `PlanModeCommand.handle` is incorrect
+   --> tests\test_command_engine_gates.py:175:35
+    |
+175 |         result = await cmd.handle(ctx)  # type: ignore[arg-type]
+    |                                   ^^^ Expected `CommandContext`, found `FakeCommandContext`
+info: Method defined here
+  --> src\untether\telegram\commands\planmode.py:33:15
+   |
+33 |     async def handle(self, ctx: CommandContext) -> CommandResult | None:
+   |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `PlanModeCommand.handle` is incorrect
+   --> tests\test_command_engine_gates.py:187:35
+    |
+187 |         result = await cmd.handle(ctx)  # type: ignore[arg-type]
+    |                                   ^^^ Expected `CommandContext`, found `FakeCommandContext`
+info: Method defined here
+  --> src\untether\telegram\commands\planmode.py:33:15
+   |
+33 |     async def handle(self, ctx: CommandContext) -> CommandResult | None:
+   |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `PlanModeCommand.handle` is incorrect
+   --> tests\test_command_engine_gates.py:199:35
+    |
+199 |         result = await cmd.handle(ctx)  # type: ignore[arg-type]
+    |                                   ^^^ Expected `CommandContext`, found `FakeCommandContext`
+info: Method defined here
+  --> src\untether\telegram\commands\planmode.py:33:15
+   |
+33 |     async def handle(self, ctx: CommandContext) -> CommandResult | None:
+   |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `PlanModeCommand.handle` is incorrect
+   --> tests\test_command_engine_gates.py:216:35
+    |
+216 |         result = await cmd.handle(ctx)  # type: ignore[arg-type]
+    |                                   ^^^ Expected `CommandContext`, found `FakeCommandContext`
+info: Method defined here
+  --> src\untether\telegram\commands\planmode.py:33:15
+   |
+33 |     async def handle(self, ctx: CommandContext) -> CommandResult | None:
+   |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `UsageCommand.handle` is incorrect
+   --> tests\test_command_engine_gates.py:256:35
+    |
+256 |         result = await cmd.handle(ctx)  # type: ignore[arg-type]
+    |                                   ^^^ Expected `CommandContext`, found `FakeCommandContext`
+info: Method defined here
+   --> src\untether\telegram\commands\usage.py:306:15
+    |
+306 |     async def handle(self, ctx: CommandContext) -> CommandResult | None:
+    |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `UsageCommand.handle` is incorrect
+   --> tests\test_command_engine_gates.py:266:41
+    |
+266 |         result_plain = await cmd.handle(ctx_plain)  # type: ignore[arg-type]
+    |                                         ^^^^^^^^^ Expected `CommandContext`, found `FakeCommandContext`
+info: Method defined here
+   --> src\untether\telegram\commands\usage.py:306:15
+    |
+306 |     async def handle(self, ctx: CommandContext) -> CommandResult | None:
+    |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-yield]: Yield expression type does not match annotation
+   --> tests\test_compact.py:144:17
+    |
+143 |             ) -> AsyncIterator[UntetherEvent]:
+    |                  ---------------------------- Function annotated with yield type `UntetherEvent` here
+144 |                 yield  # type: ignore[unreachable]
+    |                 ^^^^^ expression of type `None`, expected `UntetherEvent`
+
+error[invalid-assignment]: Property `project` defined in `RunContext` is read-only
+  --> tests\test_context.py:40:9
+   |
+40 |         ctx.project = "other"  # type: ignore[misc]
+   |         ^^^^^^^^^^^
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_cooldown_bypass.py:497:9
+    |
+497 |         plugin_config=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^^^^^^^ Expected `dict[str, Any]`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_cooldown_bypass.py:498:9
+    |
+498 |         runtime=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^ Expected `TransportRuntime`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_cooldown_bypass.py:499:9
+    |
+499 |         executor=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^^ Expected `CommandExecutor`, found `None`
+info: type `None` is not assignable to protocol `CommandExecutor`
+info: └── protocol member `edit` is not defined on type `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_cooldown_bypass.py:533:9
+    |
+533 |         plugin_config=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^^^^^^^ Expected `dict[str, Any]`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_cooldown_bypass.py:534:9
+    |
+534 |         runtime=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^ Expected `TransportRuntime`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_cooldown_bypass.py:535:9
+    |
+535 |         executor=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^^ Expected `CommandExecutor`, found `None`
+info: type `None` is not assignable to protocol `CommandExecutor`
+info: └── protocol member `edit` is not defined on type `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_cooldown_bypass.py:570:9
+    |
+570 |         plugin_config=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^^^^^^^ Expected `dict[str, Any]`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_cooldown_bypass.py:571:9
+    |
+571 |         runtime=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^ Expected `TransportRuntime`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_cooldown_bypass.py:572:9
+    |
+572 |         executor=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^^ Expected `CommandExecutor`, found `None`
+info: type `None` is not assignable to protocol `CommandExecutor`
+info: └── protocol member `edit` is not defined on type `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_cooldown_bypass.py:654:9
+    |
+654 |         plugin_config=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^^^^^^^ Expected `dict[str, Any]`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_cooldown_bypass.py:655:9
+    |
+655 |         runtime=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^ Expected `TransportRuntime`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_cooldown_bypass.py:656:9
+    |
+656 |         executor=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^^ Expected `CommandExecutor`, found `None`
+info: type `None` is not assignable to protocol `CommandExecutor`
+info: └── protocol member `edit` is not defined on type `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_cooldown_bypass.py:691:9
+    |
+691 |         plugin_config=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^^^^^^^ Expected `dict[str, Any]`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_cooldown_bypass.py:692:9
+    |
+692 |         runtime=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^ Expected `TransportRuntime`, found `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_cooldown_bypass.py:693:9
+    |
+693 |         executor=None,  # type: ignore[arg-type]
+    |         ^^^^^^^^^^^^^ Expected `CommandExecutor`, found `None`
+info: type `None` is not assignable to protocol `CommandExecutor`
+info: └── protocol member `edit` is not defined on type `None`
+
+error[invalid-argument-type]: Argument to function `_notify_drain_start` is incorrect
+  --> tests\test_drain_notify.py:48:35
+   |
+48 |         await _notify_drain_start(transport, tasks)
+   |                                   ^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+    --> src\untether\telegram\loop.py:1707:11
+     |
+1707 | async def _notify_drain_start(
+     |           ^^^^^^^^^^^^^^^^^^^
+1708 |     transport: Transport,
+     |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_notify_drain_start` is incorrect
+  --> tests\test_drain_notify.py:58:35
+   |
+58 |         await _notify_drain_start(transport, tasks)
+   |                                   ^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+    --> src\untether\telegram\loop.py:1707:11
+     |
+1707 | async def _notify_drain_start(
+     |           ^^^^^^^^^^^^^^^^^^^
+1708 |     transport: Transport,
+     |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_notify_drain_start` is incorrect
+  --> tests\test_drain_notify.py:68:35
+   |
+68 |         await _notify_drain_start(transport, tasks)
+   |                                   ^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+    --> src\untether\telegram\loop.py:1707:11
+     |
+1707 | async def _notify_drain_start(
+     |           ^^^^^^^^^^^^^^^^^^^
+1708 |     transport: Transport,
+     |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_notify_drain_start` is incorrect
+  --> tests\test_drain_notify.py:81:35
+   |
+81 |         await _notify_drain_start(transport, tasks)
+   |                                   ^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+    --> src\untether\telegram\loop.py:1707:11
+     |
+1707 | async def _notify_drain_start(
+     |           ^^^^^^^^^^^^^^^^^^^
+1708 |     transport: Transport,
+     |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_notify_drain_start` is incorrect
+  --> tests\test_drain_notify.py:90:35
+   |
+90 |         await _notify_drain_start(transport, {})
+   |                                   ^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+    --> src\untether\telegram\loop.py:1707:11
+     |
+1707 | async def _notify_drain_start(
+     |           ^^^^^^^^^^^^^^^^^^^
+1708 |     transport: Transport,
+     |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_notify_drain_timeout` is incorrect
+   --> tests\test_drain_notify.py:100:37
+    |
+100 |         await _notify_drain_timeout(transport, tasks, remaining=2)
+    |                                     ^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+    --> src\untether\telegram\loop.py:1725:11
+     |
+1725 | async def _notify_drain_timeout(
+     |           ^^^^^^^^^^^^^^^^^^^^^
+1726 |     transport: Transport,
+     |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_notify_drain_timeout` is incorrect
+   --> tests\test_drain_notify.py:110:37
+    |
+110 |         await _notify_drain_timeout(transport, tasks, remaining=3)
+    |                                     ^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+    --> src\untether\telegram\loop.py:1725:11
+     |
+1725 | async def _notify_drain_timeout(
+     |           ^^^^^^^^^^^^^^^^^^^^^
+1726 |     transport: Transport,
+     |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_notify_drain_timeout` is incorrect
+   --> tests\test_drain_notify.py:120:37
+    |
+120 |         await _notify_drain_timeout(transport, tasks, remaining=3)
+    |                                     ^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+    --> src\untether\telegram\loop.py:1725:11
+     |
+1725 | async def _notify_drain_timeout(
+     |           ^^^^^^^^^^^^^^^^^^^^^
+1726 |     transport: Transport,
+     |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_notify_drain_timeout` is incorrect
+   --> tests\test_drain_notify.py:130:37
+    |
+130 |         await _notify_drain_timeout(transport, tasks, remaining=1)
+    |                                     ^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+    --> src\untether\telegram\loop.py:1725:11
+     |
+1725 | async def _notify_drain_timeout(
+     |           ^^^^^^^^^^^^^^^^^^^^^
+1726 |     transport: Transport,
+     |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_notify_drain_timeout` is incorrect
+   --> tests\test_drain_notify.py:141:37
+    |
+141 |         await _notify_drain_timeout(transport, tasks, remaining=2)
+    |                                     ^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+    --> src\untether\telegram\loop.py:1725:11
+     |
+1725 | async def _notify_drain_timeout(
+     |           ^^^^^^^^^^^^^^^^^^^^^
+1726 |     transport: Transport,
+     |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_notify_drain_timeout` is incorrect
+   --> tests\test_drain_notify.py:149:37
+    |
+149 |         await _notify_drain_timeout(transport, {}, remaining=0)
+    |                                     ^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+    --> src\untether\telegram\loop.py:1725:11
+     |
+1725 | async def _notify_drain_timeout(
+     |           ^^^^^^^^^^^^^^^^^^^^^
+1726 |     transport: Transport,
+     |     -------------------- Parameter declared here
+
+error[unresolved-attribute]: Module `uuid` has no member `uuid7`
+   --> tests\test_exec_bridge.py:189:13
+    |
+189 |     uuid7 = uuid.uuid7  # type: ignore[attr-defined]
+    |             ^^^^^^^^^^
+info: The member may be available on other Python versions or platforms
+info: Python 3.12 was assumed when resolving the `uuid7` attribute
+  --> pyproject.toml:11:19
+   |
+11 | requires-python = ">=3.12"
+   |                   ^^^^^^^^ Python version configuration
+
+error[invalid-argument-type]: Argument to `ProgressEdits.__init__` is incorrect
+   --> tests\test_exec_bridge.py:532:9
+    |
+532 |         presenter=presenter,
+    |         ^^^^^^^^^^^^^^^^^^^ Expected `Presenter`, found `_KeyboardPresenter`
+info: type `_KeyboardPresenter` is not assignable to protocol `Presenter`
+info: └── protocol member `render_progress` is incompatible
+info:     └── parameter `steerable` is missing
+info: Method defined here
+    --> src\untether\runner_bridge.py:1014:9
+     |
+1014 |     def __init__(
+     |         ^^^^^^^^
+1015 |         self,
+1016 |         *,
+1017 |         transport: Transport,
+1018 |         presenter: Presenter,
+     |         -------------------- Parameter declared here
+
+error[unresolved-attribute]: Attribute `is_set` is not defined on `None` in union `Event | None`
+    --> tests\test_exec_bridge.py:5404:20
+     |
+5404 |         assert not edits.cancel_event.is_set()
+     |                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `recovery_attempted` is not defined on `None` in union `_StuckAfterToolResultState | None`
+    --> tests\test_exec_bridge.py:5434:16
+     |
+5434 |         assert edits._stuck_state.recovery_attempted is True
+     |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `is_set` is not defined on `None` in union `Event | None`
+    --> tests\test_exec_bridge.py:5436:20
+     |
+5436 |         assert not edits.cancel_event.is_set()
+     |                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `recovery_attempted` is not defined on `None` in union `_StuckAfterToolResultState | None`
+    --> tests\test_exec_bridge.py:5454:16
+     |
+5454 |         assert edits._stuck_state.recovery_attempted is True
+     |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `cancelled` is not defined on `None` in union `_StuckAfterToolResultState | None`
+    --> tests\test_exec_bridge.py:5462:16
+     |
+5462 |         assert edits._stuck_state.cancelled is True
+     |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `is_set` is not defined on `None` in union `Event | None`
+    --> tests\test_exec_bridge.py:5463:16
+     |
+5463 |         assert edits.cancel_event.is_set()
+     |                ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Object of type `Transport` has no attribute `send_calls`
+    --> tests\test_exec_bridge.py:5465:45
+     |
+5465 |         texts = [c["message"].text for c in edits.transport.send_calls]
+     |                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[invalid-argument-type]: Argument to function `run_runner_with_cancel` is incorrect
+    --> tests\test_exec_bridge.py:7424:17
+     |
+7424 |                 runner,  # type: ignore[arg-type]
+     |                 ^^^^^^ Expected `Runner`, found `_TaskGroupHoldOpenRunner`
+info: type `_TaskGroupHoldOpenRunner` is not assignable to protocol `Runner`
+info: └── protocol member `compact` is not defined on type `_TaskGroupHoldOpenRunner`
+info: Function defined here
+    --> src\untether\runner_bridge.py:3045:11
+     |
+3045 | async def run_runner_with_cancel(
+     |           ^^^^^^^^^^^^^^^^^^^^^^
+3046 |     runner: Runner,
+     |     -------------- Parameter declared here
+
+error[invalid-assignment]: Object of type `def run_stub(...) -> AsyncIterator[UntetherEvent]` is not assignable to attribute `run_impl` of type `def run_impl(self, prompt: str, resume: ResumeToken | None) -> AsyncIterator[UntetherEvent]`
+  --> tests\test_exec_runner.py:42:5
+   |
+42 |     runner.run_impl = run_stub  # type: ignore[assignment]
+   |     ^^^^^^^^^^^^^^^
+
+error[invalid-assignment]: Object of type `def run_stub(...) -> AsyncIterator[UntetherEvent]` is not assignable to attribute `run_impl` of type `def run_impl(self, prompt: str, resume: ResumeToken | None) -> AsyncIterator[UntetherEvent]`
+  --> tests\test_exec_runner.py:79:5
+   |
+79 |     runner.run_impl = run_stub  # type: ignore[assignment]
+   |     ^^^^^^^^^^^^^^^
+
+error[invalid-assignment]: Object of type `def run_stub(...) -> AsyncIterator[UntetherEvent]` is not assignable to attribute `run_impl` of type `def run_impl(self, prompt: str, resume: ResumeToken | None) -> AsyncIterator[UntetherEvent]`
+   --> tests\test_exec_runner.py:115:5
+    |
+115 |     runner.run_impl = run_stub  # type: ignore[assignment]
+    |     ^^^^^^^^^^^^^^^
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_exec_runner.py:956:30
+    |
+956 |     proxy = _ResumeLineProxy(runner=runner)
+    |                              ^^^^^^^^^^^^^ Expected `Runner`, found `CodexRunner`
+info: type `CodexRunner` is not assignable to protocol `Runner`
+info: └── protocol member `compact` is not defined on type `CodexRunner`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_exec_runner.py:967:30
+    |
+967 |     proxy = _ResumeLineProxy(runner=runner)
+    |                              ^^^^^^^^^^^^^ Expected `Runner`, found `CodexRunner`
+info: type `CodexRunner` is not assignable to protocol `Runner`
+info: └── protocol member `compact` is not defined on type `CodexRunner`
+
+error[invalid-assignment]: Object of type `def fake_iter_json_lines(_stream) -> Unknown` is not assignable to attribute `iter_json_lines` of type `def iter_json_lines(self, stream: Any) -> AsyncIterator[bytes]`
+    --> tests\test_exec_runner.py:1019:5
+     |
+1019 |     runner.iter_json_lines = fake_iter_json_lines  # type: ignore[assignment]
+     |     ^^^^^^^^^^^^^^^^^^^^^^
+
+error[invalid-assignment]: Object of type `None` is not assignable to `FakeMessage`
+   --> tests\test_export_command.py:102:36
+    |
+102 |             message: FakeMessage = None  # type: ignore[assignment]
+    |                      -----------   ^^^^ Incompatible value of type `None`
+    |                      |
+    |                      Declared type
+
+error[invalid-argument-type]: Argument to bound method `ExportCommand.handle` is incorrect
+   --> tests\test_export_command.py:110:37
+    |
+110 |         result_a = await cmd.handle(ctx_a)  # type: ignore[arg-type]
+    |                                     ^^^^^ Expected `CommandContext`, found `FakeCtx`
+info: Method defined here
+   --> src\untether\telegram\commands\export.py:163:15
+    |
+163 |     async def handle(self, ctx: CommandContext) -> CommandResult | None:
+    |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `ExportCommand.handle` is incorrect
+   --> tests\test_export_command.py:116:37
+    |
+116 |         result_b = await cmd.handle(ctx_b)  # type: ignore[arg-type]
+    |                                     ^^^^^ Expected `CommandContext`, found `FakeCtx`
+info: Method defined here
+   --> src\untether\telegram\commands\export.py:163:15
+    |
+163 |     async def handle(self, ctx: CommandContext) -> CommandResult | None:
+    |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-assignment]: Object of type `None` is not assignable to `FakeMessage`
+   --> tests\test_export_command.py:134:36
+    |
+134 |             message: FakeMessage = None  # type: ignore[assignment]
+    |                      -----------   ^^^^ Incompatible value of type `None`
+    |                      |
+    |                      Declared type
+
+error[invalid-argument-type]: Argument to bound method `ExportCommand.handle` is incorrect
+   --> tests\test_export_command.py:141:35
+    |
+141 |         result = await cmd.handle(ctx)  # type: ignore[arg-type]
+    |                                   ^^^ Expected `CommandContext`, found `FakeCtx`
+info: Method defined here
+   --> src\untether\telegram\commands\export.py:163:15
+    |
+163 |     async def handle(self, ctx: CommandContext) -> CommandResult | None:
+    |               ^^^^^^       ------------------- Parameter declared here
+
+error[unresolved-attribute]: Attribute `ok` is not defined on `StartedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_gemini_runner.py:198:12
+    |
+198 |     assert events[0].ok is False
+    |            ^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_gemini_runner.py:369:12
+    |
+369 |     assert events[0].action.kind == "tool"
+    |            ^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_gemini_runner.py:370:25
+    |
+370 |     assert "test.py" in events[0].action.title
+    |                         ^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_gemini_runner.py:386:12
+    |
+386 |     assert events2[0].action.kind == "file_change"
+    |            ^^^^^^^^^^^^^^^^^
+
+error[invalid-argument-type]: Argument to function `_resolve_engine_run_options` is incorrect
+   --> tests\test_loop_coverage.py:164:13
+    |
+164 |             chat_prefs=prefs,
+    |             ^^^^^^^^^^^^^^^^ Expected `ChatPrefsStore | None`, found `FakeChatPrefs`
+info: Function defined here
+   --> src\untether\telegram\loop.py:134:11
+    |
+134 | async def _resolve_engine_run_options(
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+135 |     chat_id: int,
+136 |     thread_id: int | None,
+137 |     engine: EngineId,
+138 |     chat_prefs: ChatPrefsStore | None,
+    |     --------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_resolve_engine_run_options` is incorrect
+   --> tests\test_loop_coverage.py:180:13
+    |
+180 |             topic_store=topic,
+    |             ^^^^^^^^^^^^^^^^^ Expected `TopicStateStore | None`, found `FakeTopicStore`
+info: Function defined here
+   --> src\untether\telegram\loop.py:134:11
+    |
+134 | async def _resolve_engine_run_options(
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+135 |     chat_id: int,
+136 |     thread_id: int | None,
+137 |     engine: EngineId,
+138 |     chat_prefs: ChatPrefsStore | None,
+139 |     topic_store: TopicStateStore | None,
+    |     ----------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_resolve_engine_run_options` is incorrect
+   --> tests\test_loop_coverage.py:198:13
+    |
+198 |             chat_prefs=prefs,
+    |             ^^^^^^^^^^^^^^^^ Expected `ChatPrefsStore | None`, found `FakeChatPrefs`
+info: Function defined here
+   --> src\untether\telegram\loop.py:134:11
+    |
+134 | async def _resolve_engine_run_options(
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+135 |     chat_id: int,
+136 |     thread_id: int | None,
+137 |     engine: EngineId,
+138 |     chat_prefs: ChatPrefsStore | None,
+    |     --------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_resolve_engine_run_options` is incorrect
+   --> tests\test_loop_coverage.py:199:13
+    |
+199 |             topic_store=topic,
+    |             ^^^^^^^^^^^^^^^^^ Expected `TopicStateStore | None`, found `FakeTopicStore`
+info: Function defined here
+   --> src\untether\telegram\loop.py:134:11
+    |
+134 | async def _resolve_engine_run_options(
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+135 |     chat_id: int,
+136 |     thread_id: int | None,
+137 |     engine: EngineId,
+138 |     chat_prefs: ChatPrefsStore | None,
+139 |     topic_store: TopicStateStore | None,
+    |     ----------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_resolve_engine_run_options` is incorrect
+   --> tests\test_loop_coverage.py:217:13
+    |
+217 |             chat_prefs=prefs,
+    |             ^^^^^^^^^^^^^^^^ Expected `ChatPrefsStore | None`, found `FakeChatPrefs`
+info: Function defined here
+   --> src\untether\telegram\loop.py:134:11
+    |
+134 | async def _resolve_engine_run_options(
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+135 |     chat_id: int,
+136 |     thread_id: int | None,
+137 |     engine: EngineId,
+138 |     chat_prefs: ChatPrefsStore | None,
+    |     --------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_resolve_engine_run_options` is incorrect
+   --> tests\test_loop_coverage.py:218:13
+    |
+218 |             topic_store=topic,
+    |             ^^^^^^^^^^^^^^^^^ Expected `TopicStateStore | None`, found `FakeTopicStore`
+info: Function defined here
+   --> src\untether\telegram\loop.py:134:11
+    |
+134 | async def _resolve_engine_run_options(
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+135 |     chat_id: int,
+136 |     thread_id: int | None,
+137 |     engine: EngineId,
+138 |     chat_prefs: ChatPrefsStore | None,
+139 |     topic_store: TopicStateStore | None,
+    |     ----------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_resolve_engine_run_options` is incorrect
+   --> tests\test_loop_coverage.py:237:13
+    |
+237 |             chat_prefs=prefs,
+    |             ^^^^^^^^^^^^^^^^ Expected `ChatPrefsStore | None`, found `FakeChatPrefs`
+info: Function defined here
+   --> src\untether\telegram\loop.py:134:11
+    |
+134 | async def _resolve_engine_run_options(
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+135 |     chat_id: int,
+136 |     thread_id: int | None,
+137 |     engine: EngineId,
+138 |     chat_prefs: ChatPrefsStore | None,
+    |     --------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_resolve_engine_run_options` is incorrect
+   --> tests\test_loop_coverage.py:238:13
+    |
+238 |             topic_store=topic,
+    |             ^^^^^^^^^^^^^^^^^ Expected `TopicStateStore | None`, found `FakeTopicStore`
+info: Function defined here
+   --> src\untether\telegram\loop.py:134:11
+    |
+134 | async def _resolve_engine_run_options(
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+135 |     chat_id: int,
+136 |     thread_id: int | None,
+137 |     engine: EngineId,
+138 |     chat_prefs: ChatPrefsStore | None,
+139 |     topic_store: TopicStateStore | None,
+    |     ----------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_resolve_engine_run_options` is incorrect
+   --> tests\test_loop_coverage.py:252:13
+    |
+252 |             chat_prefs=prefs,
+    |             ^^^^^^^^^^^^^^^^ Expected `ChatPrefsStore | None`, found `FakeChatPrefs`
+info: Function defined here
+   --> src\untether\telegram\loop.py:134:11
+    |
+134 | async def _resolve_engine_run_options(
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+135 |     chat_id: int,
+136 |     thread_id: int | None,
+137 |     engine: EngineId,
+138 |     chat_prefs: ChatPrefsStore | None,
+    |     --------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_resolve_engine_run_options` is incorrect
+   --> tests\test_loop_coverage.py:253:13
+    |
+253 |             topic_store=topic,
+    |             ^^^^^^^^^^^^^^^^^ Expected `TopicStateStore | None`, found `FakeTopicStore`
+info: Function defined here
+   --> src\untether\telegram\loop.py:134:11
+    |
+134 | async def _resolve_engine_run_options(
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+135 |     chat_id: int,
+136 |     thread_id: int | None,
+137 |     engine: EngineId,
+138 |     chat_prefs: ChatPrefsStore | None,
+139 |     topic_store: TopicStateStore | None,
+    |     ----------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_resolve_engine_run_options` is incorrect
+   --> tests\test_loop_coverage.py:266:13
+    |
+266 |             chat_prefs=prefs,
+    |             ^^^^^^^^^^^^^^^^ Expected `ChatPrefsStore | None`, found `FakeChatPrefs`
+info: Function defined here
+   --> src\untether\telegram\loop.py:134:11
+    |
+134 | async def _resolve_engine_run_options(
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+135 |     chat_id: int,
+136 |     thread_id: int | None,
+137 |     engine: EngineId,
+138 |     chat_prefs: ChatPrefsStore | None,
+    |     --------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_resolve_engine_run_options` is incorrect
+   --> tests\test_loop_coverage.py:279:13
+    |
+279 |             chat_prefs=prefs,
+    |             ^^^^^^^^^^^^^^^^ Expected `ChatPrefsStore | None`, found `FakeChatPrefs`
+info: Function defined here
+   --> src\untether\telegram\loop.py:134:11
+    |
+134 | async def _resolve_engine_run_options(
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+135 |     chat_id: int,
+136 |     thread_id: int | None,
+137 |     engine: EngineId,
+138 |     chat_prefs: ChatPrefsStore | None,
+    |     --------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_drain_backlog` is incorrect
+   --> tests\test_loop_coverage.py:296:39
+    |
+296 |         offset = await _drain_backlog(cfg, None)  # type: ignore[arg-type]
+    |                                       ^^^ Expected `TelegramBridgeConfig`, found `FakeConfig`
+info: Function defined here
+   --> src\untether\telegram\loop.py:662:11
+    |
+662 | async def _drain_backlog(cfg: TelegramBridgeConfig, offset: int | None) -> int | None:
+    |           ^^^^^^^^^^^^^^ ------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_drain_backlog` is incorrect
+   --> tests\test_loop_coverage.py:310:39
+    |
+310 |         offset = await _drain_backlog(cfg, None)  # type: ignore[arg-type]
+    |                                       ^^^ Expected `TelegramBridgeConfig`, found `FakeConfig`
+info: Function defined here
+   --> src\untether\telegram\loop.py:662:11
+    |
+662 | async def _drain_backlog(cfg: TelegramBridgeConfig, offset: int | None) -> int | None:
+    |           ^^^^^^^^^^^^^^ ------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_drain_backlog` is incorrect
+   --> tests\test_loop_coverage.py:318:39
+    |
+318 |         offset = await _drain_backlog(cfg, 5)  # type: ignore[arg-type]
+    |                                       ^^^ Expected `TelegramBridgeConfig`, found `FakeConfig`
+info: Function defined here
+   --> src\untether\telegram\loop.py:662:11
+    |
+662 | async def _drain_backlog(cfg: TelegramBridgeConfig, offset: int | None) -> int | None:
+    |           ^^^^^^^^^^^^^^ ------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_drain_backlog` is incorrect
+   --> tests\test_loop_coverage.py:330:39
+    |
+330 |         offset = await _drain_backlog(cfg, None)  # type: ignore[arg-type]
+    |                                       ^^^ Expected `TelegramBridgeConfig`, found `FakeConfig`
+info: Function defined here
+   --> src\untether\telegram\loop.py:662:11
+    |
+662 | async def _drain_backlog(cfg: TelegramBridgeConfig, offset: int | None) -> int | None:
+    |           ^^^^^^^^^^^^^^ ------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_drain_backlog` is incorrect
+   --> tests\test_loop_coverage.py:338:39
+    |
+338 |         offset = await _drain_backlog(cfg, 50)  # type: ignore[arg-type]
+    |                                       ^^^ Expected `TelegramBridgeConfig`, found `FakeConfig`
+info: Function defined here
+   --> src\untether\telegram\loop.py:662:11
+    |
+662 | async def _drain_backlog(cfg: TelegramBridgeConfig, offset: int | None) -> int | None:
+    |           ^^^^^^^^^^^^^^ ------------------------- Parameter declared here
+
+error[invalid-assignment]: Object of type `None` is not assignable to `list[Any]`
+  --> tests\test_loop_scheduler.py:31:23
+   |
+31 |     sent: list[Any] = None  # type: ignore[assignment]
+   |           ---------   ^^^^ Incompatible value of type `None`
+   |           |
+   |           Declared type
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:106:55
+    |
+106 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:134:55
+    |
+134 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:150:55
+    |
+150 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:164:55
+    |
+164 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:181:55
+    |
+181 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:192:55
+    |
+192 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[unresolved-attribute]: Attribute `project` is not defined on `None` in union `RunContext | None`
+   --> tests\test_loop_scheduler.py:206:24
+    |
+206 |                 assert entry.context.project == "acme"
+    |                        ^^^^^^^^^^^^^^^^^^^^^
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:221:55
+    |
+221 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:241:55
+    |
+241 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:256:55
+    |
+256 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:284:55
+    |
+284 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:295:55
+    |
+295 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:304:55
+    |
+304 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:323:55
+    |
+323 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:334:55
+    |
+334 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:342:55
+    |
+342 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:367:55
+    |
+367 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:379:55
+    |
+379 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:402:55
+    |
+402 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:441:50
+    |
+441 |             loop_scheduler.install(tg, recorder, FakeTransport(), 1)
+    |                                                  ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:455:50
+    |
+455 |             loop_scheduler.install(tg, recorder, FakeTransport(), 1)
+    |                                                  ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:465:50
+    |
+465 |             loop_scheduler.install(tg, recorder, FakeTransport(), 1)
+    |                                                  ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:487:50
+    |
+487 |             loop_scheduler.install(tg, recorder, FakeTransport(), 1)
+    |                                                  ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:504:17
+    |
+504 |                 FakeTransport(),
+    |                 ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:534:50
+    |
+534 |             loop_scheduler.install(tg, recorder, FakeTransport(), 1)
+    |                                                  ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:553:50
+    |
+553 |             loop_scheduler.install(tg, recorder, FakeTransport(), 1)
+    |                                                  ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:584:50
+    |
+584 |             loop_scheduler.install(tg, recorder, FakeTransport(), 1)
+    |                                                  ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:608:50
+    |
+608 |             loop_scheduler.install(tg, recorder, FakeTransport(), 1)
+    |                                                  ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:638:36
+    |
+638 |                 tg, _noop_run_job, FakeTransport(), 1, state_path=state_path
+    |                                    ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:652:36
+    |
+652 |                 tg, _noop_run_job, FakeTransport(), 1, state_path=state_path
+    |                                    ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:669:36
+    |
+669 |                 tg, _noop_run_job, FakeTransport(), 1, state_path=state_path
+    |                                    ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:684:36
+    |
+684 |                 tg, _noop_run_job, FakeTransport(), 1, state_path=state_path
+    |                                    ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:696:36
+    |
+696 |                 tg, _noop_run_job, FakeTransport(), 1, state_path=state_path
+    |                                    ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:707:36
+    |
+707 |                 tg, _noop_run_job, FakeTransport(), 1, state_path=state_path
+    |                                    ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:717:36
+    |
+717 |                 tg, _noop_run_job, FakeTransport(), 1, state_path=state_path
+    |                                    ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:730:36
+    |
+730 |                 tg, _noop_run_job, FakeTransport(), 1, state_path=state_path
+    |                                    ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `install` is incorrect
+   --> tests\test_loop_scheduler.py:740:55
+    |
+740 |             loop_scheduler.install(tg, _noop_run_job, FakeTransport(), 1)
+    |                                                       ^^^^^^^^^^^^^^^ Expected `Transport`, found `FakeTransport`
+info: type `FakeTransport` is not assignable to protocol `Transport`
+info: └── protocol member `close` is not defined on type `FakeTransport`
+info: Function defined here
+   --> src\untether\loop_scheduler.py:130:5
+    |
+130 | def install(
+    |     ^^^^^^^
+131 |     task_group: TaskGroup,
+132 |     run_job: RunJobFn,
+133 |     transport: Transport,
+    |     -------------------- Parameter declared here
+
+error[unresolved-attribute]: Attribute `split` is not defined on `None` in union `str | None`
+   --> tests\test_meta_line.py:283:17
+    |
+283 |         lines = parts.footer.split(HARD_BREAK)
+    |                 ^^^^^^^^^^^^^^^^^^
+
+error[invalid-argument-type]: Argument to function `handle_message` is incorrect
+   --> tests\test_noop_resume_harness.py:145:17
+    |
+145 |                 runner=runner,
+    |                 ^^^^^^^^^^^^^ Expected `Runner`, found `_HarnessClaudeRunner`
+info: type `_HarnessClaudeRunner` is not assignable to protocol `Runner`
+info: └── protocol member `compact` is not defined on type `_HarnessClaudeRunner`
+info: Function defined here
+    --> src\untether\runner_bridge.py:3275:11
+     |
+3275 | async def handle_message(
+     |           ^^^^^^^^^^^^^^
+3276 |     cfg: ExecBridgeConfig,
+3277 |     *,
+3278 |     runner: Runner,
+     |     -------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `handle_message` is incorrect
+   --> tests\test_noop_resume_harness.py:199:17
+    |
+199 |                 runner=runner,
+    |                 ^^^^^^^^^^^^^ Expected `Runner`, found `_HarnessClaudeRunner`
+info: type `_HarnessClaudeRunner` is not assignable to protocol `Runner`
+info: └── protocol member `compact` is not defined on type `_HarnessClaudeRunner`
+info: Function defined here
+    --> src\untether\runner_bridge.py:3275:11
+     |
+3275 | async def handle_message(
+     |           ^^^^^^^^^^^^^^
+3276 |     cfg: ExecBridgeConfig,
+3277 |     *,
+3278 |     runner: Runner,
+     |     -------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `handle_message` is incorrect
+   --> tests\test_noop_resume_harness.py:386:21
+    |
+386 |                     runner=runner,
+    |                     ^^^^^^^^^^^^^ Expected `Runner`, found `_HarnessClaudeRunner`
+info: type `_HarnessClaudeRunner` is not assignable to protocol `Runner`
+info: └── protocol member `compact` is not defined on type `_HarnessClaudeRunner`
+info: Function defined here
+    --> src\untether\runner_bridge.py:3275:11
+     |
+3275 | async def handle_message(
+     |           ^^^^^^^^^^^^^^
+3276 |     cfg: ExecBridgeConfig,
+3277 |     *,
+3278 |     runner: Runner,
+     |     -------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `handle_message` is incorrect
+   --> tests\test_noop_resume_harness.py:454:13
+    |
+454 |             runner=runner,
+    |             ^^^^^^^^^^^^^ Expected `Runner`, found `_HarnessClaudeRunner`
+info: type `_HarnessClaudeRunner` is not assignable to protocol `Runner`
+info: └── protocol member `compact` is not defined on type `_HarnessClaudeRunner`
+info: Function defined here
+    --> src\untether\runner_bridge.py:3275:11
+     |
+3275 | async def handle_message(
+     |           ^^^^^^^^^^^^^^
+3276 |     cfg: ExecBridgeConfig,
+3277 |     *,
+3278 |     runner: Runner,
+     |     -------------- Parameter declared here
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_onboarding_interactive.py:112:41
+    |
+112 |     backend = EngineBackend(id="codex", build_runner=lambda _cfg, _path: None)
+    |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `(dict[str, Any], Path, /) -> Runner`, found `(_cfg: dict[str, Any], _path: Path) -> None`
+info: incompatible return types: `None` is not assignable to `Runner`
+info: └── type `None` is not assignable to protocol `Runner`
+info:     └── protocol member `compact` is not defined on type `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_onboarding_interactive.py:159:41
+    |
+159 |     backend = EngineBackend(id="codex", build_runner=lambda _cfg, _path: None)
+    |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `(dict[str, Any], Path, /) -> Runner`, found `(_cfg: dict[str, Any], _path: Path) -> None`
+info: incompatible return types: `None` is not assignable to `Runner`
+info: └── type `None` is not assignable to protocol `Runner`
+info:     └── protocol member `compact` is not defined on type `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_onboarding_interactive.py:195:41
+    |
+195 |     backend = EngineBackend(id="codex", build_runner=lambda _cfg, _path: None)
+    |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `(dict[str, Any], Path, /) -> Runner`, found `(_cfg: dict[str, Any], _path: Path) -> None`
+info: incompatible return types: `None` is not assignable to `Runner`
+info: └── type `None` is not assignable to protocol `Runner`
+info:     └── protocol member `compact` is not defined on type `None`
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_onboarding_interactive.py:231:41
+    |
+231 |     backend = EngineBackend(id="codex", build_runner=lambda _cfg, _path: None)
+    |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `(dict[str, Any], Path, /) -> Runner`, found `(_cfg: dict[str, Any], _path: Path) -> None`
+info: incompatible return types: `None` is not assignable to `Runner`
+info: └── type `None` is not assignable to protocol `Runner`
+info:     └── protocol member `compact` is not defined on type `None`
+
+error[invalid-assignment]: Object of type `def run_stub(...) -> Unknown` is not assignable to attribute `run_impl` of type `def run_impl(self, prompt: str, resume: ResumeToken | None) -> AsyncIterator[UntetherEvent]`
+   --> tests\test_opencode_runner.py:521:5
+    |
+521 |     runner.run_impl = run_stub  # type: ignore[assignment]
+    |     ^^^^^^^^^^^^^^^
+
+error[unsupported-operator]: Unsupported `in` operation
+   --> tests\test_opencode_runner.py:666:16
+    |
+666 |         assert "question" in event.message
+    |                ----------^^^^-------------
+    |                |             |
+    |                |             Has type `str | None`
+    |                Has type `Literal["question"]`
+info: Operation fails because operator `in` is not supported between objects of type `Literal["question"]` and `None`
+
+error[unsupported-operator]: Unsupported `in` operation
+   --> tests\test_opencode_runner.py:677:16
+    |
+677 |         assert "permission" in events[0].message
+    |                ------------^^^^-----------------
+    |                |               |
+    |                |               Has type `str | None`
+    |                Has type `Literal["permission"]`
+info: Operation fails because operator `in` is not supported between objects of type `Literal["permission"]` and `None`
+
+error[unresolved-attribute]: Object of type `Runner` has no attribute `model`
+   --> tests\test_opencode_runner.py:780:12
+    |
+780 |     assert runner.model == "openai/gpt-4o"
+    |            ^^^^^^^^^^^^
+
+error[unresolved-attribute]: Object of type `Runner` has no attribute `session_title`
+   --> tests\test_opencode_runner.py:781:12
+    |
+781 |     assert runner.session_title == "openai/gpt-4o"
+    |            ^^^^^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Object of type `Runner` has no attribute `model`
+   --> tests\test_opencode_runner.py:794:12
+    |
+794 |     assert runner.model == "anthropic/claude-sonnet"
+    |            ^^^^^^^^^^^^
+
+error[unresolved-attribute]: Object of type `Runner` has no attribute `model`
+   --> tests\test_opencode_runner.py:802:12
+    |
+802 |     assert runner.model is None
+    |            ^^^^^^^^^^^^
+
+error[unresolved-attribute]: Object of type `Runner` has no attribute `session_title`
+   --> tests\test_opencode_runner.py:803:12
+    |
+803 |     assert runner.session_title == "opencode"
+    |            ^^^^^^^^^^^^^^^^^^^^
+
+error[invalid-assignment]: Object of type `def run_stub(_prompt: str, resume: ResumeToken | None) -> Unknown` is not assignable to attribute `run_impl` of type `def run_impl(self, prompt: str, resume: ResumeToken | None) -> AsyncIterator[UntetherEvent]`
+   --> tests\test_pi_runner.py:200:5
+    |
+200 |     runner.run_impl = run_stub  # type: ignore[assignment]
+    |     ^^^^^^^^^^^^^^^
+
+error[invalid-assignment]: Object of type `def run_stub(...) -> Unknown` is not assignable to attribute `run_impl` of type `def run_impl(self, prompt: str, resume: ResumeToken | None) -> AsyncIterator[UntetherEvent]`
+   --> tests\test_pi_runner.py:234:5
+    |
+234 |     runner.run_impl = run_stub  # type: ignore[assignment]
+    |     ^^^^^^^^^^^^^^^
+
+error[unsupported-operator]: Unsupported `in` operation
+   --> tests\test_pi_runner.py:372:12
+    |
+372 |     assert "produced no events" in completed.error
+    |            --------------------^^^^---------------
+    |            |                       |
+    |            |                       Has type `str | None`
+    |            Has type `Literal["produced no events"]`
+info: Operation fails because operator `in` is not supported between objects of type `Literal["produced no events"]` and `None`
+
+error[unsupported-operator]: Unsupported `in` operation
+   --> tests\test_pi_runner.py:374:12
+    |
+374 |     assert "failed to load on resume" in completed.error
+    |            --------------------------^^^^---------------
+    |            |                             |
+    |            |                             Has type `str | None`
+    |            Has type `Literal["failed to load on resume"]`
+info: Operation fails because operator `in` is not supported between objects of type `Literal["failed to load on resume"]` and `None`
+
+error[unsupported-operator]: Unsupported `in` operation
+   --> tests\test_pi_runner.py:376:12
+    |
+376 |     assert "MCP server 'foo' failed to connect" in completed.error
+    |            ------------------------------------^^^^---------------
+    |            |                                       |
+    |            |                                       Has type `str | None`
+    |            Has type `Literal["MCP server 'foo' failed to connect"]`
+info: Operation fails because operator `in` is not supported between objects of type `Literal["MCP server 'foo' failed to connect"]` and `None`
+
+error[unsupported-operator]: Unsupported `in` operation
+   --> tests\test_pi_runner.py:393:12
+    |
+393 |     assert "finished without an agent_end event" in completed.error
+    |            -------------------------------------^^^^---------------
+    |            |                                        |
+    |            |                                        Has type `str | None`
+    |            Has type `Literal["finished without an agent_end event"]`
+info: Operation fails because operator `in` is not supported between objects of type `Literal["finished without an agent_end event"]` and `None`
+
+error[unsupported-operator]: Unsupported `not in` operation
+   --> tests\test_pi_runner.py:394:12
+    |
+394 |     assert "produced no events" not in completed.error
+    |            --------------------^^^^^^^^---------------
+    |            |                           |
+    |            |                           Has type `str | None`
+    |            Has type `Literal["produced no events"]`
+info: Operation fails because operator `not in` is not supported between objects of type `Literal["produced no events"]` and `None`
+
+error[unsupported-operator]: Unsupported `in` operation
+   --> tests\test_pi_runner.py:407:12
+    |
+407 |     assert "RuntimeError: kaboom" in events[0].error
+    |            ----------------------^^^^---------------
+    |            |                         |
+    |            |                         Has type `str | None`
+    |            Has type `Literal["RuntimeError: kaboom"]`
+info: Operation fails because operator `in` is not supported between objects of type `Literal["RuntimeError: kaboom"]` and `None`
+
+error[unresolved-attribute]: Attribute `error` is not defined on `StartedEvent`, `ActionEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_pi_runner.py:407:38
+    |
+407 |     assert "RuntimeError: kaboom" in events[0].error
+    |                                      ^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_pi_runner.py:461:12
+    |
+461 |     assert events[0].action.title == "retrying provider"
+    |            ^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `phase` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_pi_runner.py:474:12
+    |
+474 |     assert evt.phase == "completed"
+    |            ^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `ok` is not defined on `StartedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_pi_runner.py:475:12
+    |
+475 |     assert evt.ok is True
+    |            ^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_pi_runner.py:476:12
+    |
+476 |     assert evt.action.id == "retry_1"  # stable across start/end
+    |            ^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_pi_runner.py:477:12
+    |
+477 |     assert evt.action.title == "retry succeeded"
+    |            ^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `phase` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_pi_runner.py:491:12
+    |
+491 |     assert evt.phase == "completed"
+    |            ^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `ok` is not defined on `StartedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_pi_runner.py:492:12
+    |
+492 |     assert evt.ok is False
+    |            ^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_pi_runner.py:493:12
+    |
+493 |     assert evt.action.title == "retry exhausted: 503 from provider"
+    |            ^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_pi_runner.py:510:12
+    |
+510 |     assert s1[0].action.id == "retry_1"
+    |            ^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_pi_runner.py:511:12
+    |
+511 |     assert e1[0].action.id == "retry_1"
+    |            ^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_pi_runner.py:512:12
+    |
+512 |     assert s2[0].action.id == "retry_2"
+    |            ^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `action` is not defined on `StartedEvent`, `CompletedEvent` in union `StartedEvent | ActionEvent | CompletedEvent`
+   --> tests\test_pi_runner.py:513:12
+    |
+513 |     assert e2[0].action.id == "retry_2"
+    |            ^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `text` is not defined on `None` in union `CommandResult | None`
+  --> tests\test_ping_command.py:88:37
+   |
+88 |     assert "\u23f0 triggers" not in result.text
+   |                                     ^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `text` is not defined on `None` in union `CommandResult | None`
+   --> tests\test_ping_command.py:106:9
+    |
+106 |         result.text
+    |         ^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `text` is not defined on `None` in union `CommandResult | None`
+   --> tests\test_ping_command.py:119:42
+    |
+119 |     assert "\u23f0 triggers: 2 crons" in result.text
+    |                                          ^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `text` is not defined on `None` in union `CommandResult | None`
+   --> tests\test_ping_command.py:136:44
+    |
+136 |     assert "\u23f0 triggers: 1 webhook" in result.text
+    |                                            ^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `text` is not defined on `None` in union `CommandResult | None`
+   --> tests\test_ping_command.py:145:37
+    |
+145 |     assert "\u23f0 triggers" not in result.text
+    |                                     ^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `text` is not defined on `None` in union `CommandResult | None`
+   --> tests\test_ping_command.py:155:47
+    |
+155 |     assert "\u23f0 triggers: 1 cron (any," in result.text
+    |                                               ^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `text` is not defined on `None` in union `CommandResult | None`
+   --> tests\test_ping_command.py:169:35
+    |
+169 |     assert "⏸ triggers paused" in result.text
+    |                                   ^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `text` is not defined on `None` in union `CommandResult | None`
+   --> tests\test_ping_command.py:170:29
+    |
+170 |     assert "(suspended)" in result.text
+    |                             ^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `text` is not defined on `None` in union `CommandResult | None`
+   --> tests\test_ping_command.py:172:33
+    |
+172 |     assert "⏰ triggers:" not in result.text
+    |                                  ^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `text` is not defined on `None` in union `CommandResult | None`
+   --> tests\test_ping_command.py:184:29
+    |
+184 |     assert "⏰ triggers:" in result.text
+    |                              ^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `text` is not defined on `None` in union `CommandResult | None`
+   --> tests\test_ping_command.py:185:39
+    |
+185 |     assert "⏸ triggers paused" not in result.text
+    |                                       ^^^^^^^^^^^
+
+error[invalid-assignment]: Property `pid` defined in `ProcessDiag` is read-only
+   --> tests\test_proc_diag.py:296:9
+    |
+296 |         diag.pid = 2  # type: ignore[misc]
+    |         ^^^^^^^^
+
+error[invalid-argument-type]: Argument to `TriggerManager.__init__` is incorrect
+   --> tests\test_run_once_state.py:105:26
+    |
+105 |     mgr = TriggerManager(_make_run_once_settings(["one"]))
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `TriggersSettings | None`, found `object`
+info: Method defined here
+  --> src\untether\triggers\manager.py:45:9
+   |
+45 |     def __init__(
+   |         ^^^^^^^^
+46 |         self,
+47 |         settings: TriggersSettings | None = None,
+   |         ---------------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to `TriggerManager.__init__` is incorrect
+   --> tests\test_run_once_state.py:116:26
+    |
+116 |     mgr = TriggerManager(_make_run_once_settings(["daily"]), config_path=config_path)
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `TriggersSettings | None`, found `object`
+info: Method defined here
+  --> src\untether\triggers\manager.py:45:9
+   |
+45 |     def __init__(
+   |         ^^^^^^^^
+46 |         self,
+47 |         settings: TriggersSettings | None = None,
+   |         ---------------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to bound method `TriggerManager.update` is incorrect
+   --> tests\test_run_once_state.py:126:16
+    |
+126 |     mgr.update(_make_run_once_settings(["daily"]))
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `TriggersSettings`, found `object`
+info: Method defined here
+  --> src\untether\triggers\manager.py:74:9
+   |
+74 |     def update(self, settings: TriggersSettings) -> None:
+   |         ^^^^^^       -------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to `TriggerManager.__init__` is incorrect
+   --> tests\test_run_once_state.py:137:26
+    |
+137 |     mgr = TriggerManager(_make_run_once_settings(["daily"]), config_path=config_path)
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `TriggersSettings | None`, found `object`
+info: Method defined here
+  --> src\untether\triggers\manager.py:45:9
+   |
+45 |     def __init__(
+   |         ^^^^^^^^
+46 |         self,
+47 |         settings: TriggersSettings | None = None,
+   |         ---------------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to `TriggerManager.__init__` is incorrect
+   --> tests\test_run_once_state.py:152:9
+    |
+152 |         _make_run_once_settings(["still-here"]), config_path=config_path
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `TriggersSettings | None`, found `object`
+info: Method defined here
+  --> src\untether\triggers\manager.py:45:9
+   |
+45 |     def __init__(
+   |         ^^^^^^^^
+46 |         self,
+47 |         settings: TriggersSettings | None = None,
+   |         ---------------------------------------- Parameter declared here
+
+error[invalid-return-type]: Function always implicitly returns `None`, which is not assignable to return type `bytes`
+   --> tests\test_runner_utils.py:401:37
+    |
+401 |         async def readline(self) -> bytes:
+    |                                     ^^^^^
+info: Consider changing the return annotation to `-> None` or adding a `return` statement
+
+error[invalid-argument-type]: Argument to function `drain_stderr` is incorrect
+   --> tests\test_runner_utils.py:640:13
+    |
+640 |             receive,
+    |             ^^^^^^^ Expected `ByteReceiveStream`, found `MemoryObjectReceiveStream[bytes]`
+info: Function defined here
+  --> src\untether\utils\streams.py:28:11
+   |
+28 | async def drain_stderr(
+   |           ^^^^^^^^^^^^
+29 |     stream: ByteReceiveStream,
+   |     ------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `drain_stderr` is incorrect
+   --> tests\test_runner_utils.py:666:28
+    |
+666 |         await drain_stderr(receive, __import__("structlog").get_logger(), "test")  # type: ignore[arg-type]
+    |                            ^^^^^^^ Expected `ByteReceiveStream`, found `MemoryObjectReceiveStream[bytes]`
+info: Function defined here
+  --> src\untether\utils\streams.py:28:11
+   |
+28 | async def drain_stderr(
+   |           ^^^^^^^^^^^^
+29 |     stream: ByteReceiveStream,
+   |     ------------------------- Parameter declared here
+
+error[unresolved-attribute]: Module `socket` has no member `AF_UNIX`
+  --> tests\test_sdnotify.py:17:26
+   |
+17 |         assert family == socket_mod.AF_UNIX
+   |                          ^^^^^^^^^^^^^^^^^^
+info: The member may be available on other Python versions or platforms
+info: Python 3.12 was assumed when resolving the `AF_UNIX` attribute
+  --> pyproject.toml:11:19
+   |
+11 | requires-python = ">=3.12"
+   |                   ^^^^^^^^ Python version configuration
+
+error[unknown-argument]: Argument `budget_per_loop_usd` does not match any known parameter
+   --> tests\test_settings.py:988:22
+    |
+988 |         LoopSettings(budget_per_loop_usd=5.0)  # cost caps live in [cost_budget]
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^
+
+error[invalid-argument-type]: Argument to `ResumeResolver.__init__` is incorrect
+   --> tests\test_stateless_mode.py:185:13
+    |
+185 |             task_group=_NoopTaskGroup(),
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `TaskGroup`, found `_NoopTaskGroup`
+info: Method defined here
+    --> src\untether\telegram\loop.py:1343:9
+     |
+1343 |     def __init__(
+     |         ^^^^^^^^
+1344 |         self,
+1345 |         *,
+1346 |         cfg: TelegramBridgeConfig,
+1347 |         task_group: TaskGroup,
+     |         --------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to `ResumeResolver.__init__` is incorrect
+   --> tests\test_stateless_mode.py:211:13
+    |
+211 |             task_group=_NoopTaskGroup(),
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `TaskGroup`, found `_NoopTaskGroup`
+info: Method defined here
+    --> src\untether\telegram\loop.py:1343:9
+     |
+1343 |     def __init__(
+     |         ^^^^^^^^
+1344 |         self,
+1345 |         *,
+1346 |         cfg: TelegramBridgeConfig,
+1347 |         task_group: TaskGroup,
+     |         --------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to `ResumeResolver.__init__` is incorrect
+   --> tests\test_stateless_mode.py:236:13
+    |
+236 |             task_group=_NoopTaskGroup(),
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `TaskGroup`, found `_NoopTaskGroup`
+info: Method defined here
+    --> src\untether\telegram\loop.py:1343:9
+     |
+1343 |     def __init__(
+     |         ^^^^^^^^
+1344 |         self,
+1345 |         *,
+1346 |         cfg: TelegramBridgeConfig,
+1347 |         task_group: TaskGroup,
+     |         --------------------- Parameter declared here
+
+error[invalid-assignment]: Object of type `None` is not assignable to `dict[Unknown, Unknown]`
+   --> tests\test_stats_command.py:201:31
+    |
+201 |         plugin_config: dict = None
+    |                        ----   ^^^^ Incompatible value of type `None`
+    |                        |
+    |                        Declared type
+
+error[invalid-argument-type]: Argument to bound method `StatsCommand.handle` is incorrect
+   --> tests\test_stats_command.py:211:35
+    |
+211 |         result = await cmd.handle(FakeCtx())
+    |                                   ^^^^^^^^^ Expected `CommandContext`, found `FakeCtx`
+info: Method defined here
+   --> src\untether\telegram\commands\stats.py:191:15
+    |
+191 |     async def handle(self, ctx: CommandContext) -> CommandResult:
+    |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-assignment]: Object of type `None` is not assignable to `dict[Unknown, Unknown]`
+   --> tests\test_stats_command.py:230:31
+    |
+230 |         plugin_config: dict = None
+    |                        ----   ^^^^ Incompatible value of type `None`
+    |                        |
+    |                        Declared type
+
+error[invalid-argument-type]: Argument to bound method `StatsCommand.handle` is incorrect
+   --> tests\test_stats_command.py:242:35
+    |
+242 |         result = await cmd.handle(FakeCtx())
+    |                                   ^^^^^^^^^ Expected `CommandContext`, found `FakeCtx`
+info: Method defined here
+   --> src\untether\telegram\commands\stats.py:191:15
+    |
+191 |     async def handle(self, ctx: CommandContext) -> CommandResult:
+    |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-assignment]: Object of type `None` is not assignable to `dict[Unknown, Unknown]`
+   --> tests\test_stats_command.py:270:31
+    |
+270 |         plugin_config: dict = None
+    |                        ----   ^^^^ Incompatible value of type `None`
+    |                        |
+    |                        Declared type
+
+error[invalid-argument-type]: Argument to bound method `StatsCommand.handle` is incorrect
+   --> tests\test_stats_command.py:283:35
+    |
+283 |         result = await cmd.handle(FakeCtx())
+    |                                   ^^^^^^^^^ Expected `CommandContext`, found `FakeCtx`
+info: Method defined here
+   --> src\untether\telegram\commands\stats.py:191:15
+    |
+191 |     async def handle(self, ctx: CommandContext) -> CommandResult:
+    |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-assignment]: Object of type `None` is not assignable to `dict[Unknown, Unknown]`
+   --> tests\test_stats_command.py:303:31
+    |
+303 |         plugin_config: dict = None
+    |                        ----   ^^^^ Incompatible value of type `None`
+    |                        |
+    |                        Declared type
+
+error[invalid-argument-type]: Argument to bound method `StatsCommand.handle` is incorrect
+   --> tests\test_stats_command.py:316:35
+    |
+316 |         result = await cmd.handle(FakeCtx())
+    |                                   ^^^^^^^^^ Expected `CommandContext`, found `FakeCtx`
+info: Method defined here
+   --> src\untether\telegram\commands\stats.py:191:15
+    |
+191 |     async def handle(self, ctx: CommandContext) -> CommandResult:
+    |               ^^^^^^       ------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `kill_process` is incorrect
+  --> tests\test_subprocess.py:39:35
+   |
+39 |     subprocess_utils.kill_process(proc)
+   |                                   ^^^^ Expected `Process`, found `_FakeProc`
+info: Function defined here
+  --> src\untether\utils\subprocess.py:97:5
+   |
+97 | def kill_process(proc: Process) -> None:
+   |     ^^^^^^^^^^^^ ------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `terminate_process` is incorrect
+   --> tests\test_subprocess.py:115:40
+    |
+115 |     subprocess_utils.terminate_process(_FakeProc())
+    |                                        ^^^^^^^^^^^ Expected `Process`, found `_FakeProc`
+info: Function defined here
+  --> src\untether\utils\subprocess.py:88:5
+   |
+88 | def terminate_process(proc: Process) -> None:
+   |     ^^^^^^^^^^^^^^^^^ ------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `kill_process` is incorrect
+   --> tests\test_subprocess.py:141:35
+    |
+141 |     subprocess_utils.kill_process(_FakeProc(pid=4242))
+    |                                   ^^^^^^^^^^^^^^^^^^^ Expected `Process`, found `_FakeProc`
+info: Function defined here
+  --> src\untether\utils\subprocess.py:97:5
+   |
+97 | def kill_process(proc: Process) -> None:
+   |     ^^^^^^^^^^^^ ------------- Parameter declared here
+
+error[unresolved-attribute]: Module `signal` has no member `SIGKILL`
+   --> tests\test_subprocess.py:143:29
+    |
+143 |     assert ("killpg", 4242, signal.SIGKILL) in calls
+    |                             ^^^^^^^^^^^^^^
+info: The member may be available on other Python versions or platforms
+info: Python 3.12 was assumed when resolving the `SIGKILL` attribute
+  --> pyproject.toml:11:19
+   |
+11 | requires-python = ">=3.12"
+   |                   ^^^^^^^^ Python version configuration
+
+error[unresolved-attribute]: Module `signal` has no member `SIGKILL`
+   --> tests\test_subprocess.py:144:27
+    |
+144 |     assert ("kill", 9001, signal.SIGKILL) in calls
+    |                           ^^^^^^^^^^^^^^
+info: The member may be available on other Python versions or platforms
+info: Python 3.12 was assumed when resolving the `SIGKILL` attribute
+  --> pyproject.toml:11:19
+   |
+11 | requires-python = ">=3.12"
+   |                   ^^^^^^^^ Python version configuration
+
+error[invalid-argument-type]: Argument to function `terminate_process` is incorrect
+   --> tests\test_subprocess.py:167:40
+    |
+167 |     subprocess_utils.terminate_process(_FakeProc())
+    |                                        ^^^^^^^^^^^ Expected `Process`, found `_FakeProc`
+info: Function defined here
+  --> src\untether\utils\subprocess.py:88:5
+   |
+88 | def terminate_process(proc: Process) -> None:
+   |     ^^^^^^^^^^^^^^^^^ ------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `terminate_process` is incorrect
+   --> tests\test_subprocess.py:187:40
+    |
+187 |     subprocess_utils.terminate_process(_FakeProc())
+    |                                        ^^^^^^^^^^^ Expected `Process`, found `_FakeProc`
+info: Function defined here
+  --> src\untether\utils\subprocess.py:88:5
+   |
+88 | def terminate_process(proc: Process) -> None:
+   |     ^^^^^^^^^^^^^^^^^ ------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `terminate_process` is incorrect
+   --> tests\test_subprocess.py:210:40
+    |
+210 |     subprocess_utils.terminate_process(_FakeProc())
+    |                                        ^^^^^^^^^^^ Expected `Process`, found `_FakeProc`
+info: Function defined here
+  --> src\untether\utils\subprocess.py:88:5
+   |
+88 | def terminate_process(proc: Process) -> None:
+   |     ^^^^^^^^^^^^^^^^^ ------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `terminate_process` is incorrect
+   --> tests\test_subprocess.py:233:40
+    |
+233 |     subprocess_utils.terminate_process(_FakeProc())
+    |                                        ^^^^^^^^^^^ Expected `Process`, found `_FakeProc`
+info: Function defined here
+  --> src\untether\utils\subprocess.py:88:5
+   |
+88 | def terminate_process(proc: Process) -> None:
+   |     ^^^^^^^^^^^^^^^^^ ------------- Parameter declared here
+
+error[unresolved-attribute]: Module `signal` has no member `SIGKILL`
+   --> tests\test_subprocess.py:398:19
+    |
+398 |         if sig == signal.SIGKILL:
+    |                   ^^^^^^^^^^^^^^
+info: The member may be available on other Python versions or platforms
+info: Python 3.12 was assumed when resolving the `SIGKILL` attribute
+  --> pyproject.toml:11:19
+   |
+11 | requires-python = ">=3.12"
+   |                   ^^^^^^^^ Python version configuration
+
+error[unresolved-attribute]: Module `signal` has no member `SIGKILL`
+   --> tests\test_subprocess.py:416:12
+    |
+416 |     assert signal.SIGKILL in killpg_signals
+    |            ^^^^^^^^^^^^^^
+info: The member may be available on other Python versions or platforms
+info: Python 3.12 was assumed when resolving the `SIGKILL` attribute
+  --> pyproject.toml:11:19
+   |
+11 | requires-python = ">=3.12"
+   |                   ^^^^^^^^ Python version configuration
+
+error[unresolved-attribute]: Module `signal` has no member `SIGKILL`
+   --> tests\test_subprocess.py:417:20
+    |
+417 |     assert (31002, signal.SIGKILL) in kill_calls
+    |                    ^^^^^^^^^^^^^^
+info: The member may be available on other Python versions or platforms
+info: Python 3.12 was assumed when resolving the `SIGKILL` attribute
+  --> pyproject.toml:11:19
+   |
+11 | requires-python = ">=3.12"
+   |                   ^^^^^^^^ Python version configuration
+
+error[invalid-argument-type]: Argument to `TelegramTransport.__init__` is incorrect
+    --> tests\test_telegram_bridge.py:3974:35
+     |
+3974 |     transport = TelegramTransport(bot)  # type: ignore[arg-type]
+     |                                   ^^^ Expected `BotClient`, found `_FailingEditBot`
+info: type `_FailingEditBot` is not assignable to protocol `BotClient`
+info: └── protocol member `answer_callback_query` is not defined on type `_FailingEditBot`
+info: Method defined here
+   --> src\untether\telegram\bridge.py:251:9
+    |
+251 |     def __init__(self, bot: BotClient) -> None:
+    |         ^^^^^^^^       -------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to `TelegramTransport.__init__` is incorrect
+    --> tests\test_telegram_bridge.py:4001:35
+     |
+4001 |     transport = TelegramTransport(bot)  # type: ignore[arg-type]
+     |                                   ^^^ Expected `BotClient`, found `_FailingEditBot`
+info: type `_FailingEditBot` is not assignable to protocol `BotClient`
+info: └── protocol member `answer_callback_query` is not defined on type `_FailingEditBot`
+info: Method defined here
+   --> src\untether\telegram\bridge.py:251:9
+    |
+251 |     def __init__(self, bot: BotClient) -> None:
+    |         ^^^^^^^^       -------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to `TelegramTransport.__init__` is incorrect
+    --> tests\test_telegram_bridge.py:4025:35
+     |
+4025 |     transport = TelegramTransport(_PlainFailingBot())  # type: ignore[arg-type]
+     |                                   ^^^^^^^^^^^^^^^^^^ Expected `BotClient`, found `_PlainFailingBot`
+info: type `_PlainFailingBot` is not assignable to protocol `BotClient`
+info: └── protocol member `answer_callback_query` is not defined on type `_PlainFailingBot`
+info: Method defined here
+   --> src\untether\telegram\bridge.py:251:9
+    |
+251 |     def __init__(self, bot: BotClient) -> None:
+    |         ^^^^^^^^       -------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to `TelegramTransport.__init__` is incorrect
+    --> tests\test_telegram_bridge.py:4050:35
+     |
+4050 |     transport = TelegramTransport(_SupersedingBot())  # type: ignore[arg-type]
+     |                                   ^^^^^^^^^^^^^^^^^ Expected `BotClient`, found `_SupersedingBot`
+info: type `_SupersedingBot` is not assignable to protocol `BotClient`
+info: └── protocol member `answer_callback_query` is not defined on type `_SupersedingBot`
+info: Method defined here
+   --> src\untether\telegram\bridge.py:251:9
+    |
+251 |     def __init__(self, bot: BotClient) -> None:
+    |         ^^^^^^^^       -------------- Parameter declared here
+
+error[not-subscriptable]: Cannot subscript object of type `None` with no `__getitem__` method
+   --> tests\test_telegram_client_api.py:161:12
+    |
+161 |     assert send_call[1]["disable_notification"] is True
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[not-subscriptable]: Cannot subscript object of type `None` with no `__getitem__` method
+   --> tests\test_telegram_client_api.py:162:12
+    |
+162 |     assert send_call[1]["reply_to_message_id"] == 2
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[not-subscriptable]: Cannot subscript object of type `None` with no `__getitem__` method
+   --> tests\test_telegram_client_api.py:163:12
+    |
+163 |     assert send_call[1]["message_thread_id"] == 3
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[not-subscriptable]: Cannot subscript object of type `None` with no `__getitem__` method
+   --> tests\test_telegram_client_api.py:164:12
+    |
+164 |     assert send_call[1]["entities"]
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[not-subscriptable]: Cannot subscript object of type `None` with no `__getitem__` method
+   --> tests\test_telegram_client_api.py:165:12
+    |
+165 |     assert send_call[1]["parse_mode"] == "Markdown"
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[not-subscriptable]: Cannot subscript object of type `None` with no `__getitem__` method
+   --> tests\test_telegram_client_api.py:166:12
+    |
+166 |     assert send_call[1]["link_preview_options"] == {"is_disabled": True}
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[not-subscriptable]: Cannot subscript object of type `None` with no `__getitem__` method
+   --> tests\test_telegram_client_api.py:167:12
+    |
+167 |     assert send_call[1]["reply_markup"]
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[not-subscriptable]: Cannot subscript object of type `None` with no `__getitem__` method
+   --> tests\test_telegram_client_api.py:170:12
+    |
+170 |     assert doc_call[2]["caption"] == "doc"
+    |            ^^^^^^^^^^^^^^^^^^^^^^
+
+error[not-subscriptable]: Cannot subscript object of type `None` with no `__getitem__` method
+   --> tests\test_telegram_client_api.py:171:12
+    |
+171 |     assert doc_call[3]["document"][0] == "file.txt"
+    |            ^^^^^^^^^^^^^^^^^^^^^^^
+
+error[not-subscriptable]: Cannot subscript object of type `None` with no `__getitem__` method
+   --> tests\test_telegram_client_api.py:174:12
+    |
+174 |     assert edit_call[1]["link_preview_options"] == {"is_disabled": True}
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[invalid-assignment]: Object of type `set[int]` is not assignable to attribute `allowed_user_ids` of type `tuple[int, ...]`
+   --> tests\test_telegram_compact_dispatch.py:118:5
+    |
+118 |     cfg.allowed_user_ids = {30}
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Object of type `BotClient` has no attribute `callback_calls`
+   --> tests\test_telegram_compact_dispatch.py:134:12
+    |
+134 |     assert cfg.bot.callback_calls[-1]["text"] == "Not authorised"
+    |            ^^^^^^^^^^^^^^^^^^^^^^
+
+error[invalid-return-type]: Return type does not match returned value
+   --> tests\test_telegram_compact_dispatch.py:232:20
+    |
+231 |         async def get_session_resume(self, *_args: object) -> ResumeToken | None:
+    |                                                               ------------------ Expected `ResumeToken | None` because of return type
+232 |             return self.current
+    |                    ^^^^^^^^^^^^ expected `ResumeToken | None`, found `object`
+
+error[invalid-argument-type]: Argument to function `_commit_handoff_routing` is incorrect
+   --> tests\test_telegram_compact_dispatch.py:250:13
+    |
+250 |             topic_store=topic_store,
+    |             ^^^^^^^^^^^^^^^^^^^^^^^ Expected `TopicStateStore | None`, found `Store`
+info: Function defined here
+   --> src\untether\telegram\loop.py:210:11
+    |
+210 | async def _commit_handoff_routing(
+    |           ^^^^^^^^^^^^^^^^^^^^^^^
+211 |     *,
+212 |     topic_store: TopicStateStore | None,
+    |     ----------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_commit_handoff_routing` is incorrect
+   --> tests\test_telegram_compact_dispatch.py:252:13
+    |
+252 |             chat_session_store=chat_store,
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `ChatSessionStore | None`, found `Store`
+info: Function defined here
+   --> src\untether\telegram\loop.py:210:11
+    |
+210 | async def _commit_handoff_routing(
+    |           ^^^^^^^^^^^^^^^^^^^^^^^
+211 |     *,
+212 |     topic_store: TopicStateStore | None,
+213 |     topic_key: tuple[int, int] | None,
+214 |     chat_session_store: ChatSessionStore | None,
+    |     ------------------------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `_handle_media_group` is incorrect
+   --> tests\test_telegram_media_command.py:127:9
+    |
+127 |         chat_prefs=_FakeChatPrefs(RunContext(project="auditor-toolkit")),
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `ChatPrefsStore | None`, found `_FakeChatPrefs`
+info: Function defined here
+  --> src\untether\telegram\commands\media.py:28:11
+   |
+28 | async def _handle_media_group(
+   |           ^^^^^^^^^^^^^^^^^^^
+   |
+  ::: src\untether\telegram\commands\media.py:41:5
+   |
+41 |     chat_prefs: ChatPrefsStore | None = None,
+   |     ---------------------------------------- Parameter declared here
+
+error[invalid-assignment]: Object of type `def exploding_enqueue(...) -> CoroutineType[Any, Any, Any]` is not assignable to attribute `enqueue` of type `def enqueue(self, *, key: Hashable, op: OutboxOp, wait: bool = True) -> CoroutineType[Any, Any, Any]`
+   --> tests\test_telegram_queue.py:294:5
+    |
+294 |     client._outbox.enqueue = exploding_enqueue  # type: ignore[assignment]
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+error[unresolved-attribute]: Attribute `message_id` is not defined on `_Superseded` in union `Message | _Superseded`
+   --> tests\test_telegram_queue.py:480:12
+    |
+480 |     assert result.message_id == 1
+    |            ^^^^^^^^^^^^^^^^^
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_threads_command.py:71:9
+   |
+71 |         runtime=FakeRuntime(),  # type: ignore[arg-type]
+   |         ^^^^^^^^^^^^^^^^^^^^^ Expected `TransportRuntime`, found `FakeRuntime`
+
+error[invalid-argument-type]: Argument to function `classify_transient_failure` is incorrect
+  --> tests\test_transient_failures.py:15:43
+   |
+15 |         assert classify_transient_failure(None) is None  # type: ignore[arg-type]
+   |                                           ^^^^ Expected `str`, found `None`
+info: Function defined here
+   --> src\untether\utils\transient_failures.py:124:5
+    |
+124 | def classify_transient_failure(text: str) -> TransientFailure | None:
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^ --------- Parameter declared here
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_actions.py:33:26
+   |
+33 |     return WebhookConfig(**defaults)
+   |                          ^^^^^^^^^^ Expected `Literal["POST", "PUT", "PATCH"]`, found `Unknown | str`
+info: element `str` of union `Unknown | str` is not assignable to `Literal["POST", "PUT", "PATCH"]`
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_actions.py:33:26
+   |
+33 |     return WebhookConfig(**defaults)
+   |                          ^^^^^^^^^^ Expected `Literal["overwrite", "append_timestamp", "error"]`, found `Unknown | str`
+info: element `str` of union `Unknown | str` is not assignable to `Literal["overwrite", "append_timestamp", "error"]`
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_actions.py:33:26
+   |
+33 |     return WebhookConfig(**defaults)
+   |                          ^^^^^^^^^^ Expected `Mapping[str, LaxStr] | None`, found `Unknown | str`
+info: element `str` of union `Unknown | str` is not assignable to `Mapping[str, LaxStr] | None`
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_actions.py:33:26
+   |
+33 |     return WebhookConfig(**defaults)
+   |                          ^^^^^^^^^^ Expected `int`, found `Unknown | str`
+info: element `str` of union `Unknown | str` is not assignable to `int`
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_dispatcher.py:88:26
+   |
+88 |     return WebhookConfig(**defaults)  # type: ignore[arg-type]
+   |                          ^^^^^^^^^^ Expected `Literal["POST", "PUT", "PATCH"]`, found `Any | str`
+info: element `str` of union `Any | str` is not assignable to `Literal["POST", "PUT", "PATCH"]`
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_dispatcher.py:88:26
+   |
+88 |     return WebhookConfig(**defaults)  # type: ignore[arg-type]
+   |                          ^^^^^^^^^^ Expected `Literal["agent_run", "file_write", "http_forward", "notify_only"]`, found `Any | str`
+info: element `str` of union `Any | str` is not assignable to `Literal["agent_run", "file_write", "http_forward", "notify_only"]`
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_dispatcher.py:88:26
+   |
+88 |     return WebhookConfig(**defaults)  # type: ignore[arg-type]
+   |                          ^^^^^^^^^^ Expected `Literal["overwrite", "append_timestamp", "error"]`, found `Any | str`
+info: element `str` of union `Any | str` is not assignable to `Literal["overwrite", "append_timestamp", "error"]`
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_dispatcher.py:88:26
+   |
+88 |     return WebhookConfig(**defaults)  # type: ignore[arg-type]
+   |                          ^^^^^^^^^^ Expected `Mapping[str, LaxStr] | None`, found `Any | str`
+info: element `str` of union `Any | str` is not assignable to `Mapping[str, LaxStr] | None`
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_dispatcher.py:88:26
+   |
+88 |     return WebhookConfig(**defaults)  # type: ignore[arg-type]
+   |                          ^^^^^^^^^^ Expected `int`, found `Any | str`
+info: element `str` of union `Any | str` is not assignable to `int`
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_dispatcher.py:98:23
+   |
+98 |     return CronConfig(**defaults)  # type: ignore[arg-type]
+   |                       ^^^^^^^^^^ Expected `CronFetchConfig | Mapping[str, Any] | None`, found `Any | str`
+info: element `str` of union `Any | str` is not assignable to `CronFetchConfig | Mapping[str, Any] | None`
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_fetch.py:22:28
+   |
+22 |     return CronFetchConfig(**defaults)
+   |                            ^^^^^^^^^^ Expected `Literal["abort", "run_with_error"]`, found `Unknown | str`
+info: element `str` of union `Unknown | str` is not assignable to `Literal["abort", "run_with_error"]`
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_fetch.py:22:28
+   |
+22 |     return CronFetchConfig(**defaults)
+   |                            ^^^^^^^^^^ Expected `Literal["json", "text", "lines"]`, found `Unknown | str`
+info: element `str` of union `Unknown | str` is not assignable to `Literal["json", "text", "lines"]`
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_fetch.py:22:28
+   |
+22 |     return CronFetchConfig(**defaults)
+   |                            ^^^^^^^^^^ Expected `Mapping[str, LaxStr] | None`, found `Unknown | str`
+info: element `str` of union `Unknown | str` is not assignable to `Mapping[str, LaxStr] | None`
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_fetch.py:22:28
+   |
+22 |     return CronFetchConfig(**defaults)
+   |                            ^^^^^^^^^^ Expected `int`, found `Unknown | str`
+info: element `str` of union `Unknown | str` is not assignable to `int`
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_fetch.py:22:28
+   |
+22 |     return CronFetchConfig(**defaults)
+   |                            ^^^^^^^^^^ Expected `int`, found `Unknown | str`
+info: element `str` of union `Unknown | str` is not assignable to `int`
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_manager.py:96:9
+   |
+96 |         task_group=FakeTaskGroup(),  # type: ignore[arg-type]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `TaskGroup`, found `FakeTaskGroup`
+
+error[invalid-argument-type]: Argument to function `build_webhook_app` is incorrect
+   --> tests\test_trigger_manager.py:485:46
+    |
+485 |         app = build_webhook_app(_settings(), dispatcher, manager=mgr)
+    |                                              ^^^^^^^^^^ Expected `TriggerDispatcher`, found `_DispatcherStub`
+info: Function defined here
+   --> src\untether\triggers\server.py:213:5
+    |
+213 | def build_webhook_app(
+    |     ^^^^^^^^^^^^^^^^^
+214 |     settings: TriggersSettings,
+215 |     dispatcher: TriggerDispatcher,
+    |     ----------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument is incorrect
+  --> tests\test_trigger_server.py:84:13
+   |
+84 |             task_group=FakeTaskGroup(),  # type: ignore[arg-type]
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected `TaskGroup`, found `FakeTaskGroup`
+
+error[invalid-argument-type]: Argument to function `build_webhook_app` is incorrect
+   --> tests\test_trigger_server.py:267:39
+    |
+267 |     app = build_webhook_app(settings, ExplodingDispatcher())  # type: ignore[arg-type]
+    |                                       ^^^^^^^^^^^^^^^^^^^^^ Expected `TriggerDispatcher`, found `ExplodingDispatcher`
+info: Function defined here
+   --> src\untether\triggers\server.py:213:5
+    |
+213 | def build_webhook_app(
+    |     ^^^^^^^^^^^^^^^^^
+214 |     settings: TriggersSettings,
+215 |     dispatcher: TriggerDispatcher,
+    |     ----------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument to function `build_webhook_app` is incorrect
+   --> tests\test_trigger_server.py:573:39
+    |
+573 |     app = build_webhook_app(settings, SlowDispatcher())  # type: ignore[arg-type]
+    |                                       ^^^^^^^^^^^^^^^^ Expected `TriggerDispatcher`, found `SlowDispatcher`
+info: Function defined here
+   --> src\untether\triggers\server.py:213:5
+    |
+213 | def build_webhook_app(
+    |     ^^^^^^^^^^^^^^^^^
+214 |     settings: TriggersSettings,
+215 |     dispatcher: TriggerDispatcher,
+    |     ----------------------------- Parameter declared here
+
+error[invalid-argument-type]: Argument is incorrect
+   --> tests\test_verbose_progress.py:183:63
+    |
+183 |         action = Action(id="1", kind="tool", title="unknown", detail=None)  # type: ignore[arg-type]
+    |                                                               ^^^^^^^^^^^ Expected `dict[str, Any]`, found `None`
+
+Found 342 diagnostics

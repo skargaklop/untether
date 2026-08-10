@@ -5,7 +5,7 @@ import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import anyio
 import typer
@@ -64,9 +64,14 @@ async def _doctor_telegram_checks(
     project_chat_ids: tuple[int, ...],
 ) -> list[DoctorCheck]:
     checks: list[DoctorCheck] = []
-    client_factory = _resolve_cli_attr("TelegramClient") or TelegramClient
-    validate_topics = (
-        _resolve_cli_attr("_validate_topics_setup_for") or _validate_topics_setup_for
+
+    client_factory = cast(
+        Callable[[str], TelegramClient],
+        _resolve_cli_attr("TelegramClient") or TelegramClient,
+    )
+    validate_topics = cast(
+        Callable[..., Awaitable[object]],
+        _resolve_cli_attr("_validate_topics_setup_for") or _validate_topics_setup_for,
     )
     bot = client_factory(token)
     try:
