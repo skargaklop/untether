@@ -63,7 +63,7 @@ __all__ = [
 STATE_FILENAME = "active_loops.json"
 
 LoopKind = Literal["cron", "wakeup"]
-RunJobFn = Callable[..., Awaitable[None]]
+RunJobFn = Callable[..., Awaitable[Any]]
 IsChatBusyFn = Callable[[int], bool]
 
 

@@ -17,6 +17,7 @@ import secrets
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
+from typing import Any
 
 import anyio
 from anyio.abc import TaskGroup
@@ -46,8 +47,7 @@ MIN_DELAY_SECONDS = 60
 MAX_DELAY_SECONDS = 86_400
 # Per-chat cap to prevent runaway scheduling.
 PER_CHAT_LIMIT = 20
-
-RunJobFn = Callable[..., Awaitable[None]]
+RunJobFn = Callable[..., Awaitable[Any]]
 
 
 @dataclass(slots=True)
