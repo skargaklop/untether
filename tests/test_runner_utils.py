@@ -1,4 +1,5 @@
 import re
+import sys
 from collections.abc import AsyncIterator
 from typing import Any, cast
 
@@ -18,11 +19,79 @@ from untether.runner import (
     JsonlRunState,
     JsonlSubprocessRunner,
     ResumeTokenMixin,
+    RunnerTimeoutError,
     _rc_label,
     _session_label,
     _stderr_excerpt,
 )
+@pytest.mark.anyio
+async def test_timed_jsonl_reader_accepts_real_anyio_process_stdout() -> None:
+    """The process stdout wrapper is a byte stream, not an object with readline."""
+    proc = await anyio.open_process(
+        [sys.executable, "-c", "print('first'); print('second')"]
+    )
+    try:
+        runner = _BareJsonlRunner()
+        lines = [
+            line
+            async for line in runner._iter_jsonl_with_timeouts(
+                proc.stdout, startup_timeout_s=1.0, idle_timeout_s=1.0
+            )
+        ]
+        assert lines == [b"first\r", b"second\r"]
+    finally:
+        await proc.wait()
 
+
+@pytest.mark.anyio
+async def test_timed_jsonl_reader_distinguishes_startup_and_idle_timeout() -> None:
+    for script, kind, startup, idle in [
+        ("import time; time.sleep(1)", "startup", 0.01, 0.01),
+        (
+            "print('first', flush=True); import time; time.sleep(1)",
+            "idle",
+            1.0,
+            0.01,
+        ),
+    ]:
+        proc = await anyio.open_process([sys.executable, "-c", script])
+        try:
+            runner = _BareJsonlRunner()
+            with pytest.raises(RunnerTimeoutError, match=kind):
+                async for _ in runner._iter_jsonl_with_timeouts(
+                    proc.stdout, startup_timeout_s=startup, idle_timeout_s=idle
+                ):
+                    pass
+        finally:
+            proc.kill()
+            await proc.wait()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("engine", ["omp", "grok"])
+async def test_timed_jsonl_reader_wired_for_omp_and_grok(engine: str) -> None:
+    """Both production dialects inherit the AnyIO-safe timed JSONL reader."""
+    from untether.runners.grok import GrokRunner
+    from untether.runners.omp import OmpRunner
+
+    runner: JsonlSubprocessRunner
+    if engine == "omp":
+        runner = OmpRunner(extra_args=[], model=None, provider=None)
+    else:
+        runner = GrokRunner(grok_cmd=sys.executable, extra_args=[])
+    proc = await anyio.open_process(
+        [sys.executable, "-c", "print('{\\\"type\\\": \\\"message_start\\\"}')"]
+    )
+    try:
+        lines = [
+            line
+            async for line in runner._iter_jsonl_with_timeouts(
+                proc.stdout, startup_timeout_s=1.0, idle_timeout_s=1.0
+            )
+        ]
+        assert lines == [b'{"type": "message_start"}\r']
+    finally:
+        await proc.wait()
 
 class _DummyRunner(ResumeTokenMixin, BaseRunner):
     engine = "dummy"
@@ -399,7 +468,7 @@ async def test_jsonl_timeout_completion_includes_runner_engine() -> None:
     """Timeouts become terminal events that identify their originating runner."""
 
     class _NeverReturns:
-        async def readline(self) -> bytes | None:
+        async def receive(self) -> bytes:
             await anyio.sleep_forever()
 
     runner = _DummyJsonlRunner()

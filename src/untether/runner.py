@@ -1048,24 +1048,26 @@ class JsonlSubprocessRunner(BaseRunner):
         treating it like EOF.
         """
         first = True
+        lines = self.iter_json_lines(stdout)
         while True:
             timeout = startup_timeout_s if first else idle_timeout_s
+            timed_out = True
             with anyio.move_on_after(timeout):
                 try:
-                    raw_line = await stdout.readline()
+                    raw_line = await lines.__anext__()
+                except StopAsyncIteration:
+                    return
                 except (
                     anyio.BrokenResourceError,
                     anyio.ClosedResourceError,
                     anyio.EndOfStream,
                 ):
                     return
-                if not raw_line:
-                    return  # clean EOF
-                yield raw_line
-                first = False
-                continue
-            # Timed out — raise a deterministic failure.
-            raise RunnerTimeoutError("startup" if first else "idle", timeout)
+                timed_out = False
+            if timed_out:
+                raise RunnerTimeoutError("startup" if first else "idle", timeout)
+            yield raw_line
+            first = False
 
     async def _iter_jsonl_events(
         self,
