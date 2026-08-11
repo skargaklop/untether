@@ -63,7 +63,8 @@ def test_format_last_run_days() -> None:
 def test_format_stats_empty() -> None:
     with patch("untether.telegram.commands.stats.get_stats", return_value=[]):
         msg = format_stats_message(engine=None, period="today")
-    assert "No sessions recorded" in msg
+    assert "No completed runs recorded" in msg
+    assert "completed runs" in msg
     assert "Today" in msg
 
 
@@ -80,7 +81,7 @@ def test_format_stats_single_engine() -> None:
     with patch("untether.telegram.commands.stats.get_stats", return_value=stats):
         msg = format_stats_message(engine=None, period="today")
     assert "<b>claude</b>" in msg
-    assert "3 runs" in msg
+    assert "3 completed runs" in msg
     assert "15 actions" in msg
 
 
@@ -104,7 +105,7 @@ def test_format_stats_multiple_engines_shows_total() -> None:
     with patch("untether.telegram.commands.stats.get_stats", return_value=stats):
         msg = format_stats_message(engine=None, period="today")
     assert "<b>Total</b>" in msg
-    assert "4 runs" in msg
+    assert "4 completed runs" in msg
 
 
 def test_format_stats_week_label() -> None:

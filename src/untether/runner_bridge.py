@@ -3905,15 +3905,6 @@ async def handle_message(
             resume=resume_value,
             **usage_log,
         )
-        # Record session stats for /stats command
-        from .session_stats import record_run as _record_stats_run
-
-        _record_stats_run(
-            engine=runner.engine,
-            actions=progress_tracker.action_count,
-            duration_ms=int(elapsed_final * 1000),
-            triggered=bool(context and context.trigger_source),
-        )
         sync_resume_token(progress_tracker, final_resume)
 
         # Post-outline guidance: if the session was outline-pending (user
@@ -4020,6 +4011,16 @@ async def handle_message(
             thread_id=incoming.thread_id,
         )
         final_delivery["sent"] = True
+        # /stats reports successful completed runs whose terminal answer was delivered.
+        if run_ok is True:
+            from .session_stats import record_run as _record_stats_run
+
+            _record_stats_run(
+                engine=runner.engine,
+                actions=progress_tracker.action_count,
+                duration_ms=int(elapsed_final * 1000),
+                triggered=bool(context and context.trigger_source),
+            )
 
         # Unregister progress persistence after the final message is sent.
         # Must happen AFTER send_result_message() so a crash between

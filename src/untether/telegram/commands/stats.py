@@ -55,9 +55,9 @@ def format_stats_message(
 
     if not stats:
         scope = f" ({engine})" if engine else ""
-        return f"\U0001f4ca <b>Session Stats \u2014 {label}{scope}</b>\n\nNo sessions recorded."
+        return f"📊 <b>Completed Run Stats — {label}{scope}</b>\n\nNo completed runs recorded."
 
-    lines = [f"\U0001f4ca <b>Session Stats \u2014 {label}</b>\n"]
+    lines = [f"📊 <b>Completed Run Stats — {label}</b>\n"]
     total_runs = 0
     total_actions = 0
     total_duration = 0
@@ -69,7 +69,7 @@ def format_stats_message(
         if s.triggered_count or s.manual_count:
             breakdown = f" ({s.triggered_count} triggered, {s.manual_count} manual)"
         lines.append(
-            f"<b>{s.engine}</b>: {s.run_count} runs, "
+            f"<b>{s.engine}</b>: {s.run_count} completed runs, "
             f"{s.action_count} actions, "
             f"{_format_duration(s.duration_ms)}, "
             f"last {_format_last_run(s.last_run_ts)}{breakdown}"
@@ -85,7 +85,7 @@ def format_stats_message(
         if total_triggered or total_manual:
             total_breakdown = f" ({total_triggered} triggered, {total_manual} manual)"
         lines.append(
-            f"\n<b>Total</b>: {total_runs} runs, "
+            f"\n<b>Total</b>: {total_runs} completed runs, "
             f"{total_actions} actions, "
             f"{_format_duration(total_duration)}{total_breakdown}"
         )
@@ -183,10 +183,10 @@ async def get_auth_status() -> list[str]:
 
 
 class StatsCommand:
-    """Command backend for session statistics."""
+    """Command backend for completed-run statistics."""
 
     id = "stats"
-    description = "Show per-engine session statistics and auth status"
+    description = "Show per-engine completed-run statistics and auth status"
 
     async def handle(self, ctx: CommandContext) -> CommandResult:
         # Parse args: /stats [engine] [period] or /stats auth
