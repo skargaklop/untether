@@ -3404,6 +3404,18 @@ class ClaudeRunner(ResumeTokenMixin, JsonlSubprocessRunner):
             )
             return False
         state.pre_result_silence_killed = True
+        if stream.event_count == 0:
+            run_logger.warning(
+                "claude.startup_stall.detected",
+                duration_s=round(silence_s, 1),
+                stdout_bytes=0,
+                stderr_bytes=sum(
+                    len(line.encode("utf-8", errors="replace"))
+                    for line in getattr(stream, "stderr_capture", ())
+                ),
+                event_count=0,
+                exception_type=None,
+            )
         run_logger.warning(
             "claude.pre_result_silence.cancel",
             session_id=sid,

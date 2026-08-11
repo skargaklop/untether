@@ -5926,6 +5926,79 @@ async def test_592_pre_result_silence_cap_kills_silent_run(monkeypatch) -> None:
     assert "pre_result_silence_cancelled" in exit_reasons
     assert any("pre-result silence cap" in line for line in stream.stderr_capture)
     assert state.pre_result_silence_killed is True
+@pytest.mark.anyio
+async def test_592_startup_stall_without_first_event_is_actionable(monkeypatch) -> None:
+    """A spawned Claude process with no first event gets a startup diagnosis."""
+    from untether.runner import JsonlStreamState
+
+    runner = _silence_watchdog_runner()
+    state = ClaudeStreamState()
+    stream = JsonlStreamState(expected_session=None)
+    proc = _FakeProc(pid=72428, returncode=None)
+    killed_signals: list[int] = []
+
+    def kill(_pgid: int, sig: int) -> None:
+        killed_signals.append(sig)
+        proc.returncode = -15
+
+    monkeypatch.setattr("os.killpg", kill, raising=False)
+    monkeypatch.setattr("untether.utils.subprocess.find_descendants", lambda pid: [])
+    logger = _RecordingLogger()
+    reader_done = anyio.Event()
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(
+            runner._post_result_idle_watchdog,
+            state,
+            object(),
+            reader_done,
+            logger,
+            0.2,
+            proc,
+            stream,
+            0.0,
+            0.15,
+        )
+        with anyio.move_on_after(3.0):
+            while signal.SIGTERM not in killed_signals:
+                await anyio.sleep(0.02)
+        tg.cancel_scope.cancel()
+
+    assert signal.SIGTERM in killed_signals
+    startup = [
+        kwargs
+        for _level, event, kwargs in logger.records
+        if event == "claude.startup_stall.detected"
+    ]
+    assert startup
+    assert startup[0]["duration_s"] >= 0
+    assert startup[0]["stdout_bytes"] == 0
+
+
+@pytest.mark.anyio
+async def test_592_startup_watchdog_preserves_recent_stdout_activity(monkeypatch) -> None:
+    """Recent stdout activity is not mistaken for a startup stall."""
+    from untether.runner import JsonlStreamState
+
+    runner = _silence_watchdog_runner()
+    state = ClaudeStreamState()
+    stream = JsonlStreamState(expected_session=None)
+    stream.last_stdout_at = time.monotonic()
+    proc = _FakeProc(pid=72429, returncode=None)
+    killed_signals: list[int] = []
+    monkeypatch.setattr(
+        "os.killpg", lambda _pgid, sig: killed_signals.append(sig), raising=False
+    )
+    result = await runner._maybe_cancel_pre_result_silence(
+        state=state,
+        stream=stream,
+        proc=proc,
+        run_logger=_RecordingLogger(),
+        silence_timeout_s=0.15,
+        started_at=time.monotonic() - 1.0,
+    )
+    assert result is False
+    assert killed_signals == []
 
 
 @pytest.mark.anyio
