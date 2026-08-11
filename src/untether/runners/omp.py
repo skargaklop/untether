@@ -122,6 +122,17 @@ class OmpRunner(HandoffCompactMixin, PiRunner):
     def command(self) -> str:
         return "omp"
 
+    def _final_prompt(self, prompt: str) -> str:
+        run_options = get_run_options()
+        plan, goal = run_modes(run_options)
+        if goal is not None:
+            body = prompt.strip()
+            note = f"(autonomous goal — work until: {goal})"
+            return f"{note}\n\n{body}" if body else note
+        if plan and self.plan_mode == "soft":
+            return effective_prompt(prompt, soft_plan=True, options=run_options)
+        return prompt
+
     def build_args(
         self,
         prompt: str,
@@ -129,14 +140,9 @@ class OmpRunner(HandoffCompactMixin, PiRunner):
         *,
         state: PiStreamState,
     ) -> list[str]:
+        self._final_prompt(prompt)
         run_options = get_run_options()
-        plan, goal = run_modes(run_options)
-        if goal is not None:
-            body = prompt.strip()
-            note = f"(autonomous goal — work until: {goal})"
-            prompt = f"{note}\n\n{body}" if body else note
-        elif plan and self.plan_mode == "soft":
-            prompt = effective_prompt(prompt, soft_plan=True, options=run_options)
+        plan, _goal = run_modes(run_options)
         args: list[str] = [*self.extra_args, "--print", "--mode", "json"]
         if self.provider:
             args.extend(["--provider", self.provider])
@@ -157,8 +163,18 @@ class OmpRunner(HandoffCompactMixin, PiRunner):
                 for attachment in run_options.attachments
                 if attachment.kind == "image" and attachment.rel_path
             )
-        args.append(self.sanitize_prompt(prompt))
+        args.append("-p")
         return args
+
+    def stdin_payload(
+        self,
+        prompt: str,
+        resume: ResumeToken | None,
+        *,
+        state: PiStreamState,
+    ) -> bytes:
+        _ = state
+        return (self._final_prompt(prompt) + "\n").encode("utf-8")
 
     def new_state(self, prompt: str, resume: ResumeToken | None) -> PiStreamState:
         if resume is not None:

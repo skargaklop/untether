@@ -112,6 +112,96 @@ class TestOmpResumeParsing:
 
     def test_engine_constant(self) -> None:
         assert ENGINE == "omp"
+def test_omp_build_args_excludes_prompt() -> None:
+    from untether.runners.omp import OmpRunner
+
+    runner = OmpRunner(extra_args=[], model=None, provider=None)
+    prompt = "ordinary\nmultiline — prompt"
+    args = runner.build_args(prompt, None, state=runner.new_state(prompt, None))
+
+    assert prompt not in args
+    assert all(prompt not in arg for arg in args)
+
+
+def test_omp_stdin_payload_is_utf8_newline_terminated_including_empty() -> None:
+    from untether.runners.omp import OmpRunner
+
+    runner = OmpRunner(extra_args=[], model=None, provider=None)
+    state = runner.new_state("", None)
+
+    assert runner.stdin_payload("héllo\n世界", None, state=state) == "héllo\n世界\n".encode()
+    assert runner.stdin_payload("", None, state=state) == b"\n"
+
+def test_omp_goal_prompt_transformation_is_stdin_only() -> None:
+    from unittest.mock import patch
+
+    from untether.runners.omp import OmpRunner
+
+    runner = OmpRunner(extra_args=[], model=None, provider=None)
+    prompt = "do the work"
+    state = runner.new_state(prompt, None)
+    with patch("untether.runners.omp.run_modes", return_value=(False, "ship it")):
+        args = runner.build_args(prompt, None, state=state)
+        payload = runner.stdin_payload(prompt, None, state=state)
+
+    transformed = "(autonomous goal — work until: ship it)\n\ndo the work"
+    assert all(transformed not in arg for arg in args)
+    assert payload == (transformed + "\n").encode()
+
+
+def test_omp_soft_plan_prompt_transformation_is_stdin_only() -> None:
+    from unittest.mock import patch
+
+    from untether.runners.omp import OmpRunner
+
+    runner = OmpRunner(extra_args=[], model=None, provider=None, plan_mode="soft")
+    prompt = "make a plan"
+    state = runner.new_state(prompt, None)
+    transformed = "[soft-plan] make a plan"
+    with (
+        patch("untether.runners.omp.run_modes", return_value=(True, None)),
+        patch("untether.runners.omp.effective_prompt", return_value=transformed),
+    ):
+        args = runner.build_args(prompt, None, state=state)
+        payload = runner.stdin_payload(prompt, None, state=state)
+
+    assert all(transformed not in arg for arg in args)
+    assert payload == (transformed + "\n").encode()
+
+
+def test_omp_large_prompt_is_absent_from_argv_and_sent_verbatim_to_stdin() -> None:
+    from untether.runners.omp import OmpRunner
+
+    runner = OmpRunner(extra_args=[], model=None, provider=None)
+    prompt = "x" * 200_000 + "\n終"
+    state = runner.new_state(prompt, None)
+
+    args = runner.build_args(prompt, None, state=state)
+    payload = runner.stdin_payload(prompt, None, state=state)
+
+    assert all(prompt not in arg for arg in args)
+    assert payload == (prompt + "\n").encode()
+
+def test_omp_build_args_uses_stdin_prompt_mode_and_preserves_flags() -> None:
+    from untether.runners.omp import OmpRunner
+
+    runner = OmpRunner(
+        extra_args=["--extra"], model="model-x", provider="provider-y"
+    )
+    prompt = "prompt body"
+    args = runner.build_args(prompt, None, state=runner.new_state(prompt, None))
+
+    assert args == [
+        "--extra",
+        "--print",
+        "--mode",
+        "json",
+        "--provider",
+        "provider-y",
+        "--model",
+        "model-x",
+        "-p",
+    ]
 
 def test_omp_bare_503_remains_shared_transient_classifier_input() -> None:
     from untether.utils.transient_failures import classify_transient_failure
