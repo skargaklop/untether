@@ -180,11 +180,10 @@ class OmpRunner(HandoffCompactMixin, PiRunner):
 
     def new_state(self, prompt: str, resume: ResumeToken | None) -> PiStreamState:
         if resume is not None:
-            return PiStreamState(resume=resume, shorten_session_id=False)
+            return PiStreamState(resume=resume)
         return PiStreamState(
             resume=ResumeToken(engine=ENGINE, value="pending.jsonl"),
             allow_id_promotion=True,
-            shorten_session_id=False,
         )
 
     def translate(

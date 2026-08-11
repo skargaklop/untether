@@ -161,7 +161,7 @@ def test_session_id_promotion_from_stdout() -> None:
         state=state,
     )
     started = next(evt for evt in events if isinstance(evt, StartedEvent))
-    assert started.resume.value == "ccd569e0"
+    assert started.resume.value == "ccd569e0-4e1b-4c7d-a981-637ed4107310"
 
 
 def test_extract_resume_keeps_session_path(tmp_path: Path) -> None:
@@ -323,7 +323,7 @@ def test_continue_session_id_promoted_from_header() -> None:
         state=state,
     )
     started = next(e for e in events if isinstance(e, StartedEvent))
-    assert started.resume.value == "ccd569e0"
+    assert started.resume.value == "ccd569e0-4e1b-4c7d-a981-637ed4107310"
     assert started.resume.value != ""
 
 

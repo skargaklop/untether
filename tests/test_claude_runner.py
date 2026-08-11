@@ -2549,7 +2549,7 @@ def test_extract_error_includes_diagnostic_context() -> None:
     result = _extract_error(event, resumed=True)
     assert result is not None
     assert "error_during_execution" in result
-    assert "abcdef12" in result
+    assert "abcdef1234567890" in result
     assert "resumed" in result
     assert "turns: 2" in result
     assert "$0.15" in result

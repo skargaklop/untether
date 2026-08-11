@@ -313,13 +313,16 @@ def _session_label(
     found_session: ResumeToken | None,
     resume: ResumeToken | None,
 ) -> str | None:
-    """Short session ID (8 chars) with resumed/new indicator."""
+    """Full session id with resumed/new indicator.
+
+    Nothing is trimmed — the operator needs the complete id to resume,
+    debug, and cross-reference across engines.
+    """
     token = found_session or resume
     if token is None:
         return None
-    sid = token.value[:8]
     status = "resumed" if resume is not None else "new"
-    return f"{sid} · {status}"
+    return f"{token.value} · {status}"
 
 
 class BaseRunner(SessionLockMixin):

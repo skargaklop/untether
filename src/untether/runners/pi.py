@@ -47,7 +47,7 @@ ENGINE: EngineId = "pi"
 
 _RESUME_RE = re.compile(r"(?im)^\s*`?pi\s+--session\s+(?P<token>.+?)`?\s*$")
 
-_SESSION_ID_PREFIX_LEN = 8
+_SESSION_ID_PREFIX_LEN = 8  # legacy: kept for log compatibility, unused for display
 
 
 def _load_env_extras() -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -92,7 +92,6 @@ class PiStreamState:
     # meta. Prevents us from re-emitting supplementary StartedEvents on every
     # subsequent message_end when the default-config model path is in use.
     jsonl_model_emitted: bool = False
-    shorten_session_id: bool = True
 
 
 def _looks_like_session_path(token: str) -> bool:
@@ -105,17 +104,13 @@ def _looks_like_session_path(token: str) -> bool:
     return token.startswith("~")
 
 
-def _short_session_id(session_id: str) -> str:
-    if not session_id:
-        return session_id
-    if "-" in session_id:
-        return session_id.split("-", 1)[0]
-    if len(session_id) > _SESSION_ID_PREFIX_LEN:
-        return session_id[:_SESSION_ID_PREFIX_LEN]
-    return session_id
-
-
 def _maybe_promote_session_id(state: PiStreamState, session_id: str | None) -> None:
+    """Promote the real session id from the Pi stream into the resume token.
+
+    The full session id is stored verbatim — nothing is trimmed — so the
+    resume line and every user-visible message show the complete id and the
+    token remains usable for an exact ``--session <id>`` resume.
+    """
     if not session_id:
         return
     if state.started:
@@ -127,8 +122,7 @@ def _maybe_promote_session_id(state: PiStreamState, session_id: str | None) -> N
     if state.resume.value and not _looks_like_session_path(state.resume.value):
         return
     old_value = state.resume.value
-    value = _short_session_id(session_id) if state.shorten_session_id else session_id
-    state.resume = ResumeToken(engine=ENGINE, value=value)
+    state.resume = ResumeToken(engine=ENGINE, value=session_id)
     state.allow_id_promotion = False
     logger.info("pi.session.promoted", old=old_value, new=state.resume.value)
 

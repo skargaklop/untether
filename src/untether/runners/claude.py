@@ -1483,7 +1483,7 @@ def _extract_error(
 
     # Second line: diagnostic context
     parts: list[str] = []
-    sid = event.session_id[:8] if event.session_id else None
+    sid = event.session_id if event.session_id else None
     if sid:
         parts.append(f"session: {sid}")
     parts.append("resumed" if resumed else "new")
