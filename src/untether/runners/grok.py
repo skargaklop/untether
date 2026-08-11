@@ -15,7 +15,12 @@ from ..config import ConfigError
 from ..events import EventFactory
 from ..logging import get_logger
 from ..model import ActionKind, EngineId, ResumeToken, UntetherEvent
-from ..runner import JsonlSubprocessRunner, ResumeTokenMixin, Runner
+from ..runner import (
+    JsonlSubprocessRunner,
+    ResumeTokenMixin,
+    Runner,
+    _stderr_excerpt,
+)
 from ..schemas import grok as grok_schema
 from ._compact_mixin import HandoffCompactMixin
 from .modes import effective_prompt, run_modes
@@ -598,19 +603,15 @@ class GrokRunner(HandoffCompactMixin, ResumeTokenMixin, JsonlSubprocessRunner):
         stderr_lines: list[str] | None = None,
     ) -> list[UntetherEvent]:
         message = f"grok failed (rc={rc})."
+        excerpt = _stderr_excerpt(stderr_lines)
+        if excerpt:
+            message = f"{message}\n{excerpt}"
         resume_for_completed = found_session or resume or state.resume
         out: list[UntetherEvent] = []
-        if not state.started:
-            out.append(
-                state.factory.started(
-                    resume_for_completed or state.resume,
-                    title=self.session_title,
-                )
-            )
-            state.started = True
         answer = _flush_text_segments(state, out)
         _flush_pending_thought(state, out)
-        out.append(self.note_event(message, state=state, ok=False))
+        if state.started or answer:
+            out.append(self.note_event(message, state=state, ok=False))
         out.append(
             state.factory.completed_error(
                 error=message,

@@ -112,3 +112,12 @@ class TestOmpResumeParsing:
 
     def test_engine_constant(self) -> None:
         assert ENGINE == "omp"
+
+def test_omp_bare_503_remains_shared_transient_classifier_input() -> None:
+    from untether.utils.transient_failures import classify_transient_failure
+
+    failure = classify_transient_failure(
+        "503 Chat admission capacity is temporarily unavailable."
+    )
+    assert failure is not None
+    assert failure.http_status == 503
