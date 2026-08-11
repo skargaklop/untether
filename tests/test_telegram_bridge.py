@@ -2449,10 +2449,12 @@ async def test_run_main_loop_voice_transcript_preserves_directive(
         reply,
         base_url: str | None = None,
         api_key: str | None = None,
+        provider: str = "openai",
         url_allowlist=(),
         language: str | None = None,
+        **_kwargs,
     ) -> str:
-        _ = bot, msg, enabled, model, max_bytes, reply, base_url, api_key
+        _ = bot, msg, enabled, model, max_bytes, reply, base_url, api_key, provider
         _ = url_allowlist, language
         return "/codex do thing"
 
@@ -2524,10 +2526,12 @@ async def test_run_main_loop_voice_shows_transcription_echo(
         reply,
         base_url: str | None = None,
         api_key: str | None = None,
+        provider: str = "openai",
         url_allowlist=(),
         language: str | None = None,
+        **_kwargs,
     ) -> str:
-        _ = bot, msg, enabled, model, max_bytes, reply, base_url, api_key
+        _ = bot, msg, enabled, model, max_bytes, reply, base_url, api_key, provider
         _ = url_allowlist, language
         return "hello world"
 
@@ -2599,10 +2603,12 @@ async def test_run_main_loop_voice_hides_transcription_when_disabled(
         reply,
         base_url: str | None = None,
         api_key: str | None = None,
+        provider: str = "openai",
         url_allowlist=(),
         language: str | None = None,
+        **_kwargs,
     ) -> str:
-        _ = bot, msg, enabled, model, max_bytes, reply, base_url, api_key
+        _ = bot, msg, enabled, model, max_bytes, reply, base_url, api_key, provider
         _ = url_allowlist, language
         return "hello world"
 

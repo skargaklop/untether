@@ -27,17 +27,17 @@ Returns `{"status": "ok", "webhooks": N}` where N is the number of configured we
 
 ### Health snapshot
 
-`/health` consolidates RAM, the Untether process, triggers, and today's API cost into a single message — handy as a one-shot diagnostic when a chat suddenly stops responding.
+`/health` immediately replies with an HTML service summary, then edits that same message after bounded, independent process, system, and usage collectors finish. It includes active and queued run counts plus trigger state; the detailed result always retains Service, Process, System, Usage, and Diagnostics sections.
 
-!!! untether "Untether"
-    💚 health
-    🧠 RAM: 18.2 / 32.0 GB · swap: 0 / 4.0 GB
-    🐍 untether: pid 1543657 · 70 MB RSS · 13 FDs · 1 child
-    ⏰ triggers: 2 crons, 1 webhook
-    💰 today: $1.42
-    ⏱ uptime: 3d 14h 22m
+Any unavailable or timed-out collector is marked in its own section without preventing the other diagnostics from rendering. This is expected on Windows for Linux `/proc` system data. If the initial Telegram send or detail edit fails, Untether does not emit a second error message.
 
-Each section degrades gracefully when its source is unavailable (non-Linux, no `trigger_manager`, no cost tracker). `/health` is project-aware — `children` reflects the current Untether process tree (Claude Code subprocesses, MCP servers, workerd grandchildren under #275-style cleanup). When triggers are disabled in config, the line reads `triggers: disabled`. When the master pause toggle ([#294](https://github.com/littlebearapps/untether/issues/294)) is engaged, `/health` reports `{"status":"paused","paused":true}` so external monitors can distinguish "paused but up" from healthy.
+The webhook health endpoint remains available for external monitoring:
+
+```
+GET http://127.0.0.1:9876/health
+```
+
+It returns `{"status": "ok", "webhooks": N}` when the webhook service is enabled.
 
 For Claude subscription diagnostics, use `/usage debug` ([#410](https://github.com/littlebearapps/untether/issues/410)) — it appends a `🔧 debug` block to the standard `/usage` output showing last-fetch wall time and freshness, last-error class+message, OAuth token expiry, and the cumulative `claude_usage.schema_mismatch` counter. See [Subscription usage](subscription-usage.md#debug-page-usage-debug).
 

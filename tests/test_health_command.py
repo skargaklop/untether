@@ -3,23 +3,45 @@
 from __future__ import annotations
 
 import sys
+import threading
+from dataclasses import dataclass, field
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import anyio
 import pytest
 
-from untether.commands import CommandContext, CommandResult
+from untether.commands import CommandContext, RuntimeStatusSnapshot
+from untether.telegram.commands import health
 from untether.telegram.commands.health import (
     HealthCommand,
+    SystemSnapshot,
+    UsageSnapshot,
     _format_mb,
     _read_meminfo_fields,
     render_health_snapshot,
 )
-from untether.transport import MessageRef
+from untether.transport import MessageRef, RenderedMessage
+
+
+@dataclass
+class _Executor:
+    sent: list[tuple[RenderedMessage | str, MessageRef | None, bool]] = field(
+        default_factory=list
+    )
+    edits: list[tuple[MessageRef, RenderedMessage | str]] = field(default_factory=list)
+
+    async def send(self, message, *, reply_to=None, notify=True):
+        self.sent.append((message, reply_to, notify))
+        return MessageRef(channel_id=123, message_id=2)
+
+    async def edit(self, ref, message):
+        self.edits.append((ref, message))
+        return ref
 
 
 def _make_ctx(
-    *, trigger_manager=None, config_path: Path | None = None
+    *, trigger_manager=None, config_path: Path | None = None, executor=None
 ) -> CommandContext:
     return CommandContext(
         command="health",
@@ -32,8 +54,9 @@ def _make_ctx(
         config_path=config_path,
         plugin_config={},
         runtime=MagicMock(),
-        executor=MagicMock(),
+        executor=executor or _Executor(),
         trigger_manager=trigger_manager,
+        runtime_status=RuntimeStatusSnapshot(2, 3, True, 1, 0),
     )
 
 
@@ -42,13 +65,127 @@ def test_command_id() -> None:
 
 
 @pytest.mark.anyio
-async def test_handle_returns_html_command_result(tmp_path) -> None:
-    cmd = HealthCommand()
-    result = await cmd.handle(_make_ctx(config_path=tmp_path / "untether.toml"))
-    assert isinstance(result, CommandResult)
-    assert result.parse_mode == "HTML"
-    assert result.notify is False
-    assert "Untether health" in result.text
+async def test_handle_sends_initial_summary_then_edits_same_message(tmp_path) -> None:
+    ctx = _make_ctx(config_path=tmp_path / "untether.toml")
+    result = await HealthCommand().handle(ctx)
+
+    assert result is None
+    executor = ctx.executor
+    assert len(executor.sent) == 1
+    initial, reply_to, notify = executor.sent[0]
+    assert isinstance(initial, RenderedMessage)
+    assert initial.extra == {"parse_mode": "HTML"}
+    assert reply_to == ctx.message
+    assert notify is False
+    assert "collecting diagnostics" in initial.text
+    assert executor.edits and executor.edits[0][0].message_id == 2
+    assert "<b>Service</b>" in executor.edits[0][1].text
+    assert "active: 2" in executor.edits[0][1].text
+    assert "queued: 3" in executor.edits[0][1].text
+
+
+def test_initial_message_includes_uptime(tmp_path) -> None:
+    initial = health._initial_message(_make_ctx(config_path=tmp_path / "untether.toml"))
+
+    assert "uptime:" in initial.text
+
+
+@pytest.mark.anyio
+async def test_handle_keeps_send_failure_from_triggering_second_reply(tmp_path) -> None:
+    class FailingExecutor(_Executor):
+        async def send(self, message, *, reply_to=None, notify=True):
+            self.sent.append((message, reply_to, notify))
+            raise OSError("Telegram unavailable")
+
+    executor = FailingExecutor()
+    ctx = _make_ctx(config_path=tmp_path / "untether.toml", executor=executor)
+
+    assert await HealthCommand().handle(ctx) is None
+    assert len(executor.sent) == 1
+    assert executor.edits == []
+
+
+@pytest.mark.anyio
+async def test_handle_isolates_collector_failure(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(
+        health,
+        "_collect_system",
+        lambda: SystemSnapshot(status="ok", text="RAM: healthy"),
+    )
+    monkeypatch.setattr(
+        health,
+        "_collect_process",
+        lambda: (_ for _ in ()).throw(OSError("unsupported")),
+    )
+
+    monkeypatch.setattr(
+        health,
+        "_collect_usage",
+        lambda _path: UsageSnapshot(status="ok", text="today's API cost: $1.00"),
+    )
+
+    ctx = _make_ctx(config_path=tmp_path / "untether.toml")
+    await HealthCommand().handle(ctx)
+
+    detail = ctx.executor.edits[0][1]
+    assert "RAM: healthy" in detail.text
+    assert "<b>Process</b>\n• unavailable" in detail.text
+    assert "today's API cost: $1.00" in detail.text
+    assert "process: unavailable" in detail.text
+    assert "system: ok" in detail.text
+    assert "usage: ok" in detail.text
+
+
+@pytest.mark.anyio
+async def test_handle_emits_sanitized_health_latency_events(tmp_path) -> None:
+    from structlog.testing import capture_logs
+
+    ctx = _make_ctx(config_path=tmp_path / "untether.toml")
+    with capture_logs() as logs:
+        await HealthCommand().handle(ctx)
+
+    events = {record["event"] for record in logs}
+    assert {
+        "health.initial_send.completed",
+        "health.collector.completed",
+        "health.detail_collection.completed",
+        "health.detail_edit.completed",
+    } <= events
+    assert all(
+        "chat_id" not in record and "message_id" not in record for record in logs
+    )
+
+
+@pytest.mark.anyio
+async def test_bounded_collect_propagates_cancellation() -> None:
+    started = threading.Event()
+    release = threading.Event()
+    completed = False
+
+    def blocking_collector() -> SystemSnapshot:
+        started.set()
+        release.wait()
+        return SystemSnapshot(status="ok", text="finished")
+
+    async def collect() -> None:
+        nonlocal completed
+        await health._bounded_collect(
+            blocking_collector,
+            SystemSnapshot(status="unavailable", text="unavailable"),
+            name="system",
+        )
+        completed = True
+
+    try:
+        async with anyio.create_task_group() as group:
+            group.start_soon(collect)
+            with anyio.fail_after(1):
+                await anyio.to_thread.run_sync(started.wait)
+            group.cancel_scope.cancel()
+    finally:
+        release.set()
+
+    assert completed is False
 
 
 def test_render_includes_system_and_triggers(tmp_path) -> None:
@@ -56,6 +193,25 @@ def test_render_includes_system_and_triggers(tmp_path) -> None:
     assert "Untether health" in snapshot
     # Trigger line always present (even if "none configured" or "disabled")
     assert "triggers" in snapshot
+
+
+def test_system_collector_includes_usage_and_swap(monkeypatch) -> None:
+    monkeypatch.setattr(
+        health,
+        "_read_meminfo_fields",
+        lambda _fields: {
+            "MemTotal": 4 * 1024 * 1024,
+            "MemAvailable": 2 * 1024 * 1024,
+            "SwapTotal": 1024 * 1024,
+            "SwapFree": 512 * 1024,
+        },
+    )
+
+    snapshot = health._collect_system()
+
+    assert snapshot.status == "ok"
+    assert "50%" in snapshot.text
+    assert "Swap: 512 MB / 1.0 GB" in snapshot.text
 
 
 def test_render_handles_no_trigger_manager(tmp_path) -> None:

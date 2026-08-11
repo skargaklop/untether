@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import anyio
 
-from ...commands import CommandContext, get_command
+from ...commands import CommandContext, RuntimeStatusSnapshot, get_command
 from ...config import ConfigError
 from ...logging import get_logger
 from ...model import EngineId, ResumeToken
@@ -36,6 +36,27 @@ def _parse_callback_data(data: str) -> tuple[str, str]:
         logger.warning("callback.parse_failed", data=data[:64])
     args_text = parts[1] if len(parts) > 1 else ""
     return command_id, args_text
+
+def _runtime_status(
+    running_tasks: RunningTasks,
+    scheduler: ThreadScheduler,
+    trigger_manager: object | None,
+) -> RuntimeStatusSnapshot:
+    queued_count = getattr(scheduler, "queued_count", None)
+    queued = queued_count() if callable(queued_count) else 0
+    if trigger_manager is None:
+        return RuntimeStatusSnapshot(len(running_tasks), queued, False, 0, 0)
+    try:
+        return RuntimeStatusSnapshot(
+            len(running_tasks),
+            queued,
+            True,
+            len(trigger_manager.cron_ids()),
+            len(trigger_manager.webhook_ids()),
+        )
+    except Exception:  # noqa: BLE001 - status remains available without trigger counts
+        return RuntimeStatusSnapshot(len(running_tasks), queued, True, None, None)
+
 
 
 async def _dispatch_command(
@@ -85,6 +106,7 @@ async def _dispatch_command(
         sender_id=msg.sender_id,
         raw=msg.raw,
     )
+    dispatch_start = time.monotonic()
     logger.info("command.dispatch", command=command_id, chat_id=chat_id)
     try:
         backend = get_command(command_id, allowlist=allowlist, required=False)
@@ -102,6 +124,11 @@ async def _dispatch_command(
             "command.unknown_command",
             command=command_id,
             chat_id=chat_id,
+        )
+        await executor.send(
+            "error: command unavailable",
+            reply_to=message_ref,
+            notify=True,
         )
         return
     try:
@@ -127,6 +154,8 @@ async def _dispatch_command(
         executor=executor,
         trigger_manager=cfg.trigger_manager,
         default_chat_id=cfg.chat_id,
+        runtime_status=_runtime_status(running_tasks, scheduler, cfg.trigger_manager),
+        dispatch_started_at=dispatch_start,
     )
     try:
         result = await backend.handle(ctx)
@@ -307,6 +336,8 @@ async def _dispatch_callback(
             executor=executor,
             trigger_manager=cfg.trigger_manager,
             default_chat_id=cfg.chat_id,
+            runtime_status=_runtime_status(running_tasks, scheduler, cfg.trigger_manager),
+            dispatch_started_at=dispatch_start,
         )
         try:
             result = await backend.handle(ctx)

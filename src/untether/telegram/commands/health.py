@@ -5,9 +5,16 @@ from __future__ import annotations
 import os
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
-from ...commands import CommandBackend, CommandContext, CommandResult
+import anyio
+
+from ...commands import CommandBackend, CommandContext
+from ...logging import get_logger
+from ...transport import RenderedMessage
+
+logger = get_logger(__name__)
 
 
 def _read_meminfo_fields(fields: tuple[str, ...]) -> dict[str, int]:
@@ -161,18 +168,214 @@ def render_health_snapshot(ctx: CommandContext) -> str:
     return "\n".join(lines)
 
 
+@dataclass(frozen=True, slots=True)
+class SystemSnapshot:
+    status: str
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class ProcessSnapshot:
+    status: str
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class UsageSnapshot:
+    status: str
+    text: str
+
+
+def _collect_system() -> SystemSnapshot:
+    mem = _read_meminfo_fields(("MemTotal", "MemAvailable", "SwapTotal", "SwapFree"))
+    if not mem:
+        return SystemSnapshot("unavailable", "RAM: unavailable")
+    total, available = mem.get("MemTotal", 0), mem.get("MemAvailable", 0)
+    used = max(0, total - available)
+    swap_total, swap_free = mem.get("SwapTotal", 0), mem.get("SwapFree", 0)
+    text = (
+        f"RAM: {_format_mb(used)} used · {_format_mb(available)} available "
+        f"({100 * used // total if total else 0}%)"
+    )
+    if swap_total:
+        text += f" · Swap: {_format_mb(max(0, swap_total - swap_free))} / {_format_mb(swap_total)}"
+    return SystemSnapshot("ok", text)
+
+
+def _collect_process() -> ProcessSnapshot:
+    text = _self_diag_line()
+    return (
+        ProcessSnapshot("ok", text)
+        if text
+        else ProcessSnapshot("unavailable", "unavailable")
+    )
+
+
+def _collect_usage(config_path: Path | None) -> UsageSnapshot:
+    text = _today_cost_line(config_path)
+    return (
+        UsageSnapshot("ok", text)
+        if text
+        else UsageSnapshot("unavailable", "unavailable")
+    )
+
+
+async def _bounded_collect(collector, unavailable, *, name: str):
+    started_at = time.monotonic()
+    try:
+        with anyio.move_on_after(1) as timeout_scope:
+            result = await anyio.to_thread.run_sync(  # ty: ignore[unresolved-attribute]
+                collector, abandon_on_cancel=True
+            )
+        if timeout_scope.cancel_called:
+            result = type(unavailable)("timed out", "timed out")
+        logger.info(
+            "health.collector.completed",
+            collector=name,
+            status=result.status,
+            elapsed_ms=round((time.monotonic() - started_at) * 1000),
+        )
+        return result
+    except Exception:  # noqa: BLE001 - collectors independently degrade
+        logger.info(
+            "health.collector.completed",
+            collector=name,
+            status=unavailable.status,
+            elapsed_ms=round((time.monotonic() - started_at) * 1000),
+        )
+        return unavailable
+
+
+async def _collect_details(
+    ctx: CommandContext,
+) -> tuple[SystemSnapshot, ProcessSnapshot, UsageSnapshot]:
+    system = SystemSnapshot("unavailable", "RAM: unavailable")
+    process = ProcessSnapshot("unavailable", "unavailable")
+    usage = UsageSnapshot("unavailable", "unavailable")
+
+    async def collect_system() -> None:
+        nonlocal system
+        system = await _bounded_collect(_collect_system, system, name="system")
+
+    async def collect_process() -> None:
+        nonlocal process
+        process = await _bounded_collect(_collect_process, process, name="process")
+
+    async def collect_usage() -> None:
+        nonlocal usage
+        usage = await _bounded_collect(
+            lambda: _collect_usage(ctx.config_path), usage, name="usage"
+        )
+
+    with anyio.move_on_after(2):
+        async with anyio.create_task_group() as group:
+            group.start_soon(collect_system)
+            group.start_soon(collect_process)
+            group.start_soon(collect_usage)
+    return system, process, usage
+
+
+def _uptime() -> str:
+    from .ping import _STARTED_AT, _format_uptime
+
+    return _format_uptime(max(0.0, time.monotonic() - _STARTED_AT))
+
+
+def _status(ctx: CommandContext) -> tuple[int, int, str]:
+    snapshot = ctx.runtime_status
+    if snapshot is None:
+        return 0, 0, "unavailable"
+    triggers = "enabled" if snapshot.triggers_enabled else "disabled"
+    if snapshot.cron_count is not None and snapshot.webhook_count is not None:
+        triggers += f" ({snapshot.cron_count} cron, {snapshot.webhook_count} webhook)"
+    return snapshot.active_runs, snapshot.queued_jobs, triggers
+
+
+def _initial_message(ctx: CommandContext) -> RenderedMessage:
+    active, queued, triggers = _status(ctx)
+    return RenderedMessage(
+        text=(
+            "🏥 <b>Untether health</b>\n"
+            "<b>Service</b>\n"
+            "• service: alive\n"
+            f"• uptime: {_uptime()}\n"
+            f"• active: {active}\n• queued: {queued}\n• triggers: {triggers}\n"
+            "• collecting diagnostics…"
+        ),
+        extra={"parse_mode": "HTML"},
+    )
+
+
+def _detailed_message(
+    ctx: CommandContext,
+    system: SystemSnapshot,
+    process: ProcessSnapshot,
+    usage: UsageSnapshot,
+) -> RenderedMessage:
+    active, queued, triggers = _status(ctx)
+    return RenderedMessage(
+        text="\n".join(
+            (
+                "🏥 <b>Untether health</b>",
+                "<b>Service</b>",
+                f"• service: alive\n• uptime: {_uptime()}\n• active: {active}\n• queued: {queued}\n• triggers: {triggers}",
+                "<b>Process</b>",
+                f"• {process.text}",
+                "<b>System</b>",
+                f"• {system.text}",
+                "<b>Usage</b>",
+                f"• {usage.text}",
+                "<b>Diagnostics</b>",
+                f"• process: {process.status}\n• system: {system.status}\n• usage: {usage.status}",
+            )
+        ),
+        extra={"parse_mode": "HTML"},
+    )
+
+
 class HealthCommand:
-    """Command backend for /health — compact system + state snapshot."""
+    """Command backend for bounded progressive health diagnostics."""
 
     id = "health"
-    description = "Show Untether health snapshot (RAM, triggers, cost, uptime)"
+    description = "Show Untether health snapshot"
 
-    async def handle(self, ctx: CommandContext) -> CommandResult:
-        return CommandResult(
-            text=render_health_snapshot(ctx),
-            notify=False,
-            parse_mode="HTML",
+    async def handle(self, ctx: CommandContext) -> None:
+        started_at = time.monotonic()
+        try:
+            ref = await ctx.executor.send(
+                _initial_message(ctx), reply_to=ctx.message, notify=False
+            )
+        except Exception as exc:  # noqa: BLE001 - command delivery boundary
+            logger.warning(
+                "health.initial_send.failed", error_type=exc.__class__.__name__
+            )
+            return
+        if ref is None:
+            logger.warning("health.initial_send.failed", error_type="no_message_ref")
+            return
+        logger.info(
+            "health.initial_send.completed",
+            elapsed_ms=round((time.monotonic() - started_at) * 1000),
         )
+
+        collection_started_at = time.monotonic()
+        system, process, usage = await _collect_details(ctx)
+        logger.info(
+            "health.detail_collection.completed",
+            elapsed_ms=round((time.monotonic() - collection_started_at) * 1000),
+            system_status=system.status,
+            process_status=process.status,
+            usage_status=usage.status,
+        )
+        try:
+            await ctx.executor.edit(ref, _detailed_message(ctx, system, process, usage))
+        except Exception:  # noqa: BLE001 - initial response remains visible
+            logger.warning("health.detail_edit.failed", error_type="edit_failed")
+        else:
+            logger.info(
+                "health.detail_edit.completed",
+                elapsed_ms=round((time.monotonic() - started_at) * 1000),
+            )
 
 
 BACKEND: CommandBackend = HealthCommand()

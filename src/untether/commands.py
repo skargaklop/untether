@@ -61,6 +61,15 @@ class CommandExecutor(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class RuntimeStatusSnapshot:
+    active_runs: int
+    queued_jobs: int
+    triggers_enabled: bool
+    cron_count: int | None
+    webhook_count: int | None
+
+
+@dataclass(frozen=True, slots=True)
 class CommandContext:
     command: str
     text: str
@@ -79,6 +88,8 @@ class CommandContext:
     # rc4 (#271): the default chat_id that unscoped triggers fall back to
     # (Telegram transport: cfg.chat_id).
     default_chat_id: int | None = None
+    runtime_status: RuntimeStatusSnapshot | None = None
+    dispatch_started_at: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

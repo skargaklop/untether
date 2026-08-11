@@ -69,10 +69,11 @@ Triggers (`triggers/`), cost tracking (`cost_tracker.py`), quarantine (`session_
 | Pi goal-list extension seeding | implemented | Pi runner tests cover fresh XML seeding, escaping, fallback, and plan precedence | runtime-unverified — installed extension probe unavailable |
 | CI hard type gate and 3-OS static matrix | implemented | `.github/workflows/ci.yml` enforces formatting, Ruff, and `ty check src tests` across Ubuntu, macOS, and Windows; fresh local Ruff/ty/lock checks pass with zero ty diagnostics | runtime-unverified — hosted macOS/Linux jobs await CI execution |
 | Live config/state/poller cutover | partial | restricted config/state backup created; `[logging]` absent; config loader, `untether doctor`, installed imports, Startup target, and state schema/mtime comparison verified | runtime-unverified — no poller was running; authorized Telegram and native-engine probes require external credentials/CLIs |
+| Installed `/health` command reliability | implemented | registry loads the `health` entry point; generic dispatch gives catalog misses a visible error; immutable command status plus bounded progressive diagnostic delivery are covered by `test_command_registry.py`, `test_health_command.py`, `test_scheduler_queue.py`, `test_telegram_bridge.py`, and `test_transport_runtime.py` | runtime-unverified — authorized Telegram smoke still requires credentials and a single owned poller |
 
 ## F. Verification snapshot
 
-- Focused migration validation passed: **529 passed, 15 skipped**; resolver fixtures passed **9** tests; Windows runner fixtures passed their focused suites.
+- Focused migration validation for installed health reliability: **151 passed, 2 skipped** across resolver, health, command-registry, scheduler, and Telegram bridge contracts.
 - Fresh Windows full suite: **3227 passed, 35 skipped**. Fresh static gates passed: Ruff formatting, Ruff lint, `ty check src tests` with zero diagnostics, and `uv lock --check`. Windows measures **78.26%** branch coverage, below 81%; the required 81% coverage gate remains Ubuntu/Python 3.14-only in CI, so its hosted result is runtime-unverified.
 - Documentation prebuild and clean Zensical site build passed. `uv build`, `twine check`, and `check-wheel-contents` passed. Bandit completed with only existing scoped `# nosec` findings; `pip-audit` found no known vulnerabilities.
 - A clean isolated wheel environment imported Untether, `untether.lockfile`, Telegram transport, and Codex, Claude, Pi, OMP, Grok, Agy, OpenCode, Gemini, and Amp runners.

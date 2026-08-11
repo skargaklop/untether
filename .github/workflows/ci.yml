@@ -221,9 +221,10 @@ jobs:
           uv venv /tmp/clean-env
           uv pip install --python /tmp/clean-env/bin/python dist/*.whl
 
-      - name: Smoke-test imports
+      - name: Smoke-test imports and command backends
         run: |
           /tmp/clean-env/bin/python -c "
+          from untether.commands import get_command, list_command_ids
           from untether.telegram.render import render_markdown
           from untether.runners.claude import BACKEND as claude_backend
           from untether.runners.codex import BACKEND as codex_backend
@@ -235,7 +236,11 @@ jobs:
           from untether.runners.grok import BACKEND as grok_backend
           from untether.runners.agy import BACKEND as agy_backend
           from untether.settings import load_settings
-          print('All imports OK')
+          command_ids = list_command_ids()
+          assert 'health' in command_ids
+          for command_id in command_ids:
+              assert get_command(command_id).id == command_id
+          print('All imports and command backends OK')
           "
 
   testpypi-publish:

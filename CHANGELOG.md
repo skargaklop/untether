@@ -2,12 +2,32 @@
 
 ## Unreleased
 
+## v0.35.5 (2026-08-11)
+
+### fixes
+
+- **windows:** publish the platform-safe lockfile implementation so installed Windows clients no longer import `fcntl` unconditionally. [#459]
+- **telegram:** load and dispatch the installed `/health` backend generically, expose catalog misses, and send an immediate health summary before bounded same-message diagnostic detail. [#348]
+
 ### changes
 
-- **telegram:** compact and handoff now use authorization-scoped five-minute confirmation cards, one-card lifecycle updates, safe cancellation, and transactional routing that changes a session only after its destination seed completes.
-- **directives:** add sticky `/plan` and `/subagent` preferences, dual-mode `/plan`/`/goal` classification, and native Claude/OpenCode `--agent` support while retaining one-shot skill data.
-- **runners:** apply lifecycle timeout/tree-cleanup settings to subprocess and ACP paths, distinguish JSONL timeouts from EOF, sanitize exhausted transient failures, and seed Pi goal-list sessions when the extension is installed.
-- **ci:** make formatting, Ruff, and zero-diagnostic `ty check src tests` mandatory on Ubuntu, macOS, and Windows; retain branch coverage as the Linux source of truth.
+- **telegram:** add configured Groq and local AVT voice transcription backends with hot reload, bounded subprocess output, and termination escalation. [#348]
+- **stats:** record statistics only for successfully delivered completed runs. [#348]
+
+### tests
+
+- **tests:** cover installed health command discovery, generic unavailable-command delivery, immutable health status, progressive HTML delivery, and `/pi` directive resolution. [#348]
+
+### docs
+
+- **docs:** document progressive `/health` behavior and reconcile the migration audit with deterministic health evidence. [#348]
+
+### changes
+
+- **telegram:** compact and handoff now use authorization-scoped five-minute confirmation cards, one-card lifecycle updates, safe cancellation, and transactional routing that changes a session only after its destination seed completes. [#348]
+- **directives:** add sticky `/plan` and `/subagent` preferences, dual-mode `/plan`/`/goal` classification, and native Claude/OpenCode `--agent` support while retaining one-shot skill data. [#348]
+- **runners:** apply lifecycle timeout/tree-cleanup settings to subprocess and ACP paths, distinguish JSONL timeouts from EOF, sanitize exhausted transient failures, and seed Pi goal-list sessions when the extension is installed. [#348]
+- **ci:** make formatting, Ruff, and zero-diagnostic `ty check src tests` mandatory on Ubuntu, macOS, and Windows; retain branch coverage as the Linux source of truth. [#348]
 
 ## v0.35.4 (2026-07-22)
 

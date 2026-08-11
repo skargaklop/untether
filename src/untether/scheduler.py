@@ -193,6 +193,9 @@ class ThreadScheduler:
 
     async def queue_depth(self, token: ResumeToken) -> int:
         return len(await self.list_queued_for_thread(token))
+    def queued_count(self) -> int:
+        """Return the current number of queued jobs without mutating scheduler state."""
+        return len(self._queued_by_progress)
 
     def queued_for_chat(self, chat_id: ChannelId) -> list[ThreadJob]:
         """Return queued jobs for a specific chat (sync, for cancel fallback)."""

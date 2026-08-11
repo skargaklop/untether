@@ -27,6 +27,15 @@ def _make_runtime(*, project_default_engine: str | None = None) -> TransportRunt
     return TransportRuntime(router=router, projects=projects)
 
 
+def test_resolve_message_extracts_pi_engine_directive() -> None:
+    runtime = _make_runtime()
+
+    resolved = runtime.resolve_message(text="/pi hello", reply_text=None)
+
+    assert resolved.prompt == "hello"
+    assert resolved.engine_override == "pi"
+
+
 def test_resolve_engine_uses_project_default() -> None:
     runtime = _make_runtime(project_default_engine="pi")
     engine = runtime.resolve_engine(
