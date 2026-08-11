@@ -209,14 +209,20 @@ class TestPiPlanMode:
     def test_pi_runner_init_defaults(self) -> None:
         from untether.runners.pi import PiRunner
 
-        r = PiRunner(extra_args=[], model=None, provider=None)
+        r = PiRunner(pi_cmd="pi", extra_args=[], model=None, provider=None)
         assert r.plan_mode_extension is False
         assert r._plan_warning_logged is False
 
     def test_pi_runner_plan_extension_param(self) -> None:
         from untether.runners.pi import PiRunner
 
-        r = PiRunner(extra_args=[], model=None, provider=None, plan_mode_extension=True)
+        r = PiRunner(
+            pi_cmd="pi",
+            extra_args=[],
+            model=None,
+            provider=None,
+            plan_mode_extension=True,
+        )
         assert r.plan_mode_extension is True
 
 

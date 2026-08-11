@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path, PureWindowsPath
 from typing import Any, cast
 from unittest.mock import patch
@@ -32,11 +33,7 @@ def _load_fixture(name: str) -> list[pi_schema.PiEvent]:
 
 
 def test_pi_resume_format_and_extract(tmp_path: Path) -> None:
-    runner = PiRunner(
-        extra_args=[],
-        model=None,
-        provider=None,
-    )
+    runner = PiRunner(pi_cmd="pi", extra_args=[], model=None, provider=None)
     session_path = tmp_path / "session.jsonl"
     token = ResumeToken(engine=ENGINE, value=str(session_path))
 
@@ -169,11 +166,7 @@ def test_session_id_promotion_from_stdout() -> None:
 
 def test_extract_resume_keeps_session_path(tmp_path: Path) -> None:
     session_path = tmp_path / "session.jsonl"
-    runner = PiRunner(
-        extra_args=[],
-        model=None,
-        provider=None,
-    )
+    runner = PiRunner(pi_cmd="pi", extra_args=[], model=None, provider=None)
     token = runner.extract_resume(f"pi --session {session_path}")
     assert token is not None
     assert token.value == str(session_path)
@@ -182,11 +175,7 @@ def test_extract_resume_keeps_session_path(tmp_path: Path) -> None:
 @pytest.mark.anyio
 async def test_run_keeps_resume_path(tmp_path: Path) -> None:
     session_path = tmp_path / "session.jsonl"
-    runner = PiRunner(
-        extra_args=[],
-        model=None,
-        provider=None,
-    )
+    runner = PiRunner(pi_cmd="pi", extra_args=[], model=None, provider=None)
     seen_resume: ResumeToken | None = None
 
     async def run_stub(_prompt: str, resume: ResumeToken | None):
@@ -209,11 +198,7 @@ async def test_run_keeps_resume_path(tmp_path: Path) -> None:
 
 @pytest.mark.anyio
 async def test_run_serializes_same_session() -> None:
-    runner = PiRunner(
-        extra_args=[],
-        model=None,
-        provider=None,
-    )
+    runner = PiRunner(pi_cmd="pi", extra_args=[], model=None, provider=None)
     gate = anyio.Event()
     in_flight = 0
     max_in_flight = 0
@@ -249,11 +234,7 @@ async def test_run_serializes_same_session() -> None:
 
 
 def test_session_path_prefers_run_base_dir(tmp_path: Path) -> None:
-    runner = PiRunner(
-        extra_args=[],
-        model=None,
-        provider=None,
-    )
+    runner = PiRunner(pi_cmd="pi", extra_args=[], model=None, provider=None)
     project_cwd = Path("/project")
     session_root = tmp_path / "sessions"
 
@@ -276,7 +257,7 @@ def test_session_path_prefers_run_base_dir(tmp_path: Path) -> None:
 
 def test_session_path_tightens_existing_dir_perms(tmp_path: Path) -> None:
     """#207: pre-existing dir with looser perms gets chmod'd to 0o700."""
-    runner = PiRunner(extra_args=[], model=None, provider=None)
+    runner = PiRunner(pi_cmd="pi", extra_args=[], model=None, provider=None)
     project_cwd = Path("/project")
     session_root = tmp_path / "sessions"
     session_root.mkdir(mode=0o755)
@@ -311,7 +292,7 @@ def test_session_path_sanitizes_windows_separators() -> None:
 
 def test_continue_allows_id_promotion() -> None:
     """new_state() with is_continue=True sets allow_id_promotion=True."""
-    runner = PiRunner(extra_args=[], model=None, provider=None)
+    runner = PiRunner(pi_cmd="pi", extra_args=[], model=None, provider=None)
     continue_token = ResumeToken(engine=ENGINE, value="", is_continue=True)
     state = runner.new_state("prompt", continue_token)
     assert state.allow_id_promotion is True
@@ -319,7 +300,7 @@ def test_continue_allows_id_promotion() -> None:
 
 def test_normal_resume_does_not_allow_id_promotion() -> None:
     """new_state() with a normal resume token keeps allow_id_promotion=False."""
-    runner = PiRunner(extra_args=[], model=None, provider=None)
+    runner = PiRunner(pi_cmd="pi", extra_args=[], model=None, provider=None)
     resume_token = ResumeToken(engine=ENGINE, value="ses_existing")
     state = runner.new_state("prompt", resume_token)
     assert state.allow_id_promotion is False
@@ -352,7 +333,7 @@ def test_continue_session_id_promoted_from_header() -> None:
 
 
 def _pi_runner() -> PiRunner:
-    return PiRunner(extra_args=[], model=None, provider=None)
+    return PiRunner(pi_cmd="pi", extra_args=[], model=None, provider=None)
 
 
 def test_stream_end_zero_events_reports_startup_failure() -> None:
@@ -525,3 +506,61 @@ def test_multiple_retries_have_stable_distinct_ids() -> None:
     assert e1[0].action.id == "retry_1"
     assert s2[0].action.id == "retry_2"
     assert e2[0].action.id == "retry_2"
+
+
+# ---------------------------------------------------------------------------
+# PiRunner.command() — regression: must not raise NotImplementedError.
+# The base JsonlSubprocessRunner.command() raises NotImplementedError; every
+# concrete runner overrides it. Pi lost this override during the Takopi port,
+# so spawning Pi crashed at runner.py command_args() resolution.
+# ---------------------------------------------------------------------------
+
+
+def test_pi_command_does_not_raise() -> None:
+    """PiRunner.command() must return a resolved executable string.
+
+    On Windows the Takopi contract is ``pi.cmd``; elsewhere ``pi``. The
+    override must never fall through to the base ``NotImplementedError``.
+    """
+    runner = PiRunner(pi_cmd="pi", extra_args=[], model=None, provider=None)
+    cmd = runner.command()
+    assert isinstance(cmd, str)
+    assert cmd  # non-empty
+
+
+def test_pi_command_default_matches_platform() -> None:
+    """Default command mirrors the Takopi contract: pi.cmd on Windows."""
+    from untether.runners.pi import _default_pi_cmd
+
+    cmd = _default_pi_cmd()
+    if sys.platform == "win32":
+        assert cmd == "pi.cmd"
+    else:
+        assert cmd == "pi"
+
+
+def test_pi_build_runner_honors_cmd_override() -> None:
+    """``[pi] cmd = "..."`` overrides the default executable resolution."""
+    from pathlib import Path
+
+    from untether.runners.pi import PiRunner, build_runner
+
+    runner = cast(
+        PiRunner, build_runner({"cmd": "/usr/local/bin/pi-special"}, Path("/x.toml"))
+    )
+    # build_runner returns a Runner (cast); the concrete type is PiRunner.
+    assert runner.command() == "/usr/local/bin/pi-special"
+
+
+def test_pi_build_runner_default_when_no_cmd() -> None:
+    """Without a cmd override, the platform default is used."""
+    from pathlib import Path
+
+    from untether.runners.pi import PiRunner, build_runner
+
+    runner = cast(PiRunner, build_runner({}, Path("/x.toml")))
+    cmd = runner.command()
+    if sys.platform == "win32":
+        assert cmd == "pi.cmd"
+    else:
+        assert cmd == "pi"

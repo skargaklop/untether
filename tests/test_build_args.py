@@ -612,7 +612,12 @@ class TestPiBuildArgs:
     def _runner(self, **kwargs: Any):
         from untether.runners.pi import PiRunner
 
-        defaults: dict[str, Any] = {"extra_args": [], "model": None, "provider": None}
+        defaults: dict[str, Any] = {
+            "pi_cmd": "pi",
+            "extra_args": [],
+            "model": None,
+            "provider": None,
+        }
         defaults.update(kwargs)
         return PiRunner(**defaults)
 

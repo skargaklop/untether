@@ -485,18 +485,23 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
     def __init__(
         self,
         *,
+        pi_cmd: str,
         extra_args: list[str],
         model: str | None,
         provider: str | None,
         plan_mode_extension: bool = False,
         goal_list_extension: bool = False,
     ) -> None:
+        self.pi_cmd = pi_cmd
         self.extra_args = extra_args
         self.model = model
         self.provider = provider
         self.plan_mode_extension = plan_mode_extension
         self.goal_list_extension = goal_list_extension
         self._plan_warning_logged = False
+
+    def command(self) -> str:
+        return self.pi_cmd
 
     def format_resume(self, token: ResumeToken) -> str:
         if token.engine != ENGINE:
@@ -852,6 +857,20 @@ def detect_plan_mode_extension(root: Path | None = None) -> bool:
     return (root / _PLAN_MODE_EXTENSION_PACKAGE).is_dir()
 
 
+def _default_pi_cmd() -> str:
+    """Resolve the Pi executable, honoring the PI_CLI_BIN override.
+
+    Mirrors the Takopi contract (``pi.cmd`` on Windows, ``pi`` elsewhere)
+    while allowing an explicit env-var escape hatch for non-PATH installs.
+    """
+    env_cmd = os.environ.get("PI_CLI_BIN")
+    if env_cmd:
+        return env_cmd
+    import sys
+
+    return "pi.cmd" if sys.platform == "win32" else "pi"
+
+
 def build_runner(config: EngineConfig, config_path: Path) -> Runner:
     extra_args_value = config.get("extra_args")
     if extra_args_value is None:
@@ -886,11 +905,15 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
             error="provider must be a string",
             config_path=str(config_path),
         )
-        raise ConfigError(f"Invalid `pi.provider` in {config_path}; expected a string.")
+    pi_cmd = _default_pi_cmd()
+    cmd_override = config.get("cmd")
+    if isinstance(cmd_override, str) and cmd_override.strip():
+        pi_cmd = cmd_override.strip()
 
     return cast(
         Runner,
         PiRunner(
+            pi_cmd=pi_cmd,
             extra_args=extra_args,
             model=model,
             provider=provider,

@@ -58,7 +58,7 @@ def test_opencode_run_options_override_model() -> None:
 
 
 def test_pi_run_options_override_model() -> None:
-    runner = PiRunner(extra_args=[], model="pi-default", provider=None)
+    runner = PiRunner(pi_cmd="pi", extra_args=[], model="pi-default", provider=None)
     state = PiStreamState(resume=ResumeToken(engine=PI_ENGINE, value="sess.jsonl"))
     with apply_run_options(EngineRunOptions(model="pi-override")):
         args = runner.build_args("hi", None, state=state)

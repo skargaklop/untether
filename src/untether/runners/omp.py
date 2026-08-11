@@ -92,6 +92,7 @@ class OmpRunner(HandoffCompactMixin, PiRunner):
         plan_mode: str = "soft",
     ) -> None:
         super().__init__(
+            pi_cmd="omp",
             extra_args=extra_args,
             model=model,
             provider=provider,
