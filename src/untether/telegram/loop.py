@@ -3304,12 +3304,22 @@ async def run_main_loop(
                         model=cfg.voice_transcription_model,
                         max_bytes=cfg.voice_max_bytes,
                         reply=reply,
+                        provider=cfg.voice_transcription_provider,
                         base_url=cfg.voice_transcription_base_url,
                         api_key=(
                             cfg.voice_transcription_api_key.get_secret_value()
                             if cfg.voice_transcription_api_key is not None
                             else None
                         ),
+                        groq_api_key=(
+                            cfg.voice_transcription_groq_api_key.get_secret_value()
+                            if cfg.voice_transcription_groq_api_key is not None
+                            else None
+                        ),
+                        local_command=cfg.voice_transcription_local_command,
+                        local_backend=cfg.voice_transcription_local_backend,
+                        local_model=cfg.voice_transcription_local_model,
+                        timeout_s=cfg.voice_transcription_timeout_s,
                         url_allowlist=parse_networks(
                             cfg.voice_transcription_url_allowlist
                         ),

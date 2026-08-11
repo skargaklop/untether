@@ -186,10 +186,16 @@ class TelegramBridgeConfig:
     show_resume_line: bool = True
     voice_transcription: bool = False
     voice_max_bytes: int = 10 * 1024 * 1024
+    voice_transcription_provider: Literal["openai", "groq", "local"] = "openai"
     voice_transcription_model: str = "gpt-4o-mini-transcribe"
     voice_transcription_base_url: str | None = None
     # #378: SecretStr ferries the key without leaking it through repr/log.
     voice_transcription_api_key: SecretStr | None = None
+    voice_transcription_groq_api_key: SecretStr | None = None
+    voice_transcription_local_command: str = "D:/Projects/AI-Video-Transcriber/.venv/Scripts/avt.exe"
+    voice_transcription_local_backend: Literal["whisper", "parakeet"] = "whisper"
+    voice_transcription_local_model: str = "base"
+    voice_transcription_timeout_s: float = 180.0
     # #638: optional ISO-639-1 hint forwarded to the transcription API.
     voice_transcription_language: str | None = None
     voice_show_transcription: bool = True
@@ -218,23 +224,25 @@ class TelegramBridgeConfig:
     def update_from(self, settings: TelegramTransportSettings) -> None:
         """Apply a reloaded Transport settings object to this config.
 
-        Only fields that are safe to hot-reload are updated. Architectural
-        fields (``bot``, ``runtime``, ``chat_id``, ``session_mode``,
-        ``topics``, ``exec_cfg``) stay at their initial values. ``topics``
-        specifically cannot change at runtime because it affects state
-        store initialisation.
+        Only fields safe to hot-reload are updated.
         """
-        self.show_resume_line = bool(settings.show_resume_line)
         self.voice_transcription = bool(settings.voice_transcription)
         self.voice_max_bytes = int(settings.voice_max_bytes)
+        self.voice_transcription_provider = settings.voice_transcription_provider
         self.voice_transcription_model = settings.voice_transcription_model
         self.voice_transcription_base_url = settings.voice_transcription_base_url
         self.voice_transcription_api_key = settings.voice_transcription_api_key
+        self.voice_transcription_groq_api_key = settings.voice_transcription_groq_api_key
+        self.voice_transcription_local_command = settings.voice_transcription_local_command
+        self.voice_transcription_local_backend = settings.voice_transcription_local_backend
+        self.voice_transcription_local_model = settings.voice_transcription_local_model
+        self.voice_transcription_timeout_s = float(settings.voice_transcription_timeout_s)
         self.voice_transcription_language = settings.voice_transcription_language
         self.voice_show_transcription = bool(settings.voice_show_transcription)
         self.voice_transcription_url_allowlist = tuple(
             settings.voice_transcription_url_allowlist
         )
+        self.show_resume_line = bool(settings.show_resume_line)
         self.forward_coalesce_s = float(settings.forward_coalesce_s)
         self.prompt_batch_enabled = bool(settings.prompt_batch_enabled)
         self.prompt_batch_debounce_s = float(settings.prompt_batch_debounce_s)

@@ -163,12 +163,15 @@ class TelegramTransportSettings(BaseModel):
     message_overflow: Literal["trim", "split"] = "split"
     voice_transcription: bool = False
     voice_max_bytes: StrictInt = 10 * 1024 * 1024
+    voice_transcription_provider: Literal["openai", "groq", "local"] = "openai"
     voice_transcription_model: NonEmptyStr = "gpt-4o-mini-transcribe"
     voice_transcription_base_url: NonEmptyStr | None = None
-    # #378: SecretStr (parity with bot_token from #196) — masks repr()/str()/
-    # tracebacks/structlog. Access the raw value via .get_secret_value() at the
-    # transport boundary (telegram/loop.py before passing to OpenAI SDK).
     voice_transcription_api_key: SecretStr | None = None
+    voice_transcription_groq_api_key: SecretStr | None = None
+    voice_transcription_local_command: NonEmptyStr = "D:/Projects/AI-Video-Transcriber/.venv/Scripts/avt.exe"
+    voice_transcription_local_backend: Literal["whisper", "parakeet"] = "whisper"
+    voice_transcription_local_model: NonEmptyStr = "base"
+    voice_transcription_timeout_s: float = Field(default=180.0, gt=0)
     # #638: optional ISO-639-1 language hint passed to the transcription API.
     # Unset = provider auto-detect (the pre-#638 behaviour). Pinning e.g. "en"
     # stops Whisper-family models mis-guessing the language on short
@@ -207,7 +210,9 @@ class TelegramTransportSettings(BaseModel):
             raise ValueError("bot_token must not be empty")
         return SecretStr(token)
 
-    @field_validator("voice_transcription_api_key", mode="after")
+    @field_validator(
+        "voice_transcription_api_key", "voice_transcription_groq_api_key", mode="after"
+    )
     @classmethod
     def _validate_voice_key_not_empty(cls, v: SecretStr | None) -> SecretStr | None:
         """#378: preserve the pre-SecretStr `NonEmptyStr | None` contract.
@@ -228,7 +233,7 @@ class TelegramTransportSettings(BaseModel):
             return None
         if not key.isprintable():
             raise ValueError(
-                "voice_transcription_api_key contains control characters "
+                "voice transcription API key contains control characters "
                 "(embedded newline/tab?) — check for concatenated or "
                 "line-wrapped key material"
             )
@@ -236,7 +241,7 @@ class TelegramTransportSettings(BaseModel):
             key.encode("latin-1")
         except UnicodeEncodeError as exc:
             raise ValueError(
-                "voice_transcription_api_key contains characters that cannot "
+                "voice transcription API key contains characters that cannot "
                 "be sent in an HTTP Authorization header"
             ) from exc
         return SecretStr(key)

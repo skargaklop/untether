@@ -166,6 +166,30 @@ def test_doctor_voice_checks(monkeypatch) -> None:
     assert checks[0].status == "ok"
 
 
+
+def test_doctor_voice_checks_local_provider(tmp_path) -> None:
+    executable = tmp_path / "avt.exe"
+    executable.touch()
+    settings = _settings(
+        {
+            "transports": {
+                "telegram": {
+                    "bot_token": "token",
+                    "chat_id": 1,
+                    "allow_any_user": True,
+                    "voice_transcription": True,
+                    "voice_transcription_provider": "local",
+                    "voice_transcription_local_command": str(executable),
+                    "voice_transcription_local_backend": "parakeet",
+                    "voice_transcription_local_model": "small",
+                }
+            }
+        }
+    )
+    check = cli._doctor_voice_checks(settings)[0]
+    assert check.status == "ok"
+    assert check.detail == "backend=parakeet, model=small"
+
 def test_load_settings_optional(monkeypatch, tmp_path) -> None:
     def _raise() -> None:
         raise ConfigError("boom")

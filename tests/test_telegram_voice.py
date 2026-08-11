@@ -605,3 +605,103 @@ async def test_594_transcribe_error_log_default_endpoint_marker() -> None:
     rec = next(r for r in logs if r["event"] == "openai.transcribe.error")
     assert rec["endpoint"] == "openai-default"
     assert rec["cause"] is None
+
+@pytest.mark.anyio
+async def test_groq_transcriber_uses_fixed_endpoint_and_model(monkeypatch) -> None:
+    from untether.telegram.voice import OpenAIVoiceTranscriber
+
+    calls = []
+
+    class _Audio:
+        async def create(self, **kwargs):
+            calls.append(kwargs)
+            return type("Response", (), {"text": "ok"})()
+
+    class _Client:
+        audio = type("Audio", (), {"transcriptions": _Audio()})()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+    def fake_openai(**kwargs):
+        calls.append({"client": kwargs})
+        return _Client()
+
+    monkeypatch.setattr("untether.telegram.voice.AsyncOpenAI", fake_openai)
+    transcriber = OpenAIVoiceTranscriber(
+        base_url="https://api.groq.com/openai/v1", api_key="secret"
+    )
+    assert await transcriber.transcribe(model="whisper-large-v3-turbo", audio_bytes=b"x") == "ok"
+    assert calls[0]["client"]["base_url"] == "https://api.groq.com/openai/v1"
+    assert calls[1]["model"] == "whisper-large-v3-turbo"
+
+
+@pytest.mark.anyio
+async def test_avt_transcriber_contract(monkeypatch) -> None:
+    from untether.telegram.voice import AvtVoiceTranscriber
+
+    seen = {}
+
+    class _Stream:
+        def __init__(self, chunk: bytes) -> None:
+            self._chunk = chunk
+
+        async def receive(self, max_bytes: int) -> bytes:
+            chunk, self._chunk = self._chunk[:max_bytes], b""
+            return chunk
+
+    class _Process:
+        returncode = None
+        stdout = _Stream(b'{"transcript":"hello"}')
+        stderr = _Stream(b"")
+
+        async def wait(self):
+            self.returncode = 0
+
+        def terminate(self):
+            self.returncode = 1
+        def kill(self):
+            self.returncode = 1
+
+    async def fake_open_process(argv, **kwargs):
+        seen["argv"] = argv
+        return _Process()
+
+    monkeypatch.setattr("untether.telegram.voice.anyio.open_process", fake_open_process)
+    transcriber = AvtVoiceTranscriber(
+        command="avt.exe", backend="whisper", model="base", timeout_s=1
+    )
+    assert await transcriber.transcribe(model="ignored", audio_bytes=b"ogg") == "hello"
+    assert seen["argv"][0:4] == ["avt.exe", "--quiet", "transcribe", "--file"]
+    assert seen["argv"][5:9] == ["--provider", "local", "--local-backend", "whisper"]
+
+
+
+@pytest.mark.anyio
+async def test_transcribe_voice_selects_fixed_groq_boundary() -> None:
+    calls: list[tuple[str, str | None, str | None, str]] = []
+
+    class _GroqTranscriber:
+        async def transcribe(self, *, model, audio_bytes, language=None):
+            calls.append((model, audio_bytes, language, "unexpected"))
+            return "ok"
+
+    bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"audio")
+    result = await transcribe_voice(
+        bot=bot,
+        msg=_voice_message(file_size=5),
+        enabled=True,
+        model="ignored",
+        provider="groq",
+        reply=lambda **_: _done(),
+        transcriber=_GroqTranscriber(),
+    )
+    assert result == "ok"
+    assert calls == [("whisper-large-v3-turbo", b"audio", None, "unexpected")]
+
+
+async def _done() -> None:
+    return None

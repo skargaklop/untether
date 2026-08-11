@@ -1111,3 +1111,41 @@ def test_589_concurrency_guard_bounds() -> None:
         WatchdogSettings(max_concurrent_engine_runs=-1)
     with pytest.raises(ValidationError):
         WatchdogSettings(prespawn_ram_per_run_reserve_mb=-1)
+def test_voice_provider_settings_defaults_and_groq_fields() -> None:
+    settings = UntetherSettings.model_validate(
+        {
+            "transport": "telegram",
+            "transports": {
+                "telegram": {
+                    "bot_token": "token",
+                    "chat_id": 1,
+                    "allow_any_user": True,
+                }
+            },
+        }
+    )
+    voice = settings.transports.telegram
+    assert voice.voice_transcription_provider == "openai"
+    assert voice.voice_transcription_local_command.endswith("avt.exe")
+    assert voice.voice_transcription_local_backend == "whisper"
+    assert voice.voice_transcription_local_model == "base"
+    assert voice.voice_transcription_timeout_s == 180.0
+    assert voice.voice_transcription_groq_api_key is None
+
+
+def test_voice_provider_rejects_invalid_local_backend() -> None:
+    with pytest.raises(ConfigError):
+        validate_settings_data(
+            {
+                "transport": "telegram",
+                "transports": {
+                    "telegram": {
+                        "bot_token": "token",
+                        "chat_id": 1,
+                        "allow_any_user": True,
+                        "voice_transcription_local_backend": "invalid",
+                    }
+                },
+            },
+            config_path=Path("untether.toml"),
+        )

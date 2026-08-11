@@ -94,6 +94,22 @@ class TestUpdateFrom:
         assert cfg.forward_coalesce_s == 3.5
         assert cfg.media_group_debounce_s == 2.5
 
+    def test_update_from_voice_provider_fields(self, cfg: TelegramBridgeConfig):
+        cfg.update_from(
+            _settings(
+                voice_transcription_provider="local",
+                voice_transcription_local_command="avt.exe",
+                voice_transcription_local_backend="parakeet",
+                voice_transcription_local_model="tiny",
+                voice_transcription_timeout_s=42.0,
+            )
+        )
+        assert cfg.voice_transcription_provider == "local"
+        assert cfg.voice_transcription_local_command == "avt.exe"
+        assert cfg.voice_transcription_local_backend == "parakeet"
+        assert cfg.voice_transcription_local_model == "tiny"
+        assert cfg.voice_transcription_timeout_s == 42.0
+
     def test_update_from_swaps_files_object(self, cfg: TelegramBridgeConfig):
         original = cfg.files
         new_files = TelegramFilesSettings(

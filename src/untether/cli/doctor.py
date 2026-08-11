@@ -47,13 +47,32 @@ def _doctor_file_checks(settings: UntetherSettings) -> list[DoctorCheck]:
 def _doctor_voice_checks(settings: UntetherSettings) -> list[DoctorCheck]:
     if not settings.transports.telegram.voice_transcription:
         return [DoctorCheck("voice transcription", "ok", "disabled")]
-    api_key = settings.transports.telegram.voice_transcription_api_key
+    telegram = settings.transports.telegram
+    provider = telegram.voice_transcription_provider
+    if provider == "local":
+        command = Path(telegram.voice_transcription_local_command)
+        detail = (
+            f"backend={telegram.voice_transcription_local_backend}, "
+            f"model={telegram.voice_transcription_local_model}"
+        )
+        if command.is_file():
+            return [DoctorCheck("voice transcription", "ok", detail)]
+        return [DoctorCheck("voice transcription", "error", "local transcription unavailable")]
+    api_key = (
+        telegram.voice_transcription_groq_api_key
+        if provider == "groq"
+        else telegram.voice_transcription_api_key
+    )
+    environment_key = "GROQ_API_KEY" if provider == "groq" else "OPENAI_API_KEY"
     if api_key:
-        return [
-            DoctorCheck("voice transcription", "ok", "voice_transcription_api_key set")
-        ]
-    if os.environ.get("OPENAI_API_KEY"):
-        return [DoctorCheck("voice transcription", "ok", "OPENAI_API_KEY set")]
+        detail = (
+            "voice_transcription_api_key set"
+            if provider == "openai"
+            else "groq API key set"
+        )
+        return [DoctorCheck("voice transcription", "ok", detail)]
+    if os.environ.get(environment_key):
+        return [DoctorCheck("voice transcription", "ok", f"{environment_key} set")]
     return [DoctorCheck("voice transcription", "error", "API key not set")]
 
 
