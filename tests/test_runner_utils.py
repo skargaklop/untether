@@ -24,6 +24,8 @@ from untether.runner import (
     _session_label,
     _stderr_excerpt,
 )
+
+
 @pytest.mark.anyio
 async def test_timed_jsonl_reader_accepts_real_anyio_process_stdout() -> None:
     """The process stdout wrapper is a byte stream, not an object with readline."""
@@ -80,7 +82,7 @@ async def test_timed_jsonl_reader_wired_for_omp_and_grok(engine: str) -> None:
     else:
         runner = GrokRunner(grok_cmd=sys.executable, extra_args=[])
     proc = await anyio.open_process(
-        [sys.executable, "-c", "print('{\\\"type\\\": \\\"message_start\\\"}')"]
+        [sys.executable, "-c", 'print(\'{\\"type\\": \\"message_start\\"}\')']
     )
     try:
         lines = [
@@ -92,6 +94,7 @@ async def test_timed_jsonl_reader_wired_for_omp_and_grok(engine: str) -> None:
         assert lines == [b'{"type": "message_start"}\r']
     finally:
         await proc.wait()
+
 
 class _DummyRunner(ResumeTokenMixin, BaseRunner):
     engine = "dummy"
@@ -470,6 +473,7 @@ async def test_jsonl_timeout_completion_includes_runner_engine() -> None:
     class _NeverReturns:
         async def receive(self) -> bytes:
             await anyio.sleep_forever()
+            raise AssertionError("unreachable")
 
     runner = _DummyJsonlRunner()
     runner.startup_timeout_s = 0.01

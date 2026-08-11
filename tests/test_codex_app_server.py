@@ -1,22 +1,41 @@
 from __future__ import annotations
 
+from typing import Any
+
 import anyio
 import pytest
 
 from untether.model import CompletedEvent, StartedEvent
-from untether.runners.codex import AppServerCodexRunner, _AppServerTurnControl, build_runner
+from untether.runners.codex import (
+    AppServerCodexRunner,
+    _AppServerTurnControl,
+    build_runner,
+)
 from untether.runners.run_options import EngineRunOptions, apply_run_options
 
 
 class FakeAppServer:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, dict]] = []
-        self.messages = [
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.messages: list[dict[str, Any]] = [
             {"method": "turn/started", "params": {"turn": {"id": "turn-1"}}},
-            {"method": "turn/plan/updated", "params": {"plan": [{"step": "inspect", "status": "in_progress"}]}},
-            {"method": "item/completed", "params": {"item": {"type": "agentMessage", "phase": "final_answer", "text": "completed answer"}}},
+            {
+                "method": "turn/plan/updated",
+                "params": {"plan": [{"step": "inspect", "status": "in_progress"}]},
+            },
+            {
+                "method": "item/completed",
+                "params": {
+                    "item": {
+                        "type": "agentMessage",
+                        "phase": "final_answer",
+                        "text": "completed answer",
+                    }
+                },
+            },
             {"method": "turn/completed", "params": {"turn": {"status": "completed"}}},
         ]
+        self.closed = False
 
     async def start(self) -> None:
         self.calls.append(("initialize", {}))
@@ -33,10 +52,21 @@ class FakeAppServer:
         return {"turn": {"id": "turn-1"}}
 
     async def turn_steer(self, thread_id: str, turn_id: str, text: str) -> None:
-        self.calls.append(("turn/steer", {"threadId": thread_id, "expectedTurnId": turn_id, "input": [{"type": "text", "text": text}]}))
+        self.calls.append(
+            (
+                "turn/steer",
+                {
+                    "threadId": thread_id,
+                    "expectedTurnId": turn_id,
+                    "input": [{"type": "text", "text": text}],
+                },
+            )
+        )
 
     async def turn_interrupt(self, thread_id: str, turn_id: str) -> bool:
-        self.calls.append(("turn/interrupt", {"threadId": thread_id, "turnId": turn_id}))
+        self.calls.append(
+            ("turn/interrupt", {"threadId": thread_id, "turnId": turn_id})
+        )
         return True
 
     async def subscribe_turn(self, turn_id: str):
@@ -49,9 +79,14 @@ class FakeAppServer:
     async def unsubscribe_turn(self, turn_id: str) -> None:
         self.calls.append(("unsubscribe", {"turnId": turn_id}))
 
+    async def close(self) -> None:
+        self.closed = True
+
 
 @pytest.mark.anyio
-async def test_app_server_emits_plan_and_goal_and_steering_protocol(monkeypatch) -> None:
+async def test_app_server_emits_plan_and_goal_and_steering_protocol(
+    monkeypatch,
+) -> None:
     fake = FakeAppServer()
     monkeypatch.setattr("untether.runners.codex._AppServerClient", lambda **_: fake)
     runner = AppServerCodexRunner(codex_cmd="codex", extra_args=[])
@@ -60,14 +95,22 @@ async def test_app_server_emits_plan_and_goal_and_steering_protocol(monkeypatch)
     started = next(event for event in events if isinstance(event, StartedEvent))
     completed = next(event for event in events if isinstance(event, CompletedEvent))
     assert completed.answer == "completed answer"
+    assert started.meta is not None
     control = started.meta["control"]
     assert isinstance(control, _AppServerTurnControl)
     await control.steer("goal follow-up")
     await control.interrupt()
     turn = next(payload for method, payload in fake.calls if method == "turn/start")
     assert turn["input"][0]["text"].startswith("[Untether plan mode]")
-    assert any(method == "turn/steer" and payload["expectedTurnId"] == "turn-1" for method, payload in fake.calls)
-    assert any(method == "turn/interrupt" and payload == {"threadId": "thread-1", "turnId": "turn-1"} for method, payload in fake.calls)
+    assert any(
+        method == "turn/steer" and payload["expectedTurnId"] == "turn-1"
+        for method, payload in fake.calls
+    )
+    assert any(
+        method == "turn/interrupt"
+        and payload == {"threadId": "thread-1", "turnId": "turn-1"}
+        for method, payload in fake.calls
+    )
 
 
 def test_codex_defaults_to_app_server_and_retains_exec_fallback(tmp_path) -> None:
@@ -75,13 +118,19 @@ def test_codex_defaults_to_app_server_and_retains_exec_fallback(tmp_path) -> Non
     assert isinstance(runner, AppServerCodexRunner)
     assert build_runner({"mode": "exec"}, tmp_path).__class__.__name__ == "CodexRunner"
 
+
 @pytest.mark.anyio
-async def test_app_server_subscribe_drains_notification_arriving_before_subscription() -> None:
+async def test_app_server_subscribe_drains_notification_arriving_before_subscription() -> (
+    None
+):
     from untether.runners.codex import _AppServerClient
 
     client = _AppServerClient(codex_cmd="codex", extra_args=[])
     client._pending_by_turn["turn-1"] = [
-        {"method": "turn/completed", "params": {"turnId": "turn-1", "answer": "early answer"}}
+        {
+            "method": "turn/completed",
+            "params": {"turnId": "turn-1", "answer": "early answer"},
+        }
     ]
     stream = await client.subscribe_turn("turn-1")
     message = await stream.receive()
@@ -96,10 +145,12 @@ async def test_app_server_pending_overflow_is_bounded_and_terminal() -> None:
     client = _AppServerClient(codex_cmd="codex", extra_args=[])
     turn_id = "overflow-turn"
     async with client._state_lock:
-        for index in range(_APP_PENDING_CAP + 1):
+        for _index in range(_APP_PENDING_CAP + 1):
             pending = client._pending_by_turn.setdefault(turn_id, [])
             if len(pending) < _APP_PENDING_CAP:
-                pending.append({"method": "turn/plan/updated", "params": {"turnId": turn_id}})
+                pending.append(
+                    {"method": "turn/plan/updated", "params": {"turnId": turn_id}}
+                )
             else:
                 client._pending_overflow.add(turn_id)
         assert len(client._pending_by_turn[turn_id]) == _APP_PENDING_CAP
@@ -107,16 +158,28 @@ async def test_app_server_pending_overflow_is_bounded_and_terminal() -> None:
         await client.subscribe_turn(turn_id)
     assert turn_id not in client._pending_overflow
 
+
 @pytest.mark.anyio
-async def test_app_server_replays_large_pending_turn_and_closes_client(monkeypatch) -> None:
+async def test_app_server_replays_large_pending_turn_and_closes_client(
+    monkeypatch,
+) -> None:
     fake = FakeAppServer()
-    fake.messages = [{"method": "turn/plan/updated", "params": {"turnId": "turn-1", "plan": []}} for _ in range(40)] + [{"method": "turn/completed", "params": {"turnId": "turn-1", "answer": "large answer"}}]
-    fake.closed = False
-    async def close() -> None:
-        fake.closed = True
-    fake.close = close
+    fake.messages = [
+        {"method": "turn/plan/updated", "params": {"turnId": "turn-1", "plan": []}}
+        for _ in range(40)
+    ] + [
+        {
+            "method": "turn/completed",
+            "params": {"turnId": "turn-1", "answer": "large answer"},
+        }
+    ]
     monkeypatch.setattr("untether.runners.codex._AppServerClient", lambda **_: fake)
-    events = [event async for event in AppServerCodexRunner(codex_cmd="codex", extra_args=[]).run("do thing", None)]
+    events = [
+        event
+        async for event in AppServerCodexRunner(codex_cmd="codex", extra_args=[]).run(
+            "do thing", None
+        )
+    ]
     completed = next(event for event in events if isinstance(event, CompletedEvent))
     assert not completed.ok and completed.answer == ""
     assert completed.error == "codex turn failed"
@@ -127,15 +190,17 @@ async def test_app_server_replays_large_pending_turn_and_closes_client(monkeypat
 async def test_app_server_eof_before_completion_is_error(monkeypatch) -> None:
     fake = FakeAppServer()
     fake.messages = [{"method": "turn/started", "params": {"turn": {"id": "turn-1"}}}]
-    fake.closed = False
-    async def close() -> None:
-        fake.closed = True
-    fake.close = close
     monkeypatch.setattr("untether.runners.codex._AppServerClient", lambda **_: fake)
-    events = [event async for event in AppServerCodexRunner(codex_cmd="codex", extra_args=[]).run("do thing", None)]
+    events = [
+        event
+        async for event in AppServerCodexRunner(codex_cmd="codex", extra_args=[]).run(
+            "do thing", None
+        )
+    ]
     completed = next(event for event in events if isinstance(event, CompletedEvent))
     assert not completed.ok
     assert completed.error
+
 
 @pytest.mark.anyio
 async def test_app_server_subscribed_buffer_overflow_is_terminal() -> None:
@@ -145,15 +210,23 @@ async def test_app_server_subscribed_buffer_overflow_is_terminal() -> None:
     stream = await client.subscribe_turn("turn-buffer")
     sender = client._subscriptions["turn-buffer"]
     for index in range(_APP_PENDING_CAP):
-        sender.send_nowait({"method": "turn/plan/updated", "params": {"turnId": "turn-buffer", "index": index}})
+        sender.send_nowait(
+            {
+                "method": "turn/plan/updated",
+                "params": {"turnId": "turn-buffer", "index": index},
+            }
+        )
     with pytest.raises(anyio.WouldBlock):
-        sender.send_nowait({"method": "turn/plan/updated", "params": {"turnId": "turn-buffer"}})
+        sender.send_nowait(
+            {"method": "turn/plan/updated", "params": {"turnId": "turn-buffer"}}
+        )
     async with client._state_lock:
         client._pending_overflow.add("turn-buffer")
         client._subscriptions.pop("turn-buffer", None)
     await stream.aclose()
     with pytest.raises(RuntimeError, match="notification buffer overflow"):
         await client.subscribe_turn("turn-buffer")
+
 
 @pytest.mark.anyio
 async def test_app_server_starts_and_closes_stderr_drainer(monkeypatch) -> None:
@@ -192,17 +265,25 @@ async def test_app_server_starts_and_closes_stderr_drainer(monkeypatch) -> None:
     monkeypatch.setattr("untether.runners.codex.anyio.open_process", fake_open_process)
     monkeypatch.setattr("untether.runners.codex.drain_stderr", fake_drain)
     client = _AppServerClient(codex_cmd="codex", extra_args=[])
-    client._read_loop = fake_read_loop
+    monkeypatch.setattr(client, "_read_loop", fake_read_loop)
+
     async def fake_request(*args, **kwargs):
         return {}
+
     monkeypatch.setattr(client, "request", fake_request)
-    monkeypatch.setattr(client, "notify", lambda *args, **kwargs: anyio.sleep(0))
+
+    async def fake_notify(*args, **kwargs) -> None:
+        _ = args, kwargs
+        await anyio.sleep(0)  # noqa: ASYNC115
+
+    monkeypatch.setattr(client, "notify", fake_notify)
     await client.start()
     with anyio.fail_after(1):
         await drained.wait()
     assert client._reader_tg is not None
     await client.close()
     assert client._reader_tg is None
+
 
 @pytest.mark.anyio
 async def test_app_server_close_forces_non_exiting_process(monkeypatch) -> None:
@@ -246,6 +327,8 @@ async def test_app_server_close_forces_non_exiting_process(monkeypatch) -> None:
     monkeypatch.setattr("untether.runners.codex.kill_process_tree", fake_tree)
     await client.close()
     assert proc.terminated and proc.killed and client._proc is None
+
+
 @pytest.mark.anyio
 async def test_app_server_server_request_response(monkeypatch) -> None:
     from untether.runners.codex import _AppServerClient
@@ -253,13 +336,21 @@ async def test_app_server_server_request_response(monkeypatch) -> None:
     client = _AppServerClient(codex_cmd="codex", extra_args=[])
     writes: list[dict] = []
     client._proc = type("Proc", (), {"stdout": object()})()
+
     async def fake_write(payload):
         writes.append(payload)
-    client._write = fake_write
+
+    monkeypatch.setattr(client, "_write", fake_write)
+
     async def fake_lines(_stream):
         yield b'{"id":7,"method":"item/commandExecution/requestApproval","params":{}}'
+
     monkeypatch.setattr("untether.runners.codex.iter_bytes_lines", fake_lines)
-    monkeypatch.setattr(client, "_fail_all", lambda exc: anyio.sleep(0))
+
+    async def fake_fail_all(_exc: BaseException) -> None:
+        await anyio.sleep(0)  # noqa: ASYNC115
+
+    monkeypatch.setattr(client, "_fail_all", fake_fail_all)
     await client._read_loop()
     assert writes == [{"id": 7, "result": {"decision": "accept"}}]
 
@@ -267,8 +358,9 @@ async def test_app_server_server_request_response(monkeypatch) -> None:
 def test_codex_rejects_invalid_mode(tmp_path) -> None:
     from untether.config import ConfigError
 
-    with pytest.raises(ConfigError, match="codex.mode"):
+    with pytest.raises(ConfigError, match=r"codex\.mode"):
         build_runner({"mode": "ap-server"}, tmp_path)
+
 
 @pytest.mark.anyio
 async def test_app_server_reader_routes_normal_notification(monkeypatch) -> None:
@@ -277,13 +369,21 @@ async def test_app_server_reader_routes_normal_notification(monkeypatch) -> None
     client = _AppServerClient(codex_cmd="codex", extra_args=[])
     stream = await client.subscribe_turn("turn-route")
     client._proc = type("Proc", (), {"stdout": object()})()
+
     async def fake_lines(_stream):
         yield b'{"method":"turn/completed","params":{"turnId":"turn-route","answer":"ok"}}'
+
     monkeypatch.setattr("untether.runners.codex.iter_bytes_lines", fake_lines)
-    monkeypatch.setattr(client, "_fail_all", lambda exc: anyio.sleep(0))
+
+    async def fake_fail_all(_exc: BaseException) -> None:
+        await anyio.sleep(0)  # noqa: ASYNC115
+
+    monkeypatch.setattr(client, "_fail_all", fake_fail_all)
     await client._read_loop()
     message = await stream.receive()
     assert message["params"]["answer"] == "ok"
+
+
 @pytest.mark.anyio
 async def test_app_server_pending_delivery_precedes_live_notification() -> None:
     from untether.runners.codex import _APP_PENDING_CAP, _AppServerClient
@@ -299,11 +399,16 @@ async def test_app_server_pending_delivery_precedes_live_notification() -> None:
     sender = client._subscriptions[turn_id]
     sender.send_nowait(live)
     received = [await stream.receive() for _ in range(_APP_PENDING_CAP + 1)]
-    assert [item["params"].get("index") for item in received[:-1]] == list(range(_APP_PENDING_CAP))
+    assert [item["params"].get("index") for item in received[:-1]] == list(
+        range(_APP_PENDING_CAP)
+    )
     assert received[-1] == live
 
+
 @pytest.mark.anyio
-async def test_app_server_initialize_failure_closes_process_and_streams(monkeypatch) -> None:
+async def test_app_server_initialize_failure_closes_process_and_streams(
+    monkeypatch,
+) -> None:
     from untether.runners.codex import _AppServerClient
 
     class Stream:
@@ -325,9 +430,15 @@ async def test_app_server_initialize_failure_closes_process_and_streams(monkeypa
             return self.returncode
 
     proc = Proc()
-    monkeypatch.setattr("untether.runners.codex.anyio.open_process", lambda *a, **k: _return(proc))
-    monkeypatch.setattr("untether.runners.codex.wait_for_process", lambda *_a, **_k: _done())
-    monkeypatch.setattr("untether.runners.codex.close_process_streams", lambda *_a, **_k: _closed())
+    monkeypatch.setattr(
+        "untether.runners.codex.anyio.open_process", lambda *a, **k: _return(proc)
+    )
+    monkeypatch.setattr(
+        "untether.runners.codex.wait_for_process", lambda *_a, **_k: _done()
+    )
+    monkeypatch.setattr(
+        "untether.runners.codex.close_process_streams", lambda *_a, **_k: _closed()
+    )
     client = _AppServerClient(codex_cmd="codex", extra_args=[])
 
     async def fail_request(*_args, **_kwargs):
@@ -353,7 +464,9 @@ async def _closed(*_args, **_kwargs):
 
 
 @pytest.mark.anyio
-async def test_app_server_runner_turn_overflow_is_single_terminal_error(monkeypatch) -> None:
+async def test_app_server_runner_turn_overflow_is_single_terminal_error(
+    monkeypatch,
+) -> None:
     class OverflowSubscription:
         def __aiter__(self):
             return self
@@ -385,20 +498,42 @@ async def test_app_server_runner_turn_overflow_is_single_terminal_error(monkeypa
 
     client = OverflowClient()
     monkeypatch.setattr("untether.runners.codex._AppServerClient", lambda **_: client)
-    events = [event async for event in AppServerCodexRunner(codex_cmd="codex", extra_args=[]).run("prompt", None)]
+    events = [
+        event
+        async for event in AppServerCodexRunner(codex_cmd="codex", extra_args=[]).run(
+            "prompt", None
+        )
+    ]
     completed = [event for event in events if isinstance(event, CompletedEvent)]
     assert len(completed) == 1
     assert not completed[0].ok
+    assert completed[0].error is not None
     assert "notification buffer overflow" in completed[0].error
+
+
 @pytest.mark.anyio
 async def test_app_server_agent_message_final_answer_is_retained(monkeypatch) -> None:
     fake = FakeAppServer()
     fake.messages = [
-        {"method": "item/completed", "params": {"item": {"type": "agentMessage", "phase": "final_answer", "text": "final response"}}},
+        {
+            "method": "item/completed",
+            "params": {
+                "item": {
+                    "type": "agentMessage",
+                    "phase": "final_answer",
+                    "text": "final response",
+                }
+            },
+        },
         {"method": "turn/completed", "params": {"turn": {"status": "completed"}}},
     ]
     monkeypatch.setattr("untether.runners.codex._AppServerClient", lambda **_: fake)
-    events = [event async for event in AppServerCodexRunner(codex_cmd="codex", extra_args=[]).run("prompt", None)]
+    events = [
+        event
+        async for event in AppServerCodexRunner(codex_cmd="codex", extra_args=[]).run(
+            "prompt", None
+        )
+    ]
     completed = next(event for event in events if isinstance(event, CompletedEvent))
     assert completed.ok and completed.answer == "final response"
 
@@ -407,11 +542,30 @@ async def test_app_server_agent_message_final_answer_is_retained(monkeypatch) ->
 async def test_app_server_failed_turn_preserves_final_answer(monkeypatch) -> None:
     fake = FakeAppServer()
     fake.messages = [
-        {"method": "item/completed", "params": {"item": {"type": "agentMessage", "phase": "final_answer", "text": "partial answer"}}},
-        {"method": "turn/completed", "params": {"turn": {"status": "failed", "error": {"message": "tool failed"}}}},
+        {
+            "method": "item/completed",
+            "params": {
+                "item": {
+                    "type": "agentMessage",
+                    "phase": "final_answer",
+                    "text": "partial answer",
+                }
+            },
+        },
+        {
+            "method": "turn/completed",
+            "params": {
+                "turn": {"status": "failed", "error": {"message": "tool failed"}}
+            },
+        },
     ]
     monkeypatch.setattr("untether.runners.codex._AppServerClient", lambda **_: fake)
-    events = [event async for event in AppServerCodexRunner(codex_cmd="codex", extra_args=[]).run("prompt", None)]
+    events = [
+        event
+        async for event in AppServerCodexRunner(codex_cmd="codex", extra_args=[]).run(
+            "prompt", None
+        )
+    ]
     completed = next(event for event in events if isinstance(event, CompletedEvent))
     assert not completed.ok and completed.answer == "partial answer"
     assert completed.error == "tool failed"

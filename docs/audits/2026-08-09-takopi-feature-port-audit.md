@@ -1,9 +1,9 @@
 # Takopi Feature Port Audit — Takopi → Untether
 
 **Date:** 2026-08-10
-**Untether baseline:** `78681542c967c5b31ece5cd138f39ba12e91c40e` on `takopi-gap-closure`; the documented closure changes are present in the working tree pending commit.
+**Untether baseline:** `4fdf694` on `takopi-gap-closure`; post-health migration repairs are pending commit.
 **Takopi reference:** `d28e5ba7cf449608634c4a3ab6206998e6d4f0ae`.
-**Authoritative execution plan:** `D:/Projects/takopi/docs/plans/2026-08-10-takopi-untether-gap-closure-plan.md`.
+**Authoritative execution plan:** `D:/Projects/takopi/docs/plans/2026-08-11-takopi-untether-comprehensive-gap-closure-plan.md`.
 **Historical comparison:** `D:/Projects/takopi/docs/reference/untether-comparison.md` remains evidence only; its pre-migration conclusions are not current truth.
 
 ## Method
@@ -54,7 +54,7 @@ Triggers (`triggers/`), cost tracking (`cost_tracker.py`), quarantine (`session_
 | # | Item | Superseded by |
 |---|---|---|
 | D1 | Legacy `[[takopi-send: path]]` marker protocol | `.untether-outbox/` directory delivery (`outbox_delivery.py`). |
-| D2 | Takopi `[logging]` config table | Untether logging env controls (already richer). |
+| D2 | Legacy claim that `[logging]` is absent | tested TOML `[logging]` compatibility (`UntetherSettings.logging`, CLI wiring, redaction) |
 | D3 | `pi.plan_flag` config flag | Extension detection (see E4). |
 
 ## E. Gap-closure ledger
@@ -67,16 +67,18 @@ Triggers (`triggers/`), cost tracking (`cost_tracker.py`), quarantine (`session_
 | Runner lifecycle and ACP timeout ownership | implemented | subprocess, settings, runner/ACP tests | runtime-unverified — native ACP probe unavailable |
 | Retry and timeout terminal semantics | implemented | retry/timeout contract tests, including a terminal timeout event with the runner engine | runtime-unverified — provider transient probe unavailable |
 | Pi goal-list extension seeding | implemented | Pi runner tests cover fresh XML seeding, escaping, fallback, and plan precedence | runtime-unverified — installed extension probe unavailable |
-| CI hard type gate and 3-OS static matrix | implemented | `.github/workflows/ci.yml` enforces formatting, Ruff, and `ty check src tests` across Ubuntu, macOS, and Windows; fresh local Ruff/ty/lock checks pass with zero ty diagnostics | runtime-unverified — hosted macOS/Linux jobs await CI execution |
-| Live config/state/poller cutover | partial | restricted config/state backup created; `[logging]` absent; config loader, `untether doctor`, installed imports, Startup target, and state schema/mtime comparison verified | runtime-unverified — no poller was running; authorized Telegram and native-engine probes require external credentials/CLIs |
+| CI hard type gate and 3-OS static matrix | partial | `.github/workflows/ci.yml` enforces formatting, Ruff, and `ty check src tests` across Ubuntu, macOS, and Windows; fresh production `ty check src` and Ruff gates pass locally | runtime-unverified — test-fixture Ty debt and hosted macOS/Linux jobs await CI execution |
+| Live config/state/poller cutover | partial | restricted config/state backup created; config loader, `untether doctor`, installed imports, Startup target, and state schema/mtime comparison verified | runtime-unverified — no poller was running; authorized Telegram and native-engine probes require external credentials/CLIs |
 | Installed `/health` command reliability | implemented | registry loads the `health` entry point; generic dispatch gives catalog misses a visible error; immutable command status plus bounded progressive diagnostic delivery are covered by `test_command_registry.py`, `test_health_command.py`, `test_scheduler_queue.py`, `test_telegram_bridge.py`, and `test_transport_runtime.py` | runtime-unverified — authorized Telegram smoke still requires credentials and a single owned poller |
 
 ## F. Verification snapshot
 
 - Focused migration validation for installed health reliability: **151 passed, 2 skipped** across resolver, health, command-registry, scheduler, and Telegram bridge contracts.
-- Fresh Windows full suite: **3227 passed, 35 skipped**. Fresh static gates passed: Ruff formatting, Ruff lint, `ty check src tests` with zero diagnostics, and `uv lock --check`. Windows measures **78.26%** branch coverage, below 81%; the required 81% coverage gate remains Ubuntu/Python 3.14-only in CI, so its hosted result is runtime-unverified.
-- Documentation prebuild and clean Zensical site build passed. `uv build`, `twine check`, and `check-wheel-contents` passed. Bandit completed with only existing scoped `# nosec` findings; `pip-audit` found no known vulnerabilities.
-- A clean isolated wheel environment imported Untether, `untether.lockfile`, Telegram transport, and Codex, Claude, Pi, OMP, Grok, Agy, OpenCode, Gemini, and Amp runners.
+- Current focused migration regressions: **66 passed** across Codex app-server, OMP stdin transport, configured voice backends, and installed command registry.
+- Fresh Windows full-suite verification: **3360 passed, 35 skipped, 9 warnings** in 204.22 seconds. The existing branch-inclusive coverage gate passed at **81.01%**; `--cov-branch` and `--cov-fail-under=81` remain unchanged.
+- Fresh local static checks pass: `ruff format --check src tests`, `ruff check src tests`, and `ty check src tests`.
+- `uv lock --check`, `scripts/validate_release.py`, and `git diff --check` pass. Rebuild artifacts after these pending changes are committed; hosted macOS/Linux CI and credentialed Telegram/native-engine probes remain runtime-unverified.
+- A clean isolated wheel environment previously imported Untether, `untether.lockfile`, Telegram transport, and Codex, Claude, Pi, OMP, Grok, Agy, OpenCode, Gemini, and Amp runners.
 
 ## G. Roadmap-only carryover
 

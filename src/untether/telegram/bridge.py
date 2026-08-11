@@ -192,7 +192,9 @@ class TelegramBridgeConfig:
     # #378: SecretStr ferries the key without leaking it through repr/log.
     voice_transcription_api_key: SecretStr | None = None
     voice_transcription_groq_api_key: SecretStr | None = None
-    voice_transcription_local_command: str = "D:/Projects/AI-Video-Transcriber/.venv/Scripts/avt.exe"
+    voice_transcription_local_command: str = (
+        "D:/Projects/AI-Video-Transcriber/.venv/Scripts/avt.exe"
+    )
     voice_transcription_local_backend: Literal["whisper", "parakeet"] = "whisper"
     voice_transcription_local_model: str = "base"
     voice_transcription_timeout_s: float = 180.0
@@ -232,11 +234,19 @@ class TelegramBridgeConfig:
         self.voice_transcription_model = settings.voice_transcription_model
         self.voice_transcription_base_url = settings.voice_transcription_base_url
         self.voice_transcription_api_key = settings.voice_transcription_api_key
-        self.voice_transcription_groq_api_key = settings.voice_transcription_groq_api_key
-        self.voice_transcription_local_command = settings.voice_transcription_local_command
-        self.voice_transcription_local_backend = settings.voice_transcription_local_backend
+        self.voice_transcription_groq_api_key = (
+            settings.voice_transcription_groq_api_key
+        )
+        self.voice_transcription_local_command = (
+            settings.voice_transcription_local_command
+        )
+        self.voice_transcription_local_backend = (
+            settings.voice_transcription_local_backend
+        )
         self.voice_transcription_local_model = settings.voice_transcription_local_model
-        self.voice_transcription_timeout_s = float(settings.voice_transcription_timeout_s)
+        self.voice_transcription_timeout_s = float(
+            settings.voice_transcription_timeout_s
+        )
         self.voice_transcription_language = settings.voice_transcription_language
         self.voice_show_transcription = bool(settings.voice_show_transcription)
         self.voice_transcription_url_allowlist = tuple(

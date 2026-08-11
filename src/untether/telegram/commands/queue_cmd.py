@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
+from ...transport import MessageRef
+
 if TYPE_CHECKING:
     from ...model import ResumeToken
     from ...runner_bridge import RunningTasks

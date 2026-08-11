@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Literal
+
 from .config import ConfigError, ProjectsConfig
 from .context import RunContext
 from .directives import (
     ParsedDirectives,
     compose_context_line,
-    format_context_line,
     parse_context_line,
     parse_directives,
 )
@@ -324,6 +326,4 @@ class TransportRuntime:
         plan: bool = False,
         goal: str | None = None,
     ) -> str | None:
-        return compose_context_line(
-            context, self._projects, plan=plan, goal=goal
-        )
+        return compose_context_line(context, self._projects, plan=plan, goal=goal)

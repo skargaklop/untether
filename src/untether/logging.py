@@ -5,9 +5,9 @@ import io
 import os
 import re
 import sys
-from pathlib import Path
 from contextlib import contextmanager
 from contextvars import ContextVar
+from pathlib import Path
 from typing import Any, TextIO, cast
 
 import structlog
@@ -235,7 +235,11 @@ def setup_logging(
     _PIPELINE_LEVEL_NAME = "info" if trace_pipeline else "debug"
 
     configured_format = getattr(settings, "format", None)
-    format_value = os.environ.get("TAKOPI_LOG_FORMAT", configured_format or "console").strip().lower()
+    format_value = (
+        os.environ.get("TAKOPI_LOG_FORMAT", configured_format or "console")
+        .strip()
+        .lower()
+    )
     color_override = os.environ.get("TAKOPI_LOG_COLOR")
     is_tty = sys.stdout.isatty() if color_override is None else _truthy(color_override)
     if format_value == "json":
@@ -261,7 +265,10 @@ def setup_logging(
             _log_file_handle = open(path, "a", encoding="utf-8")  # noqa: SIM115
         except OSError as exc:
             _log_file_handle = None
-            print(f"warning: unable to open log file ({type(exc).__name__})", file=sys.stderr)
+            print(
+                f"warning: unable to open log file ({type(exc).__name__})",
+                file=sys.stderr,
+            )
 
     processors = cast(
         list[Processor],

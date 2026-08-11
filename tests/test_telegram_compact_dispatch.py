@@ -8,7 +8,12 @@ import pytest
 from untether.model import ResumeToken
 from untether.telegram.commands.compact import (
     CompactConfirmRecord,
+    _card,
+    _confirm_callback_data,
+    _confirm_markup,
+    _expired,
     claim_pending_confirm,
+    prune_pending_confirms,
     register_pending_confirm,
 )
 from untether.transport import MessageRef
@@ -64,6 +69,59 @@ def test_unauthorized_callback_does_not_consume_confirmation() -> None:
             now=101.0,
         )
         is record
+    )
+
+
+def test_compact_confirmation_helpers_preserve_callback_contract() -> None:
+    assert _confirm_callback_data("token", "confirm") == "compact:token:confirm"
+    assert _confirm_markup("token")["inline_keyboard"][0][0]["callback_data"] == (
+        "compact:token:confirm"
+    )
+    assert _card("queued", keyboard=True).extra == {"parse_mode": "Markdown"}
+    assert _card("queued").extra["reply_markup"] == {"inline_keyboard": []}
+
+
+def test_pending_confirmation_pruning_and_bounded_registration() -> None:
+    expired = _record(token="expired", expires_at=100.0)
+    current = _record(token="current", expires_at=102.0)
+    registry = {expired.token: expired, current.token: current}
+
+    assert _expired(expired, now=100.0)
+    assert prune_pending_confirms(registry, now=101.0) == [expired]
+    assert registry == {current.token: current}
+
+    register_pending_confirm(registry, expired, now=101.0)
+    assert registry[expired.token] is expired
+
+
+def test_expired_or_reclaimed_confirmation_is_unavailable() -> None:
+    record = _record(expires_at=100.0)
+    registry = {record.token: record}
+
+    assert (
+        claim_pending_confirm(
+            registry,
+            record.token,
+            chat_id=10,
+            thread_id=20,
+            sender_id=30,
+            now=100.0,
+        )
+        is None
+    )
+    assert registry == {}
+
+    record.claimed = True
+    registry[record.token] = record
+    assert (
+        claim_pending_confirm(
+            registry,
+            record.token,
+            chat_id=10,
+            thread_id=20,
+            sender_id=30,
+        )
+        is None
     )
 
 

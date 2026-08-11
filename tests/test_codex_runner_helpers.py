@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -9,6 +10,7 @@ from untether.config import ConfigError
 from untether.events import EventFactory
 from untether.model import ActionEvent, CompletedEvent, StartedEvent
 from untether.runners.codex import (
+    AppServerCodexRunner,
     CodexRunner,
     _AgentMessageSummary,
     _format_change_summary,
@@ -252,8 +254,7 @@ def test_codex_runner_process_and_stream_end_events() -> None:
 
 def test_codex_build_runner_configs(tmp_path: Path) -> None:
     cfg: EngineConfig = {}
-    runner = build_runner(cfg, tmp_path)
-    assert runner.__class__.__name__ == "AppServerCodexRunner"
+    runner = cast(AppServerCodexRunner, build_runner(cfg, tmp_path))
     assert runner.extra_args == ["-c", "notify=[]"]
 
     cfg = {"mode": "exec", "extra_args": ["--foo"], "profile": "Demo"}

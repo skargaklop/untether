@@ -20,6 +20,7 @@ from ..types import TelegramCallbackQuery, TelegramIncomingMessage
 from .executor import _TelegramCommandExecutor
 
 if TYPE_CHECKING:
+    from ...triggers.manager import TriggerManager
     from ..bridge import TelegramBridgeConfig
 
 logger = get_logger(__name__)
@@ -37,10 +38,11 @@ def _parse_callback_data(data: str) -> tuple[str, str]:
     args_text = parts[1] if len(parts) > 1 else ""
     return command_id, args_text
 
+
 def _runtime_status(
     running_tasks: RunningTasks,
     scheduler: ThreadScheduler,
-    trigger_manager: object | None,
+    trigger_manager: TriggerManager | None,
 ) -> RuntimeStatusSnapshot:
     queued_count = getattr(scheduler, "queued_count", None)
     queued = queued_count() if callable(queued_count) else 0
@@ -56,7 +58,6 @@ def _runtime_status(
         )
     except Exception:  # noqa: BLE001 - status remains available without trigger counts
         return RuntimeStatusSnapshot(len(running_tasks), queued, True, None, None)
-
 
 
 async def _dispatch_command(
@@ -336,7 +337,9 @@ async def _dispatch_callback(
             executor=executor,
             trigger_manager=cfg.trigger_manager,
             default_chat_id=cfg.chat_id,
-            runtime_status=_runtime_status(running_tasks, scheduler, cfg.trigger_manager),
+            runtime_status=_runtime_status(
+                running_tasks, scheduler, cfg.trigger_manager
+            ),
             dispatch_started_at=dispatch_start,
         )
         try:

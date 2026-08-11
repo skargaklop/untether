@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import math
-import os
 import re
+import subprocess
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -13,6 +11,8 @@ from typing import Any, cast
 
 import anyio
 import msgspec
+from anyio.abc import TaskGroup
+from anyio.streams.memory import MemoryObjectSendStream
 
 from ..backends import EngineBackend, EngineConfig
 from ..config import ConfigError
@@ -30,8 +30,14 @@ from ..runner import (
 )
 from ..schemas import codex as codex_schema
 from ..utils.paths import get_run_base_dir, relativize_command
-from ..utils.subprocess import close_process_streams, kill_process_tree, terminate_process, wait_for_process
 from ..utils.streams import drain_stderr, iter_bytes_lines
+from ..utils.subprocess import (
+    close_process_streams,
+    kill_process_tree,
+    terminate_process,
+    wait_for_process,
+)
+from ._compact_mixin import SlashCompactMixin
 from .modes import effective_prompt, run_modes
 from .run_options import get_run_options
 
@@ -471,7 +477,8 @@ class CodexRunState:
     turn_index: int = 0
 
 
-class CodexRunner(ResumeTokenMixin, JsonlSubprocessRunner):
+class CodexRunner(SlashCompactMixin, ResumeTokenMixin, JsonlSubprocessRunner):
+    compact_accepts_instructions = False
     engine: EngineId = ENGINE
     resume_re = _RESUME_RE
     model: str | None = None
@@ -734,6 +741,8 @@ class CodexRunner(ResumeTokenMixin, JsonlSubprocessRunner):
                 resume=found_session,
             )
         ]
+
+
 @dataclass(slots=True)
 class _AppServerWaiter:
     event: anyio.Event = field(default_factory=anyio.Event)
@@ -742,7 +751,9 @@ class _AppServerWaiter:
 
 
 class _BufferedSubscription:
-    def __init__(self, pending: list[dict[str, Any]], receive: Any, client: Any, turn_id: str) -> None:
+    def __init__(
+        self, pending: list[dict[str, Any]], receive: Any, client: Any, turn_id: str
+    ) -> None:
         self._pending = iter(pending)
         self._receive = receive
         self._client = client
@@ -760,21 +771,25 @@ class _BufferedSubscription:
             except anyio.EndOfStream:
                 async with self._client._state_lock:
                     if self._turn_id in self._client._pending_overflow:
-                        raise RuntimeError("codex app-server notification buffer overflow")
+                        raise RuntimeError(
+                            "codex app-server notification buffer overflow"
+                        ) from None
                 raise
+
     async def receive(self) -> dict[str, Any]:
         return await self.__anext__()
 
     async def aclose(self) -> None:
         await self._receive.aclose()
 
+
 class _AppServerClient:
     def __init__(self, *, codex_cmd: str, extra_args: list[str]) -> None:
         self.codex_cmd, self.extra_args = codex_cmd, extra_args
         self._proc: Any = None
-        self._reader_tg: anyio.abc.TaskGroup | None = None
+        self._reader_tg: TaskGroup | None = None
         self._waiters: dict[str, _AppServerWaiter] = {}
-        self._subscriptions: dict[str, anyio.abc.ObjectSendStream[dict[str, Any]]] = {}
+        self._subscriptions: dict[str, MemoryObjectSendStream[dict[str, Any]]] = {}
         self._pending_by_turn: dict[str, list[dict[str, Any]]] = {}
         self._pending_overflow: set[str] = set()
         self._start_lock = anyio.Lock()
@@ -786,14 +801,31 @@ class _AppServerClient:
             if self._proc is not None:
                 return
             try:
-                self._proc = await anyio.open_process([self.codex_cmd, *self.extra_args, "app-server", "--listen", "stdio://"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                self._proc = await anyio.open_process(
+                    [
+                        self.codex_cmd,
+                        *self.extra_args,
+                        "app-server",
+                        "--listen",
+                        "stdio://",
+                    ],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
                 if self._proc.stdin is None or self._proc.stdout is None:
-                    raise RuntimeError("codex app-server failed to open subprocess pipes")
+                    raise RuntimeError(
+                        "codex app-server failed to open subprocess pipes"
+                    )
                 self._reader_tg = await anyio.create_task_group().__aenter__()
                 self._reader_tg.start_soon(self._read_loop)
                 if self._proc.stderr is not None:
-                    self._reader_tg.start_soon(drain_stderr, self._proc.stderr, logger, "codex-app-server")
-                await self.request("initialize", {"clientInfo": {"name": "untether", "version": "0"}})
+                    self._reader_tg.start_soon(
+                        drain_stderr, self._proc.stderr, logger, "codex-app-server"
+                    )
+                await self.request(
+                    "initialize", {"clientInfo": {"name": "untether", "version": "0"}}
+                )
                 await self.notify("initialized", {})
             except BaseException:
                 await self.close()
@@ -857,17 +889,24 @@ class _AppServerClient:
                 async with self._state_lock:
                     waiter = self._waiters.pop(str(message["id"]), None)
                 if waiter is not None:
-                    waiter.error = RuntimeError("codex app-server request failed") if "error" in message else None
+                    waiter.error = (
+                        RuntimeError("codex app-server request failed")
+                        if "error" in message
+                        else None
+                    )
                     waiter.result = message.get("result")
                     waiter.event.set()
-        except BaseException as exc:
+        except BaseException as exc:  # noqa: BLE001 - fail waiters before cancellation propagates
             failure = exc
         await self._fail_all(failure or RuntimeError("codex app-server closed"))
 
     def _handle_server_request(self, message: dict[str, Any]) -> dict[str, Any]:
         method = message.get("method")
         params = message.get("params")
-        if method in {"item/commandExecution/requestApproval", "item/fileChange/requestApproval"}:
+        if method in {
+            "item/commandExecution/requestApproval",
+            "item/fileChange/requestApproval",
+        }:
             return {"decision": "accept"}
         if method == "item/permissions/requestApproval" and isinstance(params, dict):
             permissions = params.get("permissions")
@@ -924,22 +963,34 @@ class _AppServerClient:
     async def ensure_thread_loaded(self, thread_id: str) -> None:
         await self.request("thread/resume", {"threadId": thread_id})
 
-    async def turn_start(self, thread_id: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def turn_start(
+        self, thread_id: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
         result = await self.request("turn/start", {"threadId": thread_id, **params})
         if not isinstance(result, dict):
             raise RuntimeError("turn/start returned non-object")
         return result
 
     async def turn_steer(self, thread_id: str, turn_id: str, text: str) -> None:
-        result = await self.request("turn/steer", {"threadId": thread_id, "expectedTurnId": turn_id, "input": [{"type": "text", "text": text}]})
+        result = await self.request(
+            "turn/steer",
+            {
+                "threadId": thread_id,
+                "expectedTurnId": turn_id,
+                "input": [{"type": "text", "text": text}],
+            },
+        )
         if not isinstance(result, dict) or result.get("turnId") != turn_id:
             raise RuntimeError("turn/steer returned unexpected turn id")
 
     async def turn_interrupt(self, thread_id: str, turn_id: str) -> bool:
         await self.request("turn/interrupt", {"threadId": thread_id, "turnId": turn_id})
         return True
+
     async def subscribe_turn(self, turn_id: str) -> Any:
-        send, receive = anyio.create_memory_object_stream[dict[str, Any]](_APP_PENDING_CAP)
+        send, receive = anyio.create_memory_object_stream[dict[str, Any]](
+            _APP_PENDING_CAP
+        )
         async with self._state_lock:
             if turn_id in self._pending_overflow:
                 self._pending_overflow.discard(turn_id)
@@ -947,6 +998,7 @@ class _AppServerClient:
             pending = self._pending_by_turn.pop(turn_id, [])
             self._subscriptions[turn_id] = send
         return _BufferedSubscription(pending, receive, self, turn_id)
+
     async def unsubscribe_turn(self, turn_id: str) -> None:
         async with self._state_lock:
             send = self._subscriptions.pop(turn_id, None)
@@ -967,15 +1019,24 @@ class _AppServerTurnControl:
         return await self.client.turn_interrupt(self.thread_id, self.turn_id)
 
 
-class AppServerCodexRunner(ResumeTokenMixin, BaseRunner):
+class AppServerCodexRunner(SlashCompactMixin, ResumeTokenMixin, BaseRunner):
+    compact_accepts_instructions = False
     engine: EngineId = ENGINE
     resume_re = _RESUME_RE
 
-    def __init__(self, *, codex_cmd: str, extra_args: list[str], title: str = "Codex") -> None:
-        self.codex_cmd, self.extra_args, self.session_title = codex_cmd, extra_args, title
+    def __init__(
+        self, *, codex_cmd: str, extra_args: list[str], title: str = "Codex"
+    ) -> None:
+        self.codex_cmd, self.extra_args, self.session_title = (
+            codex_cmd,
+            extra_args,
+            title,
+        )
         self._client = _AppServerClient(codex_cmd=codex_cmd, extra_args=extra_args)
 
-    async def run_impl(self, prompt: str, resume: ResumeToken | None) -> AsyncIterator[UntetherEvent]:
+    async def run_impl(
+        self, prompt: str, resume: ResumeToken | None
+    ) -> AsyncIterator[UntetherEvent]:
         client = self._client
         await client.start()
         options = get_run_options()
@@ -985,21 +1046,33 @@ class AppServerCodexRunner(ResumeTokenMixin, BaseRunner):
         elif plan:
             prompt = effective_prompt(prompt, soft_plan=True, options=options)
         if resume is None:
-            thread_id = str((await client.thread_start({"cwd": str(get_run_base_dir())}))["thread"]["id"])
+            thread_id = str(
+                (await client.thread_start({"cwd": str(get_run_base_dir())}))["thread"][
+                    "id"
+                ]
+            )
         else:
             thread_id = resume.value
             await client.ensure_thread_loaded(thread_id)
-        result = await client.turn_start(thread_id, {"input": [{"type": "text", "text": prompt}]})
+        result = await client.turn_start(
+            thread_id, {"input": [{"type": "text", "text": prompt}]}
+        )
         turn = result.get("turn") if isinstance(result, dict) else None
         if not isinstance(turn, dict) or not isinstance(turn.get("id"), str):
             raise RuntimeError("turn/start returned no turn id")
         token = ResumeToken(engine=ENGINE, value=thread_id)
         control = _AppServerTurnControl(client, thread_id, turn["id"])
-        yield EventFactory(ENGINE).started(token, title=self.session_title, meta={"turn_id": turn["id"], "control": control})
+        yield EventFactory(ENGINE).started(
+            token,
+            title=self.session_title,
+            meta={"turn_id": turn["id"], "control": control},
+        )
         try:
             notifications = await client.subscribe_turn(turn["id"])
         except RuntimeError as exc:
-            yield EventFactory(ENGINE).completed_error(error=str(exc), answer="", resume=token)
+            yield EventFactory(ENGINE).completed_error(
+                error=str(exc), answer="", resume=token
+            )
             await client.close()
             return
         answer = ""
@@ -1011,25 +1084,42 @@ class AppServerCodexRunner(ResumeTokenMixin, BaseRunner):
                 method = message.get("method") if isinstance(message, dict) else None
                 params = message.get("params", {}) if isinstance(message, dict) else {}
                 if method == "turn/plan/updated":
-                    yield EventFactory(ENGINE).action_started(action_id="plan", kind="command", title="Plan updated", detail={"plan": params.get("plan", [])})
+                    yield EventFactory(ENGINE).action_started(
+                        action_id="plan",
+                        kind="command",
+                        title="Plan updated",
+                        detail={"plan": params.get("plan", [])},
+                    )
                 elif method == "item/completed":
                     item = params.get("item", {}) if isinstance(params, dict) else {}
                     if isinstance(item, dict) and item.get("type") == "agentMessage":
                         text = item.get("text")
                         if isinstance(text, str):
-                            agent_messages.append(_AgentMessageSummary(text=text, phase=item.get("phase")))
+                            agent_messages.append(
+                                _AgentMessageSummary(text=text, phase=item.get("phase"))
+                            )
                             selected = _select_final_answer(agent_messages)
                             if selected is not None:
                                 answer = selected
                 elif method == "turn/completed":
-                    turn_info = params.get("turn", {}) if isinstance(params, dict) else {}
-                    status = turn_info.get("status") if isinstance(turn_info, dict) else None
+                    turn_info = (
+                        params.get("turn", {}) if isinstance(params, dict) else {}
+                    )
+                    status = (
+                        turn_info.get("status") if isinstance(turn_info, dict) else None
+                    )
                     if status == "completed":
                         terminal = True
                     else:
-                        turn_error = turn_info.get("error") if isinstance(turn_info, dict) else None
+                        turn_error = (
+                            turn_info.get("error")
+                            if isinstance(turn_info, dict)
+                            else None
+                        )
                         if isinstance(turn_error, dict):
-                            turn_error = turn_error.get("message") or turn_error.get("code")
+                            turn_error = turn_error.get("message") or turn_error.get(
+                                "code"
+                            )
                         error = str(turn_error or status or "codex turn failed")[:500]
                     break
         except RuntimeError as exc:
@@ -1043,9 +1133,9 @@ class AppServerCodexRunner(ResumeTokenMixin, BaseRunner):
         if terminal:
             yield EventFactory(ENGINE).completed_ok(answer=answer, resume=token)
         else:
-            yield EventFactory(ENGINE).completed_error(error=error, answer=answer, resume=token)
-
-
+            yield EventFactory(ENGINE).completed_error(
+                error=error, answer=answer, resume=token
+            )
 
 
 def build_runner(config: EngineConfig, config_path: Path) -> Runner:
@@ -1097,11 +1187,17 @@ def build_runner(config: EngineConfig, config_path: Path) -> Runner:
 
     mode = config.get("mode", "app_server")
     if mode not in {"app_server", "exec"}:
-        raise ConfigError(f"Invalid `codex.mode` in {config_path}; expected `app_server` or `exec`.")
+        raise ConfigError(
+            f"Invalid `codex.mode` in {config_path}; expected `app_server` or `exec`."
+        )
     if mode == "exec":
-        runner: Runner = CodexRunner(codex_cmd=codex_cmd, extra_args=extra_args, title=title)
+        runner: Runner = CodexRunner(
+            codex_cmd=codex_cmd, extra_args=extra_args, title=title
+        )
     else:
-        runner = AppServerCodexRunner(codex_cmd=codex_cmd, extra_args=extra_args, title=title)
+        runner = AppServerCodexRunner(
+            codex_cmd=codex_cmd, extra_args=extra_args, title=title
+        )
     return cast(Runner, runner)
 
 

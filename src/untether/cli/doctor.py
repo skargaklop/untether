@@ -57,7 +57,11 @@ def _doctor_voice_checks(settings: UntetherSettings) -> list[DoctorCheck]:
         )
         if command.is_file():
             return [DoctorCheck("voice transcription", "ok", detail)]
-        return [DoctorCheck("voice transcription", "error", "local transcription unavailable")]
+        return [
+            DoctorCheck(
+                "voice transcription", "error", "local transcription unavailable"
+            )
+        ]
     api_key = (
         telegram.voice_transcription_groq_api_key
         if provider == "groq"

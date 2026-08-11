@@ -3084,11 +3084,17 @@ async def run_runner_with_cancel(
                                     running_task.resume = evt.resume
                                 if evt.meta:
                                     control = evt.meta.get("control")
-                                    if callable(getattr(control, "steer", None)) and callable(getattr(control, "interrupt", None)):
-                                        running_task.control = cast(RunnerTurnControl, control)
+                                    if callable(
+                                        getattr(control, "steer", None)
+                                    ) and callable(getattr(control, "interrupt", None)):
+                                        running_task.control = cast(
+                                            RunnerTurnControl, control
+                                        )
                                 try:
                                     if on_thread_known is not None:
-                                        await on_thread_known(evt.resume, running_task.done)
+                                        await on_thread_known(
+                                            evt.resume, running_task.done
+                                        )
                                 finally:
                                     running_task.resume_ready.set()
                         elif isinstance(evt, CompletedEvent):

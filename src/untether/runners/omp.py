@@ -122,7 +122,8 @@ class OmpRunner(HandoffCompactMixin, PiRunner):
     def command(self) -> str:
         return "omp"
 
-    def _final_prompt(self, prompt: str) -> str:
+    def _final_prompt(self, prompt: str, *, resume: ResumeToken | None = None) -> str:
+        _ = resume
         run_options = get_run_options()
         plan, goal = run_modes(run_options)
         if goal is not None:
@@ -140,7 +141,7 @@ class OmpRunner(HandoffCompactMixin, PiRunner):
         *,
         state: PiStreamState,
     ) -> list[str]:
-        self._final_prompt(prompt)
+        self._final_prompt(prompt, resume=resume)
         run_options = get_run_options()
         plan, _goal = run_modes(run_options)
         args: list[str] = [*self.extra_args, "--print", "--mode", "json"]
@@ -174,7 +175,7 @@ class OmpRunner(HandoffCompactMixin, PiRunner):
         state: PiStreamState,
     ) -> bytes:
         _ = state
-        return (self._final_prompt(prompt) + "\n").encode("utf-8")
+        return (self._final_prompt(prompt, resume=resume) + "\n").encode("utf-8")
 
     def new_state(self, prompt: str, resume: ResumeToken | None) -> PiStreamState:
         if resume is not None:

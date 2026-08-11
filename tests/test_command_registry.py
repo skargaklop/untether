@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 import pytest
 
 from tests.plugin_fixtures import FakeEntryPoint, install_entrypoints
@@ -47,6 +49,34 @@ def test_command_registry_optional_missing(command_entrypoints) -> None:
     assert commands.get_command("nope", required=False) is None
 
 
+def test_command_registry_rejects_reserved_id() -> None:
+    with pytest.raises(ConfigError, match="reserved"):
+        commands.get_command("cancel")
+
+
+@pytest.mark.parametrize(
+    ("backend", "error"),
+    [
+        (object(), "not a CommandBackend"),
+        (
+            type(
+                "WrongId",
+                (),
+                {"id": "wrong", "description": "x", "handle": DummyCommand.handle},
+            )(),
+            "does not match",
+        ),
+    ],
+)
+def test_command_registry_validates_entrypoint_contract(
+    backend: object, error: str
+) -> None:
+    entrypoint = FakeEntryPoint("hello", "example:BACKEND", plugins.COMMAND_GROUP)
+
+    with pytest.raises((TypeError, ValueError), match=error):
+        commands._validate_command_backend(backend, entrypoint)
+
+
 def test_installed_registry_loads_health_backend() -> None:
     ids = commands.list_command_ids()
     backend = commands.get_command("health")
@@ -66,17 +96,19 @@ async def test_unknown_dispatched_command_returns_visible_error(monkeypatch) -> 
     from types import SimpleNamespace
 
     from untether.runner_bridge import RunningTasks
-    from untether.scheduler import ThreadScheduler
     from untether.telegram.commands import dispatch
     from untether.telegram.types import TelegramIncomingMessage
+    from untether.transport import MessageRef
 
-    sent: list[tuple[str, object, bool]] = []
+    sent: list[tuple[str, MessageRef | None, bool]] = []
 
     class Executor:
-        def __init__(self, **_kwargs) -> None:
+        def __init__(self, **_kwargs: Any) -> None:
             pass
 
-        async def send(self, text, *, reply_to, notify) -> None:
+        async def send(
+            self, text: str, *, reply_to: MessageRef | None, notify: bool
+        ) -> None:
             sent.append((text, reply_to, notify))
 
     monkeypatch.setattr(dispatch, "_TelegramCommandExecutor", Executor)
@@ -87,14 +119,29 @@ async def test_unknown_dispatched_command_returns_visible_error(monkeypatch) -> 
         show_resume_line=False,
     )
     msg = TelegramIncomingMessage(
-        transport="telegram", chat_id=42, message_id=9, text="/missing",
-        reply_to_message_id=None, reply_to_text=None, sender_id=None,
+        transport="telegram",
+        chat_id=42,
+        message_id=9,
+        text="/missing",
+        reply_to_message_id=None,
+        reply_to_text=None,
+        sender_id=None,
     )
 
     await dispatch._dispatch_command(
-        cfg, msg, "/missing", "missing", "", RunningTasks(),
-        SimpleNamespace(), None, False, None, None,
+        cast(Any, cfg),
+        msg,
+        "/missing",
+        "missing",
+        "",
+        RunningTasks(),
+        cast(Any, None),
+        None,
+        False,
+        None,
+        None,
     )
 
     assert sent and sent[0][0] == "error: command unavailable"
+    assert sent[0][1] is not None
     assert sent[0][1].message_id == 9

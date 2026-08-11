@@ -168,7 +168,9 @@ class TelegramTransportSettings(BaseModel):
     voice_transcription_base_url: NonEmptyStr | None = None
     voice_transcription_api_key: SecretStr | None = None
     voice_transcription_groq_api_key: SecretStr | None = None
-    voice_transcription_local_command: NonEmptyStr = "D:/Projects/AI-Video-Transcriber/.venv/Scripts/avt.exe"
+    voice_transcription_local_command: NonEmptyStr = (
+        "D:/Projects/AI-Video-Transcriber/.venv/Scripts/avt.exe"
+    )
     voice_transcription_local_backend: Literal["whisper", "parakeet"] = "whisper"
     voice_transcription_local_model: NonEmptyStr = "base"
     voice_transcription_timeout_s: float = Field(default=180.0, gt=0)
@@ -694,13 +696,13 @@ class RunnerSettings(BaseModel):
     retry_base_delay_s: float = Field(default=5.0, ge=0.0)
 
 
-
 class LoggingSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     level: Literal["debug", "info", "warning", "error", "critical"] = "info"
     file: NonEmptyStr | None = None
     format: Literal["console", "json"] = "console"
+
 
 class UntetherSettings(BaseSettings):
     model_config = SettingsConfigDict(

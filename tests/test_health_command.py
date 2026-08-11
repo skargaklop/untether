@@ -6,6 +6,7 @@ import sys
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 from unittest.mock import MagicMock
 
 import anyio
@@ -39,9 +40,18 @@ class _Executor:
         self.edits.append((ref, message))
         return ref
 
+    async def run_one(self, *args, **kwargs):
+        raise AssertionError("health does not run engines")
+
+    async def run_many(self, *args, **kwargs):
+        raise AssertionError("health does not run engines")
+
 
 def _make_ctx(
-    *, trigger_manager=None, config_path: Path | None = None, executor=None
+    *,
+    trigger_manager=None,
+    config_path: Path | None = None,
+    executor: _Executor | None = None,
 ) -> CommandContext:
     return CommandContext(
         command="health",
@@ -70,7 +80,7 @@ async def test_handle_sends_initial_summary_then_edits_same_message(tmp_path) ->
     result = await HealthCommand().handle(ctx)
 
     assert result is None
-    executor = ctx.executor
+    executor = cast(_Executor, ctx.executor)
     assert len(executor.sent) == 1
     initial, reply_to, notify = executor.sent[0]
     assert isinstance(initial, RenderedMessage)
@@ -79,9 +89,11 @@ async def test_handle_sends_initial_summary_then_edits_same_message(tmp_path) ->
     assert notify is False
     assert "collecting diagnostics" in initial.text
     assert executor.edits and executor.edits[0][0].message_id == 2
-    assert "<b>Service</b>" in executor.edits[0][1].text
-    assert "active: 2" in executor.edits[0][1].text
-    assert "queued: 3" in executor.edits[0][1].text
+    detail = executor.edits[0][1]
+    assert isinstance(detail, RenderedMessage)
+    assert "<b>Service</b>" in detail.text
+    assert "active: 2" in detail.text
+    assert "queued: 3" in detail.text
 
 
 def test_initial_message_includes_uptime(tmp_path) -> None:
@@ -127,7 +139,8 @@ async def test_handle_isolates_collector_failure(monkeypatch, tmp_path) -> None:
     ctx = _make_ctx(config_path=tmp_path / "untether.toml")
     await HealthCommand().handle(ctx)
 
-    detail = ctx.executor.edits[0][1]
+    detail = cast(_Executor, ctx.executor).edits[0][1]
+    assert isinstance(detail, RenderedMessage)
     assert "RAM: healthy" in detail.text
     assert "<b>Process</b>\n• unavailable" in detail.text
     assert "today's API cost: $1.00" in detail.text
@@ -180,7 +193,8 @@ async def test_bounded_collect_propagates_cancellation() -> None:
         async with anyio.create_task_group() as group:
             group.start_soon(collect)
             with anyio.fail_after(1):
-                await anyio.to_thread.run_sync(started.wait)
+                while not started.is_set():
+                    await anyio.sleep(0.01)
             group.cancel_scope.cancel()
     finally:
         release.set()

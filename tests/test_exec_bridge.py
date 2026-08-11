@@ -2,6 +2,7 @@ import contextlib
 import os
 import sys
 import uuid
+from types import SimpleNamespace
 from typing import Any, cast
 
 import anyio
@@ -900,7 +901,7 @@ class TestMaybeAppendUsageFooterAlwaysShow:
         def _warn(event: str, **kwargs) -> None:
             warn_calls.append((event, kwargs))
 
-        monkeypatch.setattr(rb.logger, "warning", _warn)
+        monkeypatch.setattr(rb, "logger", SimpleNamespace(warning=_warn))
 
         # Call _validate_usage_schema directly to exercise per-call behaviour
         # (the cached fetcher path memoises within the TTL window).
@@ -8653,7 +8654,7 @@ def test_572_retry_notice_format() -> None:
 async def test_app_server_control_attaches_and_interrupts_on_cancel() -> None:
     from untether.model import StartedEvent
     from untether.runner import RunnerTurnControl
-    from untether.runner_bridge import RunningTask, run_runner_with_cancel
+    from untether.runner_bridge import RunningTask
 
     class Control(RunnerTurnControl):
         def __init__(self) -> None:
@@ -8672,7 +8673,12 @@ async def test_app_server_control_attaches_and_interrupts_on_cancel() -> None:
         async def run(self, prompt: str, resume: ResumeToken | None):
             token = ResumeToken(engine=CODEX_ENGINE, value="thread-1")
             control = Control()
-            yield StartedEvent(engine=CODEX_ENGINE, resume=token, title="codex", meta={"control": control})
+            yield StartedEvent(
+                engine=CODEX_ENGINE,
+                resume=token,
+                title="codex",
+                meta={"control": control},
+            )
             await anyio.sleep_forever()
 
     task = RunningTask()
@@ -8690,4 +8696,14 @@ async def test_app_server_control_attaches_and_interrupts_on_cancel() -> None:
 
 async def _run_bridge(result, runner, edits, task):
     from untether.runner_bridge import run_runner_with_cancel
-    result.append(await run_runner_with_cancel(runner, prompt="x", resume_token=None, edits=edits, running_task=task, on_thread_known=None))
+
+    result.append(
+        await run_runner_with_cancel(
+            runner,
+            prompt="x",
+            resume_token=None,
+            edits=edits,
+            running_task=task,
+            on_thread_known=None,
+        )
+    )

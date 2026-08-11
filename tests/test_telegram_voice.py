@@ -606,6 +606,7 @@ async def test_594_transcribe_error_log_default_endpoint_marker() -> None:
     assert rec["endpoint"] == "openai-default"
     assert rec["cause"] is None
 
+
 @pytest.mark.anyio
 async def test_groq_transcriber_uses_fixed_endpoint_and_model(monkeypatch) -> None:
     from untether.telegram.voice import OpenAIVoiceTranscriber
@@ -634,7 +635,10 @@ async def test_groq_transcriber_uses_fixed_endpoint_and_model(monkeypatch) -> No
     transcriber = OpenAIVoiceTranscriber(
         base_url="https://api.groq.com/openai/v1", api_key="secret"
     )
-    assert await transcriber.transcribe(model="whisper-large-v3-turbo", audio_bytes=b"x") == "ok"
+    assert (
+        await transcriber.transcribe(model="whisper-large-v3-turbo", audio_bytes=b"x")
+        == "ok"
+    )
     assert calls[0]["client"]["base_url"] == "https://api.groq.com/openai/v1"
     assert calls[1]["model"] == "whisper-large-v3-turbo"
 
@@ -663,6 +667,7 @@ async def test_avt_transcriber_contract(monkeypatch) -> None:
 
         def terminate(self):
             self.returncode = 1
+
         def kill(self):
             self.returncode = 1
 
@@ -677,7 +682,6 @@ async def test_avt_transcriber_contract(monkeypatch) -> None:
     assert await transcriber.transcribe(model="ignored", audio_bytes=b"ogg") == "hello"
     assert seen["argv"][0:4] == ["avt.exe", "--quiet", "transcribe", "--file"]
     assert seen["argv"][5:9] == ["--provider", "local", "--local-backend", "whisper"]
-
 
 
 @pytest.mark.anyio

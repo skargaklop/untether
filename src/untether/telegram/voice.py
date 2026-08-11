@@ -21,7 +21,7 @@ from .types import TelegramIncomingMessage
 
 logger = get_logger(__name__)
 
-__all__ = ["transcribe_voice", "OpenAIVoiceTranscriber", "AvtVoiceTranscriber"]
+__all__ = ["AvtVoiceTranscriber", "OpenAIVoiceTranscriber", "transcribe_voice"]
 
 VOICE_TRANSCRIPTION_DISABLED_HINT = (
     "voice transcription is disabled. enable it in config:\n"
@@ -67,10 +67,14 @@ class OpenAIVoiceTranscriber:
             timeout=120,
             max_retries=_VOICE_MAX_RETRIES,
         ) as client:
-            kwargs: dict[str, object] = {"model": model, "file": audio_file}
-            if language is not None:
-                kwargs["language"] = language
-            response = await client.audio.transcriptions.create(**kwargs)
+            if language is None:
+                response = await client.audio.transcriptions.create(
+                    model=model, file=audio_file
+                )
+            else:
+                response = await client.audio.transcriptions.create(
+                    model=model, file=audio_file, language=language
+                )
         return response.text
 
 
@@ -146,7 +150,9 @@ class AvtVoiceTranscriber:
                 payload = json.loads(bytes(stdout))
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 raise ValueError("local transcription returned invalid output") from exc
-            transcript = payload.get("transcript") if isinstance(payload, dict) else None
+            transcript = (
+                payload.get("transcript") if isinstance(payload, dict) else None
+            )
             if not isinstance(transcript, str) or not transcript.strip():
                 raise ValueError("local transcription returned invalid output")
             return transcript
@@ -190,7 +196,9 @@ async def transcribe_voice(
         return None
     file_info = await bot.get_file(voice.file_id)
     if file_info is None:
-        logger.warning("voice.file_info.failed", file_id=voice.file_id, file_size=voice.file_size)
+        logger.warning(
+            "voice.file_info.failed", file_id=voice.file_id, file_size=voice.file_size
+        )
         await reply(text="failed to fetch voice file.")
         return None
     audio_bytes = await bot.download_file(file_info.file_path)

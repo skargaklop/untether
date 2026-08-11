@@ -5926,6 +5926,8 @@ async def test_592_pre_result_silence_cap_kills_silent_run(monkeypatch) -> None:
     assert "pre_result_silence_cancelled" in exit_reasons
     assert any("pre-result silence cap" in line for line in stream.stderr_capture)
     assert state.pre_result_silence_killed is True
+
+
 @pytest.mark.anyio
 async def test_592_startup_stall_without_first_event_is_actionable(monkeypatch) -> None:
     """A spawned Claude process with no first event gets a startup diagnosis."""
@@ -5976,7 +5978,9 @@ async def test_592_startup_stall_without_first_event_is_actionable(monkeypatch) 
 
 
 @pytest.mark.anyio
-async def test_592_startup_watchdog_preserves_recent_stdout_activity(monkeypatch) -> None:
+async def test_592_startup_watchdog_preserves_recent_stdout_activity(
+    monkeypatch,
+) -> None:
     """Recent stdout activity is not mistaken for a startup stall."""
     from untether.runner import JsonlStreamState
 

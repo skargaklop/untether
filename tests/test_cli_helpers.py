@@ -166,7 +166,6 @@ def test_doctor_voice_checks(monkeypatch) -> None:
     assert checks[0].status == "ok"
 
 
-
 def test_doctor_voice_checks_local_provider(tmp_path) -> None:
     executable = tmp_path / "avt.exe"
     executable.touch()
@@ -189,6 +188,7 @@ def test_doctor_voice_checks_local_provider(tmp_path) -> None:
     check = cli._doctor_voice_checks(settings)[0]
     assert check.status == "ok"
     assert check.detail == "backend=parakeet, model=small"
+
 
 def test_load_settings_optional(monkeypatch, tmp_path) -> None:
     def _raise() -> None:
