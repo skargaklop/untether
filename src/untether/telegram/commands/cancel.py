@@ -297,7 +297,12 @@ async def _edit_labelled_message(
         return
     tracker = ProgressTracker(engine=job.resume_token.engine)
     tracker.set_resume(job.resume_token)
-    context_line = cfg.runtime.format_context_line(job.context)
+    options = job.run_options
+    context_line = cfg.runtime.format_context_line(
+        job.context,
+        plan=options.plan if options is not None else False,
+        goal=options.goal if options is not None else None,
+    )
     state = tracker.snapshot(context_line=context_line)
     message = cfg.exec_cfg.presenter.render_progress(
         state,

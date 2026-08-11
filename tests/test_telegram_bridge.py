@@ -57,6 +57,32 @@ from untether.telegram.types import (
     TelegramVoice,
 )
 from untether.transport import MessageRef, RenderedMessage, SendOptions
+@pytest.mark.parametrize(
+    ("plan", "goal", "expected"),
+    [
+        (False, "ship it", "`goal` dir: app @main"),
+        (True, None, "`plan` dir: app @main"),
+        (False, None, "dir: app @main"),
+    ],
+)
+def test_progress_card_context_places_goal_or_plan_before_context(
+    plan: bool, goal: str | None, expected: str
+) -> None:
+    projects = ProjectsConfig(
+        projects={
+            "app": ProjectConfig(
+                alias="app", path=Path("."), worktrees_dir=Path(".worktrees")
+            )
+        },
+        default_project=None,
+    )
+    runtime = TransportRuntime(
+        router=_make_router(ScriptRunner([Return(answer="ok")], engine=CODEX_ENGINE)),
+        projects=projects,
+    )
+    assert runtime.format_context_line(
+        RunContext(project="app", branch="main"), plan=plan, goal=goal
+    ) == expected
 from untether.transport_runtime import TransportRuntime
 
 CODEX_ENGINE = "codex"
@@ -1587,7 +1613,7 @@ async def test_send_with_resume_waits_for_token() -> None:
             )
         )
 
-    running_task = RunningTask()
+    running_task = RunningTask(context=RunContext(project="app", branch="main"))
 
     async def trigger_resume() -> None:
         await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
@@ -1602,7 +1628,7 @@ async def test_send_with_resume_waits_for_token() -> None:
             running_task,
             123,
             10,
-            None,
+            77,
             None,
             "hello",
         )
@@ -1613,13 +1639,14 @@ async def test_send_with_resume_waits_for_token() -> None:
         10,
         "hello",
         ResumeToken(engine=CODEX_ENGINE, value="abc123"),
-        None,
-        None,
+        RunContext(project="app", branch="main"),
+        77,
         None,
     )
     assert sent[0][7] == transport.send_calls[0]["ref"]
     assert transport.send_calls
     assert "queued" in transport.send_calls[0]["message"].text.lower()
+    assert "dir: app @main" in transport.send_calls[0]["message"].text
 
 
 @pytest.mark.anyio

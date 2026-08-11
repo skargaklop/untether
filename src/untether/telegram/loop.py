@@ -1603,12 +1603,17 @@ async def _send_queued_progress(
     user_msg_id: int,
     thread_id: int | None,
     resume_token: ResumeToken,
-    context: RunContext | None,
+    context: RunContext | None = None,
+    run_options: EngineRunOptions | None = None,
     steerable: bool = False,
 ) -> MessageRef | None:
     tracker = ProgressTracker(engine=resume_token.engine)
     tracker.set_resume(resume_token)
-    context_line = cfg.runtime.format_context_line(context)
+    context_line = cfg.runtime.format_context_line(
+        context,
+        plan=run_options.plan if run_options is not None else False,
+        goal=run_options.goal if run_options is not None else None,
+    )
     state = tracker.snapshot(context_line=context_line)
     message = cfg.exec_cfg.presenter.render_progress(
         state,
@@ -2471,7 +2476,12 @@ async def run_main_loop(
                         return
                     tracker = ProgressTracker(engine=job.resume_token.engine)
                     tracker.set_resume(job.resume_token)
-                    context_line = cfg.runtime.format_context_line(job.context)
+                    options = job.run_options
+                    context_line = cfg.runtime.format_context_line(
+                        job.context,
+                        plan=options.plan if options is not None else False,
+                        goal=options.goal if options is not None else None,
+                    )
                     st = tracker.snapshot(context_line=context_line)
                     msg = cfg.exec_cfg.presenter.render_progress(
                         st, elapsed_s=0.0, label="starting"
@@ -2764,6 +2774,7 @@ async def run_main_loop(
                     thread_id=msg.thread_id,
                     resume_token=resume_token,
                     context=context,
+                    run_options=_directive_options(resolved),
                 )
                 await scheduler.enqueue_resume(
                     chat_id,

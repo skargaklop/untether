@@ -254,7 +254,11 @@ async def _run_engine(
             if cwd is not None:
                 run_fields["cwd"] = str(cwd)
             bind_run_context(**run_fields)
-            context_line = runtime.format_context_line(context)
+            context_line = runtime.format_context_line(
+                context,
+                plan=run_options.plan if run_options is not None else False,
+                goal=run_options.goal if run_options is not None else None,
+            )
             incoming = RunnerIncomingMessage(
                 channel_id=chat_id,
                 message_id=user_msg_id,
