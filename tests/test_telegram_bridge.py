@@ -24,6 +24,7 @@ from untether.model import ResumeToken
 from untether.progress import ProgressTracker
 from untether.router import AutoRouter, RunnerEntry
 from untether.runner_bridge import ExecBridgeConfig, RunningTask
+from untether.transport_runtime import TransportRuntime
 from untether.runners.mock import Return, ScriptRunner, Sleep, Wait
 from untether.scheduler import CancelQueuedStatus, ThreadScheduler
 from untether.settings import TelegramFilesSettings, TelegramTopicsSettings
@@ -83,7 +84,6 @@ def test_progress_card_context_places_goal_or_plan_before_context(
     assert runtime.format_context_line(
         RunContext(project="app", branch="main"), plan=plan, goal=goal
     ) == expected
-from untether.transport_runtime import TransportRuntime
 
 CODEX_ENGINE = "codex"
 FAST_FORWARD_COALESCE_S = 0.0
@@ -310,6 +310,92 @@ def test_telegram_presenter_split_overflow_adds_followups() -> None:
     assert all(
         item.extra["reply_markup"]["inline_keyboard"] == [] for item in followups
     )
+
+
+
+@pytest.mark.anyio
+async def test_split_delivery_preserves_complete_fenced_answer_identity_and_footer() -> None:
+    """A split final answer remains complete and Telegram-safe end to end."""
+    presenter = TelegramPresenter(message_overflow="split")
+    tracker = ProgressTracker(engine="codex")
+    tracker.set_resume(ResumeToken(engine="codex", value="sid"))
+    state = tracker.snapshot(
+        context_line="goal: ship split delivery",
+        resume_formatter=lambda token: f"resume:{token.value}",
+    )
+    answer = "before\n\n```python\n" + "\n".join(
+        f"print('line-{idx}')" for idx in range(500)
+    ) + "\n```\n\nafter"
+    rendered = presenter.render_final(
+        state, elapsed_s=1.25, status="done", answer=answer
+    )
+    bot = FakeBot()
+    transport = TelegramTransport(bot)
+    user_reply = MessageRef(channel_id=123, message_id=10)
+
+    await transport.send(
+        channel_id=123,
+        message=rendered,
+        options=SendOptions(reply_to=user_reply, thread_id=7),
+    )
+
+    sent = bot.send_calls
+    assert len(sent) > 1
+    assert all(len(call["text"]) <= 4096 for call in sent)
+    assert all(call["reply_to_message_id"] == 10 for call in sent)
+    assert all(call["message_thread_id"] == 7 for call in sent)
+    assert all(call["reply_markup"] == {"inline_keyboard": []} for call in sent)
+    assert sum("goal: ship split delivery" in call["text"] for call in sent) == 1
+    assert sum("resume:" in call["text"] for call in sent) == 1
+
+    combined = "".join(call["text"] for call in sent)
+    positions = [combined.index(f"line-{idx}") for idx in range(500)]
+    assert positions == sorted(positions)
+    assert "before" in combined and "after" in combined
+    pre_entities = [
+        entity
+        for call in sent
+        for entity in (call["entities"] or [])
+        if entity["type"] == "pre"
+    ]
+    assert len(pre_entities) == 3
+    # Reconstruct the fenced payload from Telegram's entity ranges; only
+    # presenter-added headers/fence wrappers are omitted by Telegram entities.
+    delivered_code = "\n".join(
+        call["text"][
+            entity["offset"] : entity["offset"] + entity["length"]
+        ].rstrip("\n")
+        for call in sent
+        for entity in (call["entities"] or [])
+        if entity["type"] == "pre"
+    )
+    assert delivered_code == "\n".join(
+        f"print('line-{idx}')" for idx in range(500)
+    )
+    assert "before" in sent[0]["text"]
+    assert "after" in sent[-1]["text"]
+
+    # Seed a terminal keyboard on the final part and ensure continuation
+    # sends do not acquire it.
+    terminal_markup = {"inline_keyboard": [[{"text": "done"}]]}
+    rendered.extra["followups"][-1].extra["reply_markup"] = terminal_markup
+    bot.send_calls.clear()
+    await transport.send(
+        channel_id=123,
+        message=rendered,
+        options=SendOptions(reply_to=user_reply, thread_id=7),
+    )
+    assert all(call["reply_markup"] == {"inline_keyboard": []} for call in bot.send_calls[:-1])
+    assert bot.send_calls[-1]["reply_markup"] == terminal_markup
+    for call in sent:
+        text = call["text"]
+        for entity in call["entities"] or []:
+            assert entity["offset"] >= 0
+            assert entity["offset"] + entity["length"] <= len(
+                text.encode("utf-16-le")
+            ) // 2
+            if entity["type"] == "pre":
+                assert entity["offset"] < len(text.encode("utf-16-le")) // 2
 
 
 @pytest.mark.anyio
