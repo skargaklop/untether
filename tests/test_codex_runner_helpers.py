@@ -253,10 +253,10 @@ def test_codex_runner_process_and_stream_end_events() -> None:
 def test_codex_build_runner_configs(tmp_path: Path) -> None:
     cfg: EngineConfig = {}
     runner = build_runner(cfg, tmp_path)
-    assert isinstance(runner, CodexRunner)
+    assert runner.__class__.__name__ == "AppServerCodexRunner"
     assert runner.extra_args == ["-c", "notify=[]"]
 
-    cfg = {"extra_args": ["--foo"], "profile": "Demo"}
+    cfg = {"mode": "exec", "extra_args": ["--foo"], "profile": "Demo"}
     runner = build_runner(cfg, tmp_path)
     assert isinstance(runner, CodexRunner)
     assert runner.extra_args[-2:] == ["--profile", "Demo"]

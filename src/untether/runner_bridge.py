@@ -3079,13 +3079,16 @@ async def run_runner_with_cancel(
                             _cs = getattr(runner, "current_stream", None)
                             if _cs is not None:
                                 edits.stream = _cs
-                            if running_task is not None and running_task.resume is None:
-                                running_task.resume = evt.resume
+                            if running_task is not None:
+                                if running_task.resume is None:
+                                    running_task.resume = evt.resume
+                                if evt.meta:
+                                    control = evt.meta.get("control")
+                                    if callable(getattr(control, "steer", None)) and callable(getattr(control, "interrupt", None)):
+                                        running_task.control = cast(RunnerTurnControl, control)
                                 try:
                                     if on_thread_known is not None:
-                                        await on_thread_known(
-                                            evt.resume, running_task.done
-                                        )
+                                        await on_thread_known(evt.resume, running_task.done)
                                 finally:
                                     running_task.resume_ready.set()
                         elif isinstance(evt, CompletedEvent):
@@ -3159,6 +3162,11 @@ async def run_runner_with_cancel(
             async def wait_cancel(task: RunningTask) -> None:
                 await task.cancel_requested.wait()
                 outcome.cancelled = True
+                if task.control is not None:
+                    try:
+                        await task.control.interrupt()
+                    except Exception:  # noqa: BLE001
+                        logger.debug("runner.control_interrupt_failed", exc_info=True)
                 tg.cancel_scope.cancel()
 
             async def thread_pid() -> None:

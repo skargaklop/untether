@@ -8647,3 +8647,47 @@ def test_572_retry_notice_format() -> None:
     assert "attempt" not in first
     second = _format_stream_idle_retry_notice(1)
     assert "(attempt 2)" in second
+
+
+@pytest.mark.anyio
+async def test_app_server_control_attaches_and_interrupts_on_cancel() -> None:
+    from untether.model import StartedEvent
+    from untether.runner import RunnerTurnControl
+    from untether.runner_bridge import RunningTask, run_runner_with_cancel
+
+    class Control(RunnerTurnControl):
+        def __init__(self) -> None:
+            self.interrupted = False
+
+        async def steer(self, text: str) -> None:
+            return None
+
+        async def interrupt(self) -> bool:
+            self.interrupted = True
+            return True
+
+    class Runner:
+        engine = CODEX_ENGINE
+
+        async def run(self, prompt: str, resume: ResumeToken | None):
+            token = ResumeToken(engine=CODEX_ENGINE, value="thread-1")
+            control = Control()
+            yield StartedEvent(engine=CODEX_ENGINE, resume=token, title="codex", meta={"control": control})
+            await anyio.sleep_forever()
+
+    task = RunningTask()
+    edits = _make_edits(FakeTransport(), _KeyboardPresenter())
+    async with anyio.create_task_group() as tg:
+        result: list[RunOutcome] = []
+        tg.start_soon(lambda: _run_bridge(result, Runner(), edits, task))
+        await task.resume_ready.wait()
+        assert isinstance(task.control, Control)
+        task.cancel_requested.set()
+        await anyio.sleep(0.05)
+        tg.cancel_scope.cancel()
+    assert task.control.interrupted
+
+
+async def _run_bridge(result, runner, edits, task):
+    from untether.runner_bridge import run_runner_with_cancel
+    result.append(await run_runner_with_cancel(runner, prompt="x", resume_token=None, edits=edits, running_task=task, on_thread_known=None))
