@@ -575,6 +575,13 @@ class GrokRunner(HandoffCompactMixin, ResumeTokenMixin, JsonlSubprocessRunner):
     ) -> list[UntetherEvent]:
         return []
 
+    def selected_model(self) -> str | None:
+        """Return the explicit model selected for this invocation."""
+        run_options = get_run_options()
+        if run_options is not None and run_options.model:
+            return run_options.model
+        return self.model
+
     def translate(
         self,
         data: grok_schema.GrokEvent,
@@ -583,9 +590,10 @@ class GrokRunner(HandoffCompactMixin, ResumeTokenMixin, JsonlSubprocessRunner):
         resume: ResumeToken | None,
         found_session: ResumeToken | None,
     ) -> list[UntetherEvent]:
-        meta: dict[str, Any] = {"cwd": os.getcwd()}
-        if self.model:
-            meta["model"] = self.model
+        meta: dict[str, Any] = {
+            "cwd": os.getcwd(),
+            "model": self.selected_model() or "auto",
+        }
         return translate_grok_event(
             data,
             title=self.session_title,

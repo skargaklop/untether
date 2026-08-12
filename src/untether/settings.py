@@ -450,6 +450,13 @@ class AutoContinueSettings(BaseModel):
     # enough to ride out single-flake failures without a retry storm.
     transient_error_retry: bool = True
     transient_error_max_retries: int = Field(default=1, ge=0, le=3)
+    # Auto-retry explicit provider request timeouts (e.g. "timeout waiting
+    # for response"). When a real resume token exists, the session is nudged
+    # with "continue"; when no authentic session was created, the original
+    # prompt is retried as a fresh session (timeout_fresh_retry). Both share
+    # the transient_error_max_retries budget.
+    timeout_nudge: bool = True
+    timeout_fresh_retry: bool = True
     # #633 (W4): never resume a session whose previous subprocess is still
     # alive. rc7's quarantine-and-fresh recovers AFTER a session is poisoned;
     # this prevents the poisoning. Before spawning a `--resume`, wait (bounded)

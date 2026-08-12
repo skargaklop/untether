@@ -423,7 +423,10 @@ This section also carries the empty-resume recovery and session-ownership knobs,
     serialize_session_owner = true
     session_handoff_timeout_s = 30.0
     session_handoff_bg_timeout_s = 600.0
-    ```
+    transient_error_retry = true
+    transient_error_max_retries = 1
+    timeout_nudge = true
+    timeout_fresh_retry = true
 
 | Key | Type | Default | Notes |
 |-----|------|---------|-------|
@@ -435,6 +438,10 @@ This section also carries the empty-resume recovery and session-ownership knobs,
 | `serialize_session_owner` | bool | `true` | ([#633](https://github.com/littlebearapps/untether/issues/633) W4) Never resume a session whose previous subprocess is still alive. Before spawning `--resume`, wait (bounded) for the prior owner to exit; if it will not, quarantine and start fresh rather than racing it. Two concurrent owners of one session id is what leaves the upstream turn dangling and produces the 0-turn empty resume. Set `false` for exact pre-0.35.4rc8 behaviour. Claude only. |
 | `session_handoff_timeout_s` | float | `30.0` | Upper bound on that wait (0–300). Condition-based, so it resolves the instant the prior subprocess exits — this is only the give-up point. Keep comfortably above the post-result SIGTERM grace so a normal teardown wins the race. |
 | `session_handoff_bg_timeout_s` | float | `600.0` | ([#647](https://github.com/littlebearapps/untether/issues/647)) Extended handoff wait when the prior owner still has live background work at the base `session_handoff_timeout_s` deadline (0–1800). The user is told why the reply is delayed, and the wait extends up to this bound before diverting to a fresh session. |
+| `transient_error_retry` | bool | `true` | Auto-retry on transient upstream/provider errors (502 bad gateway, serialization errors, quality-validation failures, content-filter blocks). Applies to **all engines**. |
+| `transient_error_max_retries` | int | `1` | Maximum consecutive retries for transient upstream errors and explicit provider timeouts (0–3). |
+| `timeout_nudge` | bool | `true` | Recognize explicit provider request timeouts (e.g. `timeout waiting for response`) and retry. When a real session exists, it is nudged with `continue`; otherwise the original prompt is retried fresh. |
+| `timeout_fresh_retry` | bool | `true` | When no authentic session was created, retry the original prompt as a fresh session instead of surfacing the error. Set `false` to only nudge existing sessions. |
 
 !!! tip "Layered defence"
 

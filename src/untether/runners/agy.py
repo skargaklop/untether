@@ -108,6 +108,13 @@ class AgyRunner(HandoffCompactMixin, ResumeTokenMixin, BaseRunner):
     def command(self) -> str:
         return self.agy_cmd
 
+    def selected_model(self) -> str | None:
+        """Return the explicit model selected for this invocation."""
+        run_options = get_run_options()
+        if run_options is not None and run_options.model:
+            return run_options.model
+        return self.model
+
     def build_args(
         self,
         prompt: str,
@@ -122,9 +129,7 @@ class AgyRunner(HandoffCompactMixin, ResumeTokenMixin, BaseRunner):
             prompt = f"{note}\n\n{body}" if body else note
         args: list[str] = [*self.extra_args]
 
-        model = self.model
-        if run_options is not None and run_options.model:
-            model = run_options.model
+        model = self.selected_model()
         if model is not None:
             args.extend(["--model", str(model)])
 
@@ -221,7 +226,7 @@ class AgyRunner(HandoffCompactMixin, ResumeTokenMixin, BaseRunner):
         yield state.factory.started(
             state.resume,
             title=self.session_title,
-            meta={"cwd": os.getcwd(), **({"model": self.model} if self.model else {})},
+            meta={"cwd": os.getcwd(), "model": self.selected_model() or "auto"},
         )
         state.started = True
 
@@ -292,11 +297,18 @@ class AgyRunner(HandoffCompactMixin, ResumeTokenMixin, BaseRunner):
                     if not answer.strip():
                         answer = ""
 
+            # When no real conversation id was scraped for a new session,
+            # the provisional UUID is an internal lock placeholder — it is
+            # not an upstream conversation id and must not be persisted or
+            # nudged. Only expose a resume when promotion occurred or the
+            # caller passed in a real session.
+            completed_resume = state.resume if not state.allow_id_promotion else resume
+
             completed = CompletedEvent(
                 engine=ENGINE,
                 ok=ok,
                 answer=answer,
-                resume=state.resume,
+                resume=completed_resume,
                 error=error,
             )
             yield completed

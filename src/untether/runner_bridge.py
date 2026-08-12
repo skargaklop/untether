@@ -414,7 +414,9 @@ _TRANSIENT_ERROR_PATTERNS: tuple[str, ...] = (
     "content filter",
     "prompt_blocked",
     "safety_block",
-    "harm_category",
+    "timeout waiting for response",
+    "timed out waiting",
+    "request timed out",
 )
 
 
@@ -4551,37 +4553,64 @@ async def handle_message(
             _stream_idle_retried_count=_stream_idle_retried_count + 1,
             _transient_retried_count=_transient_retried_count,
         )
-    # --- End #572 stream-idle auto-retry ---
     # --- Transient upstream error auto-retry ---
     # When the run fails with a transient upstream/provider error (502 bad
     # gateway, serialization errors, quality-validation failures, content
-    # filter blocks, streaming upstream errors), auto-resume the session
-    # instead of surfacing a terminal error. These are provider-side failures
-    # where the session is still valid and retrying usually succeeds on the
-    # next attempt. The retry re-enters handle_message as a normal resumed
-    # run — all guards (quarantine, RAM, budget) apply.
-    _te_resume = completed.resume or outcome.resume or resume_token
+    # filter blocks, streaming upstream errors, explicit provider timeouts),
+    # auto-retry instead of surfacing a terminal error. These are provider-
+    # side failures where the session is usually still valid and retrying
+    # succeeds on the next attempt.
+    #
+    # Some engines (notably agy) collapse stderr into CompletedEvent.answer
+    # while CompletedEvent.error stays generic ("agy failed (rc=1)."), so we
+    # classify over a bounded combination of both fields.
+    _te_resume = completed.resume or resume_token
     _te_rc = edits.stream.proc_returncode if edits.stream else None
+    _te_text = f"{completed.error or ''}\n{str(completed.answer or '')[:500]}"
+    _te_is_timeout = any(
+        pattern in _te_text.lower()
+        for pattern in (
+            "timeout waiting for response",
+            "timed out waiting",
+            "request timed out",
+        )
+    )
+    _te_is_transient = _is_transient_upstream_error(_te_text) and (
+        ac_settings.timeout_nudge or not _te_is_timeout
+    )
+    # When an authentic resume exists, nudge that session with "continue".
+    # When no session was created and timeout_fresh_retry is enabled, retry
+    # the original prompt as a fresh session.
+    _te_can_nudge = _te_resume is not None
+    _te_can_fresh = (
+        not _te_can_nudge and ac_settings.timeout_fresh_retry and bool(incoming.text)
+    )
     if (
         run_ok is False
         and not outcome.cancelled
         and not final_delivery["sent"]
-        and _te_resume is not None
-        and completed.error
-        and _is_transient_upstream_error(str(completed.error))
+        and _te_is_transient
+        and (_te_can_nudge or _te_can_fresh)
         and not _is_signal_death(_te_rc)
         and ac_settings.transient_error_retry
         and _transient_retried_count < ac_settings.transient_error_max_retries
         and not _stream_idle_retry_budget_blocked(completed.usage)
     ):
+        if _te_can_nudge:
+            _te_next_text = "continue"
+            _te_next_resume = _te_resume
+        else:
+            _te_next_text = incoming.text
+            _te_next_resume = None
         logger.warning(
             "session.transient_retry",
-            session_id=_te_resume.value,
+            session_id=(_te_next_resume.value if _te_next_resume else "fresh"),
             engine=runner.engine,
-            error=str(completed.error)[:200],
+            error=str(completed.error or "")[:200],
             attempt=_transient_retried_count + 1,
             max_retries=ac_settings.transient_error_max_retries,
             proc_returncode=_te_rc,
+            fresh_retry=not _te_can_nudge,
         )
         notice = _format_transient_retry_notice(_transient_retried_count)
         notice_msg = RenderedMessage(text=notice, extra={})
@@ -4600,11 +4629,11 @@ async def handle_message(
             incoming=IncomingMessage(
                 channel_id=incoming.channel_id,
                 message_id=incoming.message_id,
-                text="continue",
+                text=_te_next_text,
                 reply_to=incoming.reply_to,
                 thread_id=incoming.thread_id,
             ),
-            resume_token=_te_resume,
+            resume_token=_te_next_resume,
             context=context,
             context_line=context_line,
             strip_resume_line=strip_resume_line,

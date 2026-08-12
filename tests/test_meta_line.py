@@ -431,6 +431,30 @@ class TestCrossEngineFooter:
         footer = self._render_footer("codex", meta=None, context_line=None)
         assert footer is None
 
+    def test_agy_auto_model(self) -> None:
+        footer = self._render_footer(
+            "agy",
+            meta={"model": "auto"},
+            context_line="dir: agy-test",
+        )
+        assert footer == "\N{LABEL} dir: agy-test | auto"
+
+    def test_grok_auto_model(self) -> None:
+        footer = self._render_footer(
+            "grok",
+            meta={"model": "auto"},
+            context_line="dir: grok-test",
+        )
+        assert footer == "\N{LABEL} dir: grok-test | auto"
+
+    def test_omp_auto_model(self) -> None:
+        footer = self._render_footer(
+            "omp",
+            meta={"model": "auto"},
+            context_line="dir: omp-test",
+        )
+        assert footer == "\N{LABEL} dir: omp-test | auto"
+
 
 # ── #269 — MarkdownFormatter.refresh_from() hot-reload hook ───────────────
 

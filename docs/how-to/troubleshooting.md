@@ -214,6 +214,24 @@ stream_idle_max_retries = 1      # attempt cap, 1–3
 
 Type-B (cold-start zero-byte) is **never** retried — retrying just hammers a down API. Cost-budget caps and signal-death suppression still apply to a retried run, so it can't spiral under memory pressure or blow a daily budget.
 
+## Upstream provider timeout / "timeout waiting for response"
+
+**Symptoms:** An engine fails with `Error: timeout waiting for response` or a similar explicit provider-side request timeout, producing `agy failed (rc=1).` or a generic failure.
+
+Since v0.35.6, Untether recognizes these as transient and retries automatically across **all engines** — not just Claude. When the failed run has a valid session, that session is nudged with `continue`; when no session was created (e.g. Agy timed out before scraping a conversation id), the original prompt is retried as a fresh session.
+
+Controls live under `[auto_continue]`:
+
+```toml
+[auto_continue]
+transient_error_retry = true        # master switch for all transient retries
+transient_error_max_retries = 1     # shared cap, 0–3
+timeout_nudge = true                # recognize explicit timeout phrases
+timeout_fresh_retry = true          # fresh-session fallback when no session exists
+```
+
+Retries are suppressed after cancellation, signal death (rc=143/137), delivery, or budget exhaustion. Runner-level subprocess retry deliberately stays timeout-negative to prevent duplicate side effects after visible output.
+
 ## Claude session looks alive 30+ min after the final message
 
 **Symptoms:** Claude has clearly finished the turn (you can see the final answer in Telegram), but the session metadata indicates it's still running. The bidirectional Claude CLI is sitting idle holding stdin open.

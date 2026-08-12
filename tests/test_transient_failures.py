@@ -101,3 +101,18 @@ class TestFormatTransientFailure:
         failure = TransientFailure(http_status=503, message="temporarily unavailable")
         result = format_transient_failure("omp", failure)
         assert "temporarily unavailable." in result
+
+
+class TestTimeoutStaysNonTransient:
+    """Runner-level transient classification must NEVER match generic timeouts.
+
+    That subsystem retries subprocesses only before visible output; a timeout
+    after output risks duplicate side effects. The bridge-level classifier
+    handles explicit provider timeouts separately.
+    """
+
+    def test_timeout_waiting_for_response_stays_non_transient(self) -> None:
+        assert classify_transient_failure("Error: timeout waiting for response") is None
+
+    def test_generic_timed_out_stays_non_transient(self) -> None:
+        assert classify_transient_failure("operation timed out") is None

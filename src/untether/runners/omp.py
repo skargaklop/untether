@@ -11,11 +11,10 @@ OMP has no dedicated schema — it reuses :mod:`untether.schemas.pi`.
 
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from ..backends import EngineBackend, EngineConfig
 from ..config import ConfigError
@@ -194,20 +193,23 @@ class OmpRunner(HandoffCompactMixin, PiRunner):
         resume: ResumeToken | None,
         found_session: ResumeToken | None,
     ) -> list[UntetherEvent]:
-        meta: dict[str, Any] = {"cwd": os.getcwd()}
-        if self.model:
-            meta["model"] = self.model
-        if self.provider:
-            meta["provider"] = self.provider
-        return [
-            _retag_event(event)
-            for event in super().translate(
-                data,
-                state=state,
-                resume=resume,
-                found_session=found_session,
-            )
-        ]
+        events: list[UntetherEvent] = []
+        for event in super().translate(
+            data,
+            state=state,
+            resume=resume,
+            found_session=found_session,
+        ):
+            retagged = _retag_event(event)
+            if isinstance(retagged, StartedEvent) and not (retagged.meta or {}).get(
+                "model"
+            ):
+                retagged = replace(
+                    retagged,
+                    meta={**(retagged.meta or {}), "model": "auto"},
+                )
+            events.append(retagged)
+        return events
 
     def process_error_events(
         self,

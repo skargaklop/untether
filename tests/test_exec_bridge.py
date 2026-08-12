@@ -9003,3 +9003,199 @@ async def test_transient_retry_skips_non_transient_errors() -> None:
         resume_token=resume,
     )
     assert len(runner.calls) == 1
+
+
+# ===========================================================================
+# Timeout auto-retry — explicit provider request timeouts
+# ===========================================================================
+
+
+def test_timeout_waiting_for_response_is_transient_upstream_error() -> None:
+    from untether.runner_bridge import _is_transient_upstream_error
+
+    assert _is_transient_upstream_error("Error: timeout waiting for response")
+
+
+@pytest.mark.anyio
+async def test_timeout_in_answer_nudges_valid_session() -> None:
+    """Agy puts the timeout text in the answer with a generic error; the
+    bridge must still recognize it and nudge the valid session."""
+    transport = FakeTransport()
+    runner = _StatefulRunner(
+        [
+            (False, "Error: timeout waiting for response", "agy failed (rc=1)."),
+            (True, "recovered after nudge", ""),
+        ],
+        engine="agy",
+        resume_value="real-session",
+    )
+    cfg = ExecBridgeConfig(
+        transport=transport, presenter=MarkdownPresenter(), final_notify=True
+    )
+    resume = ResumeToken(engine="agy", value="real-session")
+
+    await handle_message(
+        cfg,
+        runner=runner,
+        incoming=IncomingMessage(channel_id=123, message_id=10, text="hi"),
+        resume_token=resume,
+    )
+    assert len(runner.calls) == 2
+    # Second call is a nudge of the same session.
+    assert runner.calls[1][1] == ResumeToken(engine="agy", value="real-session")
+    all_text = " ".join(
+        c["message"].text for c in transport.send_calls + transport.edit_calls
+    )
+    assert "recovered after nudge" in all_text
+
+
+@pytest.mark.anyio
+async def test_timeout_without_session_fresh_retries_original_prompt() -> None:
+    """When no authentic resume exists, the bridge retries the original
+    prompt as a fresh session instead of nudging a synthetic token."""
+    transport = FakeTransport()
+
+    class _NoResumeStatefulRunner(_StatefulRunner):
+        async def run(self, prompt, resume):
+            from untether.model import CompletedEvent, StartedEvent
+            from untether.runners.mock import _resume_token
+
+            self.calls.append((prompt, resume))
+            ok, answer, error = self._results[min(self._idx, len(self._results) - 1)]
+            self._idx += 1
+            # First call: no resume (cold start timeout, no scraped id).
+            # Second call: fresh retry also has no resume.
+            token = _resume_token(self.engine, self._resume_value)
+            yield StartedEvent(engine=self.engine, resume=token, title=self.title)
+            await anyio.lowlevel.checkpoint()
+            yield CompletedEvent(
+                engine=self.engine,
+                resume=None,  # no scraped conversation id
+                ok=ok,
+                answer=answer,
+                error=error if not ok else None,
+                usage={"num_turns": 1},
+            )
+
+    runner = _NoResumeStatefulRunner(
+        [
+            (False, "Error: timeout waiting for response", "agy failed (rc=1)."),
+            (True, "recovered fresh", ""),
+        ],
+        engine="agy",
+        resume_value="fresh-session",
+    )
+    cfg = ExecBridgeConfig(
+        transport=transport, presenter=MarkdownPresenter(), final_notify=True
+    )
+
+    await handle_message(
+        cfg,
+        runner=runner,
+        incoming=IncomingMessage(channel_id=123, message_id=10, text="original prompt"),
+        resume_token=None,
+    )
+    assert len(runner.calls) == 2
+    # Fresh retry: no resume token, and the original prompt is included.
+    assert runner.calls[1][1] is None
+    assert "original prompt" in runner.calls[1][0]
+    all_text = " ".join(
+        c["message"].text for c in transport.send_calls + transport.edit_calls
+    )
+    assert "recovered fresh" in all_text
+
+
+@pytest.mark.anyio
+async def test_timeout_fresh_retry_disabled_surfaces_error(monkeypatch) -> None:
+    """When timeout_fresh_retry is off and there is no resume, the error
+    is surfaced without retrying."""
+    from untether.settings import AutoContinueSettings
+
+    monkeypatch.setattr(
+        "untether.runner_bridge._load_auto_continue_settings",
+        lambda: AutoContinueSettings(timeout_fresh_retry=False),
+    )
+    transport = FakeTransport()
+
+    class _NoResumeRunner(_StatefulRunner):
+        async def run(self, prompt, resume):
+            from untether.model import CompletedEvent, StartedEvent
+            from untether.runners.mock import _resume_token
+
+            self.calls.append((prompt, resume))
+            ok, answer, error = self._results[min(self._idx, len(self._results) - 1)]
+            self._idx += 1
+            token = _resume_token(self.engine, self._resume_value)
+            yield StartedEvent(engine=self.engine, resume=token, title=self.title)
+            await anyio.lowlevel.checkpoint()
+            yield CompletedEvent(
+                engine=self.engine,
+                resume=None,  # no scraped conversation id
+                ok=ok,
+                answer=answer,
+                error=error if not ok else None,
+                usage={"num_turns": 1},
+            )
+
+    runner = _NoResumeRunner(
+        [
+            (False, "Error: timeout waiting for response", "agy failed (rc=1)."),
+            (True, "should not reach", ""),
+        ],
+        engine="agy",
+        resume_value="no-fresh",
+    )
+    cfg = ExecBridgeConfig(
+        transport=transport, presenter=MarkdownPresenter(), final_notify=True
+    )
+
+    await handle_message(
+        cfg,
+        runner=runner,
+        incoming=IncomingMessage(channel_id=123, message_id=10, text="hi"),
+        resume_token=None,
+    )
+    assert len(runner.calls) == 1
+
+
+@pytest.mark.anyio
+async def test_timeout_nudge_disabled_surfaces_error(monkeypatch) -> None:
+    """timeout_nudge disables only explicit provider-timeout recovery."""
+    from untether.settings import AutoContinueSettings
+
+    monkeypatch.setattr(
+        "untether.runner_bridge._load_auto_continue_settings",
+        lambda: AutoContinueSettings(timeout_nudge=False),
+    )
+    transport = FakeTransport()
+    runner = _StatefulRunner(
+        [
+            (False, "Error: timeout waiting for response", "agy failed (rc=1)."),
+            (True, "should not reach", ""),
+        ],
+        engine="agy",
+        resume_value="real-session",
+    )
+    cfg = ExecBridgeConfig(
+        transport=transport, presenter=MarkdownPresenter(), final_notify=True
+    )
+
+    await handle_message(
+        cfg,
+        runner=runner,
+        incoming=IncomingMessage(channel_id=123, message_id=10, text="hi"),
+        resume_token=ResumeToken(engine="agy", value="real-session"),
+    )
+
+    assert len(runner.calls) == 1
+
+
+@pytest.mark.anyio
+async def test_timeout_does_not_retry_after_signal_death() -> None:
+    """Signal death (rc=143) blocks timeout retry; this is already proven
+    by _is_signal_death tests and the bridge gate. Verify the guard
+    predicate itself."""
+    from untether.runner_bridge import _is_signal_death
+
+    assert _is_signal_death(143) is True
+    assert _is_signal_death(None) is False

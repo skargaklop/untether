@@ -16,6 +16,7 @@ from untether.runners.omp import (
     _unquote_token,
     build_runner,
 )
+from untether.schemas import pi as pi_schema
 
 
 class TestRetagResume:
@@ -320,3 +321,32 @@ def test_omp_runner_failure_and_unterminated_stream_preserve_state() -> None:
         assert events[-1].engine == "omp"
         assert events[-1].answer == "partial"
         assert expected in (events[-1].error or "")
+
+
+def test_omp_started_meta_prefers_run_option_model() -> None:
+    from untether.runners.run_options import EngineRunOptions, apply_run_options
+
+    runner = OmpRunner(extra_args=[], model="omp-configured", provider=None)
+    state = runner.new_state("hi", None)
+    with apply_run_options(EngineRunOptions(model="omp-override")):
+        events = runner.translate(
+            pi_schema.SessionHeader(id="s", version=1),
+            state=state,
+            resume=None,
+            found_session=None,
+        )
+    assert isinstance(events[0], StartedEvent)
+    assert events[0].meta["model"] == "omp-override"
+
+
+def test_omp_started_meta_reports_auto_when_model_is_unknown() -> None:
+    runner = OmpRunner(extra_args=[], model=None, provider=None)
+    state = runner.new_state("hi", None)
+    events = runner.translate(
+        pi_schema.SessionHeader(id="s", version=1),
+        state=state,
+        resume=None,
+        found_session=None,
+    )
+    assert isinstance(events[0], StartedEvent)
+    assert events[0].meta["model"] == "auto"

@@ -4,11 +4,12 @@
 
 ### changes
 
-- **telegram:** replace scalar `voice_transcription_provider` with ordered `voice_transcription_providers` array (default `["avt", "groq", "local", "openai"]`). Each provider failure advances to the next; exhaustion produces a single sanitized reply. Native Groq and local Whisper/Parakeet adapters are ported from [AI-Video-Transcriber](https://github.com/littlebearapps/AI-Video-Transcriber) (Apache-2.0); `avt` remains an external CLI integration and `openai` remains the SDK path. The hot-reload path now applies settings via `cfg.update_from()` rather than only reporting the diff. [#348]
+- **runners:** display the active model state for every engine. Agy, Grok, and OMP now report `auto` in the footer when no model is explicitly configured, and all three honor `/model` overrides in their metadata. Agy no longer leaks a synthetic UUID as a resume token when no upstream conversation id was scraped.
 
 ### fixes
 
 - **telegram:** hot-reload of voice settings now actually applies the new configuration at runtime; previously the reload handler reported the diff but never called `update_from()`.
+- **runner_bridge:** retry explicit provider request timeouts (e.g. `timeout waiting for response`) across all engines. When a real session exists, it is nudged with `continue`; when no authentic session was created and `timeout_fresh_retry` is enabled, the original prompt is retried as a fresh session. The transient-error classifier now inspects both `CompletedEvent.error` and `CompletedEvent.answer` (Agy places timeout text in the answer). Runner-level subprocess retry remains timeout-negative to prevent duplicate side effects after visible output.
 
 ## v0.35.5 (2026-08-11)
 

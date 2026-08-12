@@ -6,8 +6,9 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from untether.model import CompletedEvent, ResumeToken, UntetherEvent
+from untether.model import CompletedEvent, ResumeToken, StartedEvent, UntetherEvent
 from untether.runners.grok import GrokRunner, GrokStreamState
+from untether.runners.run_options import EngineRunOptions, apply_run_options
 from untether.schemas import grok as grok_schema
 
 
@@ -107,6 +108,33 @@ def _run_events(payloads: list[bytes]) -> tuple[list[UntetherEvent], GrokStreamS
     events: list[UntetherEvent] = []
     for payload in payloads:
         events.extend(translate_grok_event(_decode(payload), title="grok", state=state))
+    return events, state
+
+
+def _translate_events(
+    runner: GrokRunner,
+    payloads: list[bytes],
+    *,
+    run_options: EngineRunOptions | None = None,
+) -> tuple[list[UntetherEvent], GrokStreamState]:
+    state = _grok_state()
+    events: list[UntetherEvent] = []
+    if run_options is not None:
+        ctx = apply_run_options(run_options)
+    else:
+        from contextlib import nullcontext
+
+        ctx = nullcontext()
+    with ctx:
+        for payload in payloads:
+            events.extend(
+                runner.translate(
+                    grok_schema.decode_event(payload),
+                    state=state,
+                    resume=None,
+                    found_session=None,
+                )
+            )
     return events, state
 
 
@@ -271,3 +299,21 @@ def test_grok_stream_end_without_end_event_starts_and_fails() -> None:
     assert isinstance(completed, CompletedEvent)
     assert completed.ok is False
     assert completed.error == "grok finished without an end event"
+
+
+def test_grok_started_meta_prefers_run_option_model() -> None:
+    runner = GrokRunner(extra_args=[], model="grok-configured")
+    events, _ = _translate_events(
+        runner,
+        [b'{"type":"text","data":"hi"}'],
+        run_options=EngineRunOptions(model="grok-override"),
+    )
+    assert isinstance(events[0], StartedEvent)
+    assert events[0].meta["model"] == "grok-override"
+
+
+def test_grok_started_meta_reports_auto_when_model_is_unknown() -> None:
+    runner = GrokRunner(extra_args=[])
+    events, _ = _translate_events(runner, [b'{"type":"text","data":"hi"}'])
+    assert isinstance(events[0], StartedEvent)
+    assert events[0].meta["model"] == "auto"

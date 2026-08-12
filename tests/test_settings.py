@@ -868,6 +868,14 @@ def test_auto_continue_max_retries_bounds() -> None:
     assert AutoContinueSettings(max_retries=3).max_retries == 3
 
 
+def test_timeout_nudge_settings_defaults() -> None:
+    from untether.settings import AutoContinueSettings
+
+    s = AutoContinueSettings()
+    assert s.timeout_nudge is True
+    assert s.timeout_fresh_retry is True
+
+
 # ---------------------------------------------------------------------------
 # #350 — pre-spawn RAM guard settings
 # ---------------------------------------------------------------------------
