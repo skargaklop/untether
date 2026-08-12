@@ -77,6 +77,7 @@ from .prompt_batch import (
     PromptBatchPart,
     PromptBatchSeparator,
     PromptBatchSettings,
+    is_sticky_model_args,
     join_prompt_parts,
     should_batch_text,
 )
@@ -3054,7 +3055,10 @@ async def run_main_loop(
                 if command_id is not None and command_id not in state.reserved_commands:
                     if command_id not in state.command_ids:
                         refresh_commands()
-                    if command_id in state.command_ids:
+                    if command_id in state.command_ids and not (
+                        command_id == "model"
+                        and not is_sticky_model_args(args_text)
+                    ):
                         chat_id = pending.msg.chat_id
                         topic_key = pending.topic_key
                         engine_resolution = await resolve_engine_defaults(
@@ -3529,7 +3533,10 @@ async def run_main_loop(
                 if command_id is not None and command_id not in state.reserved_commands:
                     if command_id not in state.command_ids:
                         refresh_commands()
-                    if command_id in state.command_ids:
+                    if command_id in state.command_ids and not (
+                        command_id == "model"
+                        and not is_sticky_model_args(args_text)
+                    ):
                         engine_resolution = await resolve_engine_defaults(
                             explicit_engine=None,
                             context=ambient_context,

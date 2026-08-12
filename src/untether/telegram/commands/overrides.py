@@ -124,10 +124,10 @@ def parse_set_args(
         return None, tokens[1].strip()
     maybe_engine = tokens[1].strip().lower()
     if maybe_engine in engine_ids:
-        value = " ".join(tokens[2:]).strip()
-        return maybe_engine, value or None
-    value = " ".join(tokens[1:]).strip()
-    return None, value or None
+        model = tokens[2].strip() if len(tokens) > 2 else None
+        return maybe_engine, model
+    model = tokens[1].strip()
+    return None, model
 
 
 async def apply_engine_override(

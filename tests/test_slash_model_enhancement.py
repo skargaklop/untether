@@ -159,6 +159,57 @@ def test_model_with_multiline_prompt() -> None:
     assert parsed.prompt == "second line"
 
 
+def test_model_with_prompt_and_engine_name_as_model() -> None:
+    """Regression: /model gemini-3.6-flash use seversl tools must set
+    model=gemini-3.6-flash, prompt='use seversl tools', not dispatch to
+    the command handler as a usage error."""
+    parsed = parse_directives(
+        "/model gemini-3.6-flash use seversl tools",
+        engine_ids=ENGINE_IDS,
+        projects=_projects(),
+    )
+    assert parsed.model == "gemini-3.6-flash"
+    assert parsed.prompt == "use seversl tools"
+
+
+def test_parse_set_args_takes_only_first_token_as_model() -> None:
+    """Regression: /model set gemini-3.6-flash use seversl tools must set
+    model=gemini-3.6-flash, not 'gemini-3.6-flash  use seversl tools'."""
+    from untether.telegram.commands.overrides import parse_set_args
+
+    # Without engine prefix: first token is model, rest is ignored.
+    engine_arg, model = parse_set_args(
+        ("set", "gemini-3.6-flash", "use", "seversl", "tools"),
+        engine_ids={"codex", "claude", "pi"},
+    )
+    assert engine_arg is None
+    assert model == "gemini-3.6-flash"
+
+    # With engine prefix: second token is model, rest is ignored.
+    engine_arg, model = parse_set_args(
+        ("set", "codex", "gemini-3.6-flash", "use", "seversl", "tools"),
+        engine_ids={"codex", "claude", "pi"},
+    )
+    assert engine_arg == "codex"
+    assert model == "gemini-3.6-flash"
+
+    # Single model still works.
+    engine_arg, model = parse_set_args(
+        ("set", "gpt-4.1-mini"),
+        engine_ids={"codex", "claude", "pi"},
+    )
+    assert engine_arg is None
+    assert model == "gpt-4.1-mini"
+
+    # Engine + single model still works.
+    engine_arg, model = parse_set_args(
+        ("set", "codex", "gpt-4.1-mini"),
+        engine_ids={"codex", "claude", "pi"},
+    )
+    assert engine_arg == "codex"
+    assert model == "gpt-4.1-mini"
+
+
 # ---------------------------------------------------------------------------
 # 2. Command/store cases
 
