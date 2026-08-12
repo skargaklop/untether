@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 import anyio
 from anyio.abc import TaskGroup
@@ -25,7 +25,7 @@ from ..runners.run_options import EngineRunOptions
 from ..scheduler import ThreadJob, ThreadScheduler
 from ..settings import TelegramTransportSettings
 from ..transport import MessageRef, RenderedMessage, SendOptions, Transport
-from ..transport_runtime import ResolvedMessage, TransportRuntime
+from ..transport_runtime import ResolvedMessage
 from ..utils.error_display import user_safe_error
 from .bridge import (
     CANCEL_CALLBACK_DATA,
@@ -279,6 +279,15 @@ def _directive_options(resolved: ResolvedMessage) -> EngineRunOptions | None:
     )
 
 
+@runtime_checkable
+class _ModelCatalogRuntime(Protocol):
+    """Structural subset of TransportRuntime needed for model validation."""
+
+    def list_models(self, engine: EngineId | None) -> tuple[str, ...] | None: ...
+
+    def supports_model_on_resume(self, engine: EngineId | None) -> bool: ...
+
+
 class _ModelValidationResult:
     """Outcome of validating a one-message model directive before enqueue.
 
@@ -305,7 +314,7 @@ def _validate_model_override(
     model: str,
     engine: EngineId,
     *,
-    runtime: TransportRuntime,
+    runtime: _ModelCatalogRuntime,
     fallback_enabled: bool,
 ) -> _ModelValidationResult:
     """Validate a one-message model against the engine's catalog before enqueue.
@@ -337,7 +346,7 @@ def _validate_model_override(
 def _check_resume_model_capability(
     *,
     engine: EngineId,
-    runtime: TransportRuntime,
+    runtime: _ModelCatalogRuntime,
     model: str,
 ) -> str | None:
     """Return a limitation message if the engine can't change model on resume.

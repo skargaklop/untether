@@ -303,14 +303,18 @@ def test_supports_model_on_resume_true() -> None:
 
 
 class _FakeRuntime:
-    def __init__(self, models=None, supports_resume=False):
+    def __init__(
+        self,
+        models: tuple[str, ...] | None = None,
+        supports_resume: bool = False,
+    ) -> None:
         self._models = models
         self._supports_resume = supports_resume
 
-    def list_models(self, engine):
+    def list_models(self, engine: str | None) -> tuple[str, ...] | None:
         return self._models
 
-    def supports_model_on_resume(self, engine):
+    def supports_model_on_resume(self, engine: str | None) -> bool:
         return self._supports_resume
 
 
@@ -329,6 +333,7 @@ def test_validation_confirmed_miss_rejects() -> None:
         "haiku", "claude", runtime=runtime, fallback_enabled=False
     )
     assert result.action == "reject"
+    assert result.message is not None
     assert "haiku" in result.message
     assert "claude" in result.message
 
@@ -339,6 +344,7 @@ def test_validation_confirmed_miss_fallback() -> None:
         "haiku", "claude", runtime=runtime, fallback_enabled=True
     )
     assert result.action == "fallback"
+    assert result.message is not None
     assert "haiku" in result.message
     assert "claude" in result.message
 
