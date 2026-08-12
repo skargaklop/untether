@@ -645,7 +645,7 @@ def _dispatch_builtin_command(
             task_group.start_soon(handler)
             return True
 
-    if command_id == "model":
+    if command_id == "model" and is_sticky_model_args(args_text):
         handler = partial(
             handle_model_command,
             cfg,
