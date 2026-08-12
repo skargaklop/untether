@@ -34,19 +34,16 @@ def _load_fixture(name: str) -> list[pi_schema.PiEvent]:
 
 def test_pi_resume_format_and_extract(tmp_path: Path) -> None:
     runner = PiRunner(pi_cmd="pi", extra_args=[], model=None, provider=None)
-    session_path = tmp_path / "session.jsonl"
-    token = ResumeToken(engine=ENGINE, value=str(session_path))
+    token = ResumeToken(engine=ENGINE, value="session.jsonl")
 
-    expected = f"`pi --session {runner._quote_token(str(session_path))}`"
-    assert runner.format_resume(token) == expected
-    assert runner.extract_resume(expected) == token
-    assert runner.extract_resume(f'pi --session "{session_path}"') == token
+    assert runner.format_resume(token) == "`pi --session session.jsonl`"
+    assert runner.extract_resume("`pi --session session.jsonl`") == token
+    assert runner.extract_resume('pi --session "session.jsonl"') == token
     assert runner.extract_resume("`codex resume sid`") is None
 
-    spaced_path = tmp_path / "pi session.jsonl"
-    spaced = ResumeToken(engine=ENGINE, value=str(spaced_path))
-    assert runner.format_resume(spaced) == f'`pi --session "{spaced_path}"`'
-    assert runner.extract_resume(f'`pi --session "{spaced_path}"`') == spaced
+    spaced = ResumeToken(engine=ENGINE, value="pi session.jsonl")
+    assert runner.format_resume(spaced) == '`pi --session "pi session.jsonl"`'
+    assert runner.extract_resume('`pi --session "pi session.jsonl"`') == spaced
 
 
 def test_translate_success_fixture() -> None:
