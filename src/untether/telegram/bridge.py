@@ -203,6 +203,7 @@ class TelegramBridgeConfig:
     # #638: optional ISO-639-1 hint forwarded to the transcription API.
     voice_transcription_language: str | None = None
     voice_show_transcription: bool = True
+    voice_transcribing_status: bool = True
     # #381: CIDR/IP allowlist strings for the voice base_url SSRF check.
     voice_transcription_url_allowlist: tuple[str, ...] = ()
     forward_coalesce_s: float = 1.0
@@ -257,6 +258,7 @@ class TelegramBridgeConfig:
         )
         self.voice_transcription_language = settings.voice_transcription_language
         self.voice_show_transcription = bool(settings.voice_show_transcription)
+        self.voice_transcribing_status = bool(settings.voice_transcribing_status)
         self.voice_transcription_url_allowlist = tuple(
             settings.voice_transcription_url_allowlist
         )

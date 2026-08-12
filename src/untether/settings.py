@@ -185,6 +185,7 @@ class TelegramTransportSettings(BaseModel):
     # utterances ('Continue' → '계속').
     voice_transcription_language: NonEmptyStr | None = None
     voice_show_transcription: bool = True
+    voice_transcribing_status: bool = True
     # #381: optional SSRF allowlist (CIDR / bare-IP strings) for
     # voice_transcription_base_url — lets operators opt in to private endpoints
     # (e.g. an Azure private-link range) that would otherwise be blocked.

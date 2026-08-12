@@ -99,6 +99,12 @@ class BotClient(Protocol):
         message_id: int,
     ) -> bool: ...
 
+    async def send_chat_action(
+        self,
+        chat_id: int,
+        action: str = "typing",
+    ) -> bool: ...
+
     async def set_my_commands(
         self,
         commands: list[dict[str, Any]],
@@ -557,6 +563,17 @@ class HttpBotClient:
             chat_id=chat_id,
             message_id=message_id,
             success=bool(result),
+        )
+        return bool(result)
+
+    async def send_chat_action(
+        self,
+        chat_id: int,
+        action: str = "typing",
+    ) -> bool:
+        result = await self._post(
+            "sendChatAction",
+            {"chat_id": chat_id, "action": action},
         )
         return bool(result)
 

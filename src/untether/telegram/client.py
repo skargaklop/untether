@@ -312,6 +312,27 @@ class TelegramClient:
             )
         )
 
+    async def send_chat_action(
+        self,
+        chat_id: int,
+        action: str = "typing",
+    ) -> bool:
+        async def execute() -> bool:
+            return await self._client.send_chat_action(
+                chat_id=chat_id,
+                action=action,
+            )
+
+        return bool(
+            await self.enqueue_op(
+                key=self.unique_key("chat_action"),
+                label="send_chat_action",
+                execute=execute,
+                priority=SEND_PRIORITY,
+                chat_id=chat_id,
+            )
+        )
+
     async def set_my_commands(
         self,
         commands: list[dict[str, Any]],

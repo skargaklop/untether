@@ -25,6 +25,7 @@ VOICE_TRANSCRIPTION_CONNECTION_HINT = "couldn't reach the transcription service 
 VOICE_TRANSCRIPTION_UNAVAILABLE = (
     "voice transcription is unavailable. please type your message instead."
 )
+_VOICE_TRANSCRIBING_STATUS = "🎙 Transcribing…"
 _VOICE_MAX_RETRIES = 4
 _AVT_OUTPUT_LIMIT = 64 * 1024
 
@@ -205,6 +206,7 @@ async def transcribe_voice(
     api_key: str | None = None,
     url_allowlist: Sequence[ipaddress.IPv4Network | ipaddress.IPv6Network] = (),
     language: str | None = None,
+    transcribing_status: bool = True,
     providers: Sequence[VoiceTranscriptionProvider] = (
         "avt",
         "groq",
@@ -241,47 +243,76 @@ async def transcribe_voice(
     if max_bytes is not None and len(audio_bytes) > max_bytes:
         await reply(text="voice message is too large to transcribe.")
         return None
-    if transcriber is not None:
+    # Best-effort "Transcribing…" status indicator.
+    status_msg = None
+    if transcribing_status:
         try:
-            text = await transcriber.transcribe(
-                model=model, audio_bytes=audio_bytes, language=language
+            await bot.send_chat_action(chat_id=msg.chat_id, action="typing")
+            status_msg = await bot.send_message(
+                chat_id=msg.chat_id,
+                text=_VOICE_TRANSCRIBING_STATUS,
+                message_thread_id=msg.thread_id,
             )
-            if text and text.strip():
-                return text
         except Exception as exc:  # noqa: BLE001
-            logger.error(
-                "voice.transcribe.error",
+            logger.debug(
+                "voice.status.send_failed",
                 error_type=exc.__class__.__name__,
-                file_id=voice.file_id,
             )
+
+    try:
+        if transcriber is not None:
+            try:
+                text = await transcriber.transcribe(
+                    model=model, audio_bytes=audio_bytes, language=language
+                )
+                if text and text.strip():
+                    return text
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "voice.transcribe.error",
+                    error_type=exc.__class__.__name__,
+                    file_id=voice.file_id,
+                )
+            await reply(text=VOICE_TRANSCRIPTION_UNAVAILABLE)
+            return None
+        for provider_id in providers:
+            try:
+                text = await _try_provider(
+                    provider_id=provider_id,
+                    audio_bytes=audio_bytes,
+                    model=model,
+                    language=language,
+                    base_url=base_url,
+                    api_key=api_key,
+                    url_allowlist=url_allowlist,
+                    groq_api_key=groq_api_key,
+                    local_command=local_command,
+                    local_backend=local_backend,
+                    local_model=local_model,
+                    timeout_s=timeout_s,
+                )
+                if text and text.strip():
+                    return text
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "voice.transcribe.provider_failed",
+                    provider=provider_id,
+                    error_type=exc.__class__.__name__,
+                    file_id=voice.file_id,
+                    file_size=voice.file_size,
+                    audio_size=len(audio_bytes),
+                )
         await reply(text=VOICE_TRANSCRIPTION_UNAVAILABLE)
         return None
-    for provider_id in providers:
-        try:
-            text = await _try_provider(
-                provider_id=provider_id,
-                audio_bytes=audio_bytes,
-                model=model,
-                language=language,
-                base_url=base_url,
-                api_key=api_key,
-                url_allowlist=url_allowlist,
-                groq_api_key=groq_api_key,
-                local_command=local_command,
-                local_backend=local_backend,
-                local_model=local_model,
-                timeout_s=timeout_s,
-            )
-            if text and text.strip():
-                return text
-        except Exception as exc:  # noqa: BLE001
-            logger.error(
-                "voice.transcribe.provider_failed",
-                provider=provider_id,
-                error_type=exc.__class__.__name__,
-                file_id=voice.file_id,
-                file_size=voice.file_size,
-                audio_size=len(audio_bytes),
-            )
-    await reply(text=VOICE_TRANSCRIPTION_UNAVAILABLE)
-    return None
+    finally:
+        if status_msg is not None:
+            try:
+                await bot.delete_message(
+                    chat_id=msg.chat_id,
+                    message_id=status_msg.message_id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    "voice.status.delete_failed",
+                    error_type=exc.__class__.__name__,
+                )

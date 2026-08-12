@@ -63,8 +63,6 @@ class _Bot(BotClient):
         replace_message_id: int | None = None,
     ) -> Message | None:
         _ = (
-            chat_id,
-            text,
             reply_to_message_id,
             disable_notification,
             message_thread_id,
@@ -73,7 +71,10 @@ class _Bot(BotClient):
             reply_markup,
             replace_message_id,
         )
-        raise AssertionError("send_message should not be called")
+        return Message(
+            message_id=999,
+            chat=Chat(id=chat_id, type="private"),
+        )
 
     async def send_document(
         self,
@@ -119,8 +120,10 @@ class _Bot(BotClient):
         raise AssertionError("edit_message_text should not be called")
 
     async def delete_message(self, chat_id: int, message_id: int) -> bool:
-        _ = chat_id, message_id
-        raise AssertionError("delete_message should not be called")
+        return True
+
+    async def send_chat_action(self, chat_id: int, action: str = "typing") -> bool:
+        return True
 
     async def set_my_commands(
         self,
@@ -200,6 +203,183 @@ class _Transcriber:
             raise self._error
         assert self._result is not None
         return self._result
+
+
+class _StatusBot(_Bot):
+    """_Bot variant that records status-message lifecycle calls."""
+
+    def __init__(
+        self,
+        *,
+        file_info: File | None,
+        audio: bytes | None,
+        status_message_id: int = 999,
+    ) -> None:
+        super().__init__(file_info=file_info, audio=audio)
+        self._status_message_id = status_message_id
+        self.sent_messages: list[tuple[int, str]] = []
+        self.deleted_messages: list[tuple[int, int]] = []
+        self.chat_actions: list[tuple[int, str]] = []
+
+    async def send_message(
+        self,
+        chat_id: int,
+        text: str,
+        reply_to_message_id: int | None = None,
+        disable_notification: bool | None = False,
+        message_thread_id: int | None = None,
+        entities: list[dict] | None = None,
+        parse_mode: str | None = None,
+        reply_markup: dict | None = None,
+        *,
+        replace_message_id: int | None = None,
+    ) -> Message | None:
+        self.sent_messages.append((chat_id, text))
+        return Message(
+            message_id=self._status_message_id,
+            chat=Chat(id=chat_id, type="private"),
+        )
+
+    async def delete_message(self, chat_id: int, message_id: int) -> bool:
+        self.deleted_messages.append((chat_id, message_id))
+        return True
+
+    async def send_chat_action(self, chat_id: int, action: str = "typing") -> bool:
+        self.chat_actions.append((chat_id, action))
+        return True
+
+
+@pytest.mark.anyio
+async def test_transcribe_voice_status_message_sent_and_deleted_on_success() -> None:
+    """When transcribing_status=True, a 'Transcribing…' message is sent
+    before transcription and deleted after it succeeds."""
+    replies: list[str] = []
+
+    async def reply(**kwargs) -> None:
+        replies.append(kwargs["text"])
+
+    transcriber = _Transcriber(result="hello")
+    bot = _StatusBot(file_info=File(file_path="voice.ogg"), audio=b"ok")
+    result = await transcribe_voice(
+        bot=bot,
+        msg=_voice_message(file_size=2),
+        enabled=True,
+        model="whisper-1",
+        reply=reply,
+        transcriber=transcriber,
+        transcribing_status=True,
+    )
+
+    assert result == "hello"
+    assert len(bot.sent_messages) == 1
+    assert bot.sent_messages[0] == (1, "🎙 Transcribing…")
+    assert bot.chat_actions == [(1, "typing")]
+    assert bot.deleted_messages == [(1, 999)]
+
+
+@pytest.mark.anyio
+async def test_transcribe_voice_status_message_deleted_on_failure() -> None:
+    """The status message is deleted even when transcription fails."""
+    replies: list[str] = []
+
+    async def reply(**kwargs) -> None:
+        replies.append(kwargs["text"])
+
+    transcriber = _Transcriber(error=RuntimeError("provider down"))
+    bot = _StatusBot(file_info=File(file_path="voice.ogg"), audio=b"ok")
+    result = await transcribe_voice(
+        bot=bot,
+        msg=_voice_message(file_size=2),
+        enabled=True,
+        model="whisper-1",
+        reply=reply,
+        transcriber=transcriber,
+        transcribing_status=True,
+    )
+
+    assert result is None
+    assert len(bot.sent_messages) == 1
+    assert bot.deleted_messages == [(1, 999)]
+
+
+@pytest.mark.anyio
+async def test_transcribe_voice_no_status_message_when_disabled() -> None:
+    """When transcribing_status=False, no status message or chat action."""
+    replies: list[str] = []
+
+    async def reply(**kwargs) -> None:
+        replies.append(kwargs["text"])
+
+    transcriber = _Transcriber(result="hello")
+    bot = _StatusBot(file_info=File(file_path="voice.ogg"), audio=b"ok")
+    result = await transcribe_voice(
+        bot=bot,
+        msg=_voice_message(file_size=2),
+        enabled=True,
+        model="whisper-1",
+        reply=reply,
+        transcriber=transcriber,
+        transcribing_status=False,
+    )
+
+    assert result == "hello"
+    assert bot.sent_messages == []
+    assert bot.chat_actions == []
+    assert bot.deleted_messages == []
+
+
+@pytest.mark.anyio
+async def test_transcribe_voice_status_send_failure_doesnt_block() -> None:
+    """If sending the status message fails (returns None), transcription
+    proceeds normally."""
+    replies: list[str] = []
+
+    async def reply(**kwargs) -> None:
+        replies.append(kwargs["text"])
+
+    class _FailSendBot(_StatusBot):
+        async def send_message(
+            self,
+            chat_id: int,
+            text: str,
+            reply_to_message_id: int | None = None,
+            disable_notification: bool | None = False,
+            message_thread_id: int | None = None,
+            entities: list[dict] | None = None,
+            parse_mode: str | None = None,
+            reply_markup: dict | None = None,
+            *,
+            replace_message_id: int | None = None,
+        ) -> Message | None:
+            self.sent_messages.append((chat_id, text))
+            return None  # Simulate network failure
+
+    transcriber = _Transcriber(result="hello")
+    bot = _FailSendBot(file_info=File(file_path="voice.ogg"), audio=b"ok")
+    result = await transcribe_voice(
+        bot=bot,
+        msg=_voice_message(file_size=2),
+        enabled=True,
+        model="whisper-1",
+        reply=reply,
+        transcriber=transcriber,
+        transcribing_status=True,
+    )
+
+    assert result == "hello"
+    assert len(bot.sent_messages) == 1
+    assert bot.deleted_messages == []
+
+
+def test_voice_transcribing_status_default() -> None:
+    from untether.settings import TelegramTransportSettings
+
+    settings = TelegramTransportSettings(
+        bot_token="token",
+        chat_id=1,
+        allow_any_user=True,
+    )
+    assert settings.voice_transcribing_status is True
 
 
 @pytest.mark.anyio
