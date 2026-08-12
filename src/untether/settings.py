@@ -201,6 +201,14 @@ class TelegramTransportSettings(BaseModel):
     prompt_batch_max_messages: StrictInt = 8
     prompt_batch_max_chars: StrictInt = 120_000
     prompt_batch_separator: Literal["newline", "blank_line"] = "blank_line"
+    # Unknown-model policy for /model and --model directives (see
+    # docs/plans/slash-model-command-enhancement-plan.md). Default False:
+    # reject an explicit model selection as `Unknown model <name> for <engine>`
+    # after a trustworthy live/configured catalog confirms the miss, creating
+    # no job. Set True to instead omit the invalid override so the runner uses
+    # its configured/native default, with a visible fallback notice naming the
+    # rejected value. TOML: [transports.telegram] unknown_model_fallback.
+    unknown_model_fallback: bool = False
     topics: TelegramTopicsSettings = Field(default_factory=TelegramTopicsSettings)
     files: TelegramFilesSettings = Field(default_factory=TelegramFilesSettings)
 

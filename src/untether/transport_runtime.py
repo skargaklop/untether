@@ -39,6 +39,10 @@ class ResolvedMessage:
     goal: str | None = None
     skill: str | None = None
     subagent: str | None = None
+    # One-message model override from /model, --model, or --model= directives.
+    # None when no directive is present; precedence is enforced at the run
+    # boundary in loop._directive_options / _resolve_engine_run_options.
+    model: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +152,20 @@ class TransportRuntime:
     def missing_engine_ids(self) -> tuple[EngineId, ...]:
         return self.engine_ids_with_status("missing_cli")
 
+    def supports_model_on_resume(self, engine: EngineId | None) -> bool:
+        """Whether the engine can change model when resuming an authentic session."""
+        return self._router.supports_model_on_resume(engine)
+
+    def list_models(self, engine: EngineId | None) -> tuple[str, ...] | None:
+        """Return the engine's model catalog, or None when discovery is unavailable.
+
+        Delegates to the router's per-engine capability callable. Returns None
+        for missing CLI, timeout, nonzero exit, or schema drift so callers can
+        treat infrastructure failure as catalog-unavailable (pass-through)
+        rather than model-invalid.
+        """
+        return self._router.list_models(engine)
+
     def project_aliases(self) -> tuple[str, ...]:
         return tuple(project.alias for project in self._projects.projects.values())
 
@@ -210,6 +228,7 @@ class TransportRuntime:
             goal=directives.goal,
             skill=directives.skill,
             subagent=directives.subagent,
+            model=directives.model,
         )
 
     def project_default_engine(self, context: RunContext | None) -> EngineId | None:

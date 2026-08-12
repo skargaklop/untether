@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shlex
 from dataclasses import dataclass
 
 from .config import ProjectsConfig
@@ -17,6 +18,7 @@ class ParsedDirectives:
     goal: str | None = None
     skill: str | None = None
     subagent: str | None = None
+    model: str | None = None
 
 
 # Mode tokens reserved ahead of project aliases (e.g. a project named "plan").
@@ -58,6 +60,7 @@ def parse_directives(
     goal: str | None = None
     skill: str | None = None
     subagent: str | None = None
+    model: str | None = None
     consumed = 0
 
     while consumed < len(tokens):
@@ -81,6 +84,17 @@ def parse_directives(
                 raise DirectiveError("multiple --subagent directives")
             subagent = tokens[next_pos]
             consumed += 2
+            continue
+        if lower == "--model":
+            next_pos = consumed + 1
+            if next_pos >= len(tokens):
+                raise DirectiveError("--model requires a value")
+            model = tokens[next_pos]  # last-one-wins
+            consumed += 2
+            continue
+        if token.startswith("--model="):
+            model = token[len("--model=") :]  # last-one-wins
+            consumed += 1
             continue
         if token.startswith("/"):
             name = token[1:]
@@ -108,12 +122,42 @@ def parse_directives(
                 subagent = tokens[next_pos]
                 consumed += 2
                 continue
+            if key == "model":
+                next_pos = consumed + 1
+                if next_pos >= len(tokens):
+                    raise DirectiveError("/model requires a value")
+                value = tokens[next_pos]
+                # Bare /model <value> as the last thing in the message is a
+                # persistence directive for command dispatch; break so the raw
+                # text falls through to the command layer instead of being
+                # consumed as a one-message override (bare /model has no prompt).
+                more_tokens = consumed + 2 < len(tokens)
+                more_lines = any(line.strip() for line in lines[idx + 1 :])
+                if not more_tokens and not more_lines:
+                    break
+                model = value  # last-one-wins
+                consumed += 2
+                continue
             if key == _MODE_PLAN:
                 plan = True
                 consumed += 1
                 continue
             if key == _MODE_GOAL:
-                # Remainder of the message is the goal condition.
+                goal_rest_tokens = tokens[consumed:]
+                follow = goal_rest_tokens[1] if len(goal_rest_tokens) > 1 else None
+                if follow is not None and follow.startswith('"'):
+                    # Quoted goal form: /goal "<condition>" [more directives/prompt].
+                    try:
+                        parts = shlex.split(" ".join(goal_rest_tokens))
+                    except ValueError:
+                        raise DirectiveError("unterminated /goal quote") from None
+                    goal = parts[1] if len(parts) > 1 else None
+                    # Resume scanning the tokens after the closing quote.
+                    tokens = parts[2:]
+                    consumed = 0
+                    lines[idx] = " ".join(tokens)
+                    continue
+                # Legacy unquoted terminal form: remainder is the goal.
                 rest_on_line = tokens[consumed + 1 :]
                 rest_lines = lines[idx + 1 :]
                 parts: list[str] = []
@@ -132,6 +176,7 @@ def parse_directives(
                     goal=goal,
                     skill=skill,
                     subagent=subagent,
+                    model=model,
                 )
             engine_candidate = engine_map.get(key)
             project_candidate = project_map.get(key)
@@ -173,6 +218,7 @@ def parse_directives(
             branch=None,
             plan=False,
             goal=None,
+            model=model,
         )
     if consumed < len(tokens):
         remainder = " ".join(tokens[consumed:])
@@ -192,6 +238,7 @@ def parse_directives(
         goal=goal,
         skill=skill,
         subagent=subagent,
+        model=model,
     )
 
 

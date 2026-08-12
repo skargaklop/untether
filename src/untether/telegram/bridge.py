@@ -217,6 +217,10 @@ class TelegramBridgeConfig:
     # Mirrors `TelegramTransportSettings.allow_any_user` so the loop can
     # log on every boot (telegram/loop.py:security.allow_any_user).
     allow_any_user: bool = False
+    # Unknown-model policy for /model and --model directives. Default False:
+    # reject after catalog-confirmed miss; True = fall back to engine default
+    # with a visible notice. Hot-reloadable via update_from.
+    unknown_model_fallback: bool = False
     files: TelegramFilesSettings = field(default_factory=TelegramFilesSettings)
     chat_ids: tuple[int, ...] | None = None
     topics: TelegramTopicsSettings = field(default_factory=TelegramTopicsSettings)
@@ -262,6 +266,7 @@ class TelegramBridgeConfig:
         self.prompt_batch_debounce_s = float(settings.prompt_batch_debounce_s)
         self.prompt_batch_max_messages = int(settings.prompt_batch_max_messages)
         self.prompt_batch_max_chars = int(settings.prompt_batch_max_chars)
+        self.unknown_model_fallback = bool(settings.unknown_model_fallback)
         self.prompt_batch_separator = settings.prompt_batch_separator
         self.media_group_debounce_s = float(settings.media_group_debounce_s)
         self.allowed_user_ids = tuple(settings.allowed_user_ids)

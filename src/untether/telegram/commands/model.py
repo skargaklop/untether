@@ -5,7 +5,11 @@ from typing import TYPE_CHECKING
 from ...context import RunContext
 from ...logging import get_logger
 from ..chat_prefs import ChatPrefsStore
-from ..engine_overrides import EngineOverrides, resolve_override_value
+from ..engine_overrides import (
+    EngineOverrides,
+    get_engine_default_model,
+    resolve_override_value,
+)
 from ..files import split_command_args
 from ..topic_state import TopicStateStore
 from ..topics import _topic_key
@@ -82,6 +86,15 @@ async def _handle_model_command(
         model_line = (
             f"model: **{model_value}** ({OVERRIDE_SOURCE_LABELS[resolution.source]})"
         )
+        # When no override is set, show the engine's discovered/configured
+        # default so the user can see what "default" resolves to.
+        if resolution.value is None:
+            discovered = cfg.runtime.list_models(engine)
+            configured_default = get_engine_default_model(engine)
+            if configured_default is not None:
+                model_line += f"\n  configured default: `{configured_default}`"
+            if discovered is not None:
+                model_line += f"\n  available: {', '.join(discovered)}"
         topic_label = resolution.topic_value or "none"
         if tkey is None:
             topic_label = "none"

@@ -25,7 +25,7 @@ from ..runners.run_options import EngineRunOptions
 from ..scheduler import ThreadJob, ThreadScheduler
 from ..settings import TelegramTransportSettings
 from ..transport import MessageRef, RenderedMessage, SendOptions, Transport
-from ..transport_runtime import ResolvedMessage
+from ..transport_runtime import ResolvedMessage, TransportRuntime
 from ..utils.error_display import user_safe_error
 from .bridge import (
     CANCEL_CALLBACK_DATA,
@@ -267,6 +267,7 @@ def _directive_options(resolved: ResolvedMessage) -> EngineRunOptions | None:
         and resolved.goal is None
         and resolved.skill is None
         and resolved.subagent is None
+        and resolved.model is None
     ):
         return None
     return EngineRunOptions(
@@ -274,6 +275,81 @@ def _directive_options(resolved: ResolvedMessage) -> EngineRunOptions | None:
         goal=resolved.goal,
         skill=resolved.skill,
         subagent=resolved.subagent,
+        model=resolved.model,
+    )
+
+
+class _ModelValidationResult:
+    """Outcome of validating a one-message model directive before enqueue.
+
+    ``allow`` — pass the model through unchanged.
+    ``reject`` — stop with ``message``; create no job.
+    ``fallback`` — drop the model override (use engine default); send ``message``.
+    """
+
+    __slots__ = ("action", "message", "model")
+
+    def __init__(
+        self,
+        action: str,
+        *,
+        message: str | None = None,
+        model: str | None = None,
+    ) -> None:
+        self.action = action
+        self.message = message
+        self.model = model
+
+
+def _validate_model_override(
+    model: str,
+    engine: EngineId,
+    *,
+    runtime: TransportRuntime,
+    fallback_enabled: bool,
+) -> _ModelValidationResult:
+    """Validate a one-message model against the engine's catalog before enqueue.
+
+    Precedence:
+    - Catalog hit → allow.
+    - Catalog-confirmed miss, fallback off → reject with ``Unknown model``.
+    - Catalog-confirmed miss, fallback on → drop override, visible notice.
+    - Catalog unavailable (None) → pass through; the engine is authoritative.
+    """
+    catalog = runtime.list_models(engine)
+    if catalog is None:
+        return _ModelValidationResult("allow", model=model)
+    if model in catalog:
+        return _ModelValidationResult("allow", model=model)
+    if fallback_enabled:
+        return _ModelValidationResult(
+            "fallback",
+            message=(
+                f"Unknown model `{model}` for `{engine}`; using the engine's default."
+            ),
+        )
+    return _ModelValidationResult(
+        "reject",
+        message=f"Unknown model `{model}` for `{engine}`.",
+    )
+
+
+def _check_resume_model_capability(
+    *,
+    engine: EngineId,
+    runtime: TransportRuntime,
+    model: str,
+) -> str | None:
+    """Return a limitation message if the engine can't change model on resume.
+
+    None means the override is allowed. A non-None message means: send the
+    message, perform zero runner starts, and create no fresh session.
+    """
+    if runtime.supports_model_on_resume(engine):
+        return None
+    return (
+        f"`{engine}` does not support changing the model while resuming a session; "
+        f"the model override (`{model}`) was not applied."
     )
 
 
@@ -2282,6 +2358,11 @@ async def run_main_loop(
                             if directive_options.subagent is not None
                             else base.subagent
                         ),
+                        model=(
+                            directive_options.model
+                            if directive_options.model is not None
+                            else base.model
+                        ),
                     )
                 return await run_engine(
                     exec_cfg=cfg.exec_cfg,
@@ -2752,6 +2833,77 @@ async def run_main_loop(
                 if resume_decision.handled_by_running_task:
                     return
                 resume_token = resume_decision.resume_token
+                # Model validation + resume-model capability gate (see
+                # docs/plans/slash-model-command-enhancement-plan.md).
+                # Runs before any job creation / enqueue so a rejection
+                # produces zero runner starts and unchanged stores.
+                effective_model = resolved.model
+                if effective_model is not None:
+                    # Empty or whitespace-only model values are usage errors.
+                    if not effective_model.strip():
+                        await send_plain(
+                            cfg.exec_cfg.transport,
+                            chat_id=chat_id,
+                            user_msg_id=user_msg_id,
+                            text="Model override must not be empty.",
+                            thread_id=msg.thread_id,
+                        )
+                        return
+                    effective_engine = (
+                        resume_token.engine
+                        if resume_token is not None
+                        else engine_override
+                    )
+                    # Resume-model capability: reject before job creation
+                    # when resuming an authentic session and the engine
+                    # can't change model on resume.
+                    if resume_token is not None:
+                        limit_msg = _check_resume_model_capability(
+                            engine=effective_engine,
+                            runtime=cfg.runtime,
+                            model=effective_model,
+                        )
+                        if limit_msg is not None:
+                            await send_plain(
+                                cfg.exec_cfg.transport,
+                                chat_id=chat_id,
+                                user_msg_id=user_msg_id,
+                                text=limit_msg,
+                                thread_id=msg.thread_id,
+                            )
+                            return
+                    # Catalog validation: reject or fall back per policy.
+                    validation = _validate_model_override(
+                        effective_model,
+                        effective_engine,
+                        runtime=cfg.runtime,
+                        fallback_enabled=cfg.unknown_model_fallback,
+                    )
+                    if validation.action == "reject":
+                        assert validation.message is not None
+                        await send_plain(
+                            cfg.exec_cfg.transport,
+                            chat_id=chat_id,
+                            user_msg_id=user_msg_id,
+                            text=validation.message,
+                            thread_id=msg.thread_id,
+                        )
+                        return
+                    if validation.action == "fallback":
+                        assert validation.message is not None
+                        await send_plain(
+                            cfg.exec_cfg.transport,
+                            chat_id=chat_id,
+                            user_msg_id=user_msg_id,
+                            text=validation.message,
+                            thread_id=msg.thread_id,
+                        )
+                        effective_model = None
+                # Build directive options with the (possibly cleared) model.
+                if effective_model != resolved.model:
+                    from dataclasses import replace as _dc_replace
+
+                    resolved = _dc_replace(resolved, model=effective_model)
                 if resume_token is None:
                     _dir_opts = _directive_options(resolved)
                     await run_job(

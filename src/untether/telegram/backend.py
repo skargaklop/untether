@@ -302,6 +302,7 @@ class TelegramBackend(TransportBackend):
             prompt_batch_separator=settings.prompt_batch_separator,
             allowed_user_ids=tuple(settings.allowed_user_ids),
             allow_any_user=settings.allow_any_user,
+            unknown_model_fallback=settings.unknown_model_fallback,
             topics=settings.topics,
             files=settings.files,
             trigger_config=trigger_config,

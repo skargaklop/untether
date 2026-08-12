@@ -28,7 +28,6 @@ CONTROL_COMMANDS = frozenset(
         "continue",
         "ctx",
         "agent",
-        "model",
         "reasoning",
         "listen",
         "trigger",
@@ -68,6 +67,24 @@ def is_sticky_goal_args(args_text: str) -> bool:
     return not (args_text or "").strip()
 
 
+_STICKY_MODEL_ACTIONS = frozenset({"set", "clear"})
+
+
+def is_sticky_model_args(args_text: str) -> bool:
+    """True when /model is a control/persistence action, not a prompt-bearing run.
+
+    Control (non-batchable): bare `/model` (show), `/model set ...`,
+    `/model clear ...`, and `/model <value>` (single-token persistence
+    shorthand). Prompt-bearing (batchable): `/model <value> <prompt...>`.
+    """
+    tokens = split_command_args(args_text)
+    if not tokens:
+        return True
+    if tokens[0].lower() in _STICKY_MODEL_ACTIONS:
+        return True
+    return len(tokens) == 1
+
+
 @dataclass(frozen=True, slots=True)
 class PromptBatchSettings:
     enabled: bool
@@ -98,6 +115,8 @@ def should_batch_text(text: str, *, settings: PromptBatchSettings) -> bool:
         return not is_sticky_plan_args(args_text)
     if command_id == "goal":
         return not is_sticky_goal_args(args_text)
+    if command_id == "model":
+        return not is_sticky_model_args(args_text)
 
     # Engine directives, project aliases, and plugin commands with text are
     # interpreted after batching by the existing dispatcher.
