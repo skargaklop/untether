@@ -163,7 +163,12 @@ class TelegramTransportSettings(BaseModel):
     message_overflow: Literal["trim", "split"] = "split"
     voice_transcription: bool = False
     voice_max_bytes: StrictInt = 10 * 1024 * 1024
-    voice_transcription_provider: Literal["openai", "groq", "local"] = "openai"
+    voice_transcription_providers: list[Literal["avt", "groq", "local", "openai"]] = [
+        "avt",
+        "groq",
+        "local",
+        "openai",
+    ]
     voice_transcription_model: NonEmptyStr = "gpt-4o-mini-transcribe"
     voice_transcription_base_url: NonEmptyStr | None = None
     voice_transcription_api_key: SecretStr | None = None
@@ -198,6 +203,31 @@ class TelegramTransportSettings(BaseModel):
     prompt_batch_separator: Literal["newline", "blank_line"] = "blank_line"
     topics: TelegramTopicsSettings = Field(default_factory=TelegramTopicsSettings)
     files: TelegramFilesSettings = Field(default_factory=TelegramFilesSettings)
+
+    @field_validator("voice_transcription_providers", mode="before")
+    @classmethod
+    def _normalize_voice_providers(cls, value: object) -> object:
+        if isinstance(value, list):
+            return [
+                item.strip().lower() if isinstance(item, str) else item
+                for item in value
+            ]
+        return value
+
+    @model_validator(mode="after")
+    def _validate_voice_providers(self) -> TelegramTransportSettings:
+        providers = self.voice_transcription_providers
+        if not providers:
+            raise ValueError("voice_transcription_providers must not be empty")
+        if len(set(providers)) != len(providers):
+            duplicates = sorted(
+                {item for item in providers if providers.count(item) > 1}
+            )
+            raise ValueError(
+                "voice_transcription_providers contains duplicates: "
+                + ", ".join(duplicates)
+            )
+        return self
 
     @field_validator("bot_token", mode="after")
     @classmethod

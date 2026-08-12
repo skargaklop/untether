@@ -186,7 +186,9 @@ class TelegramBridgeConfig:
     show_resume_line: bool = True
     voice_transcription: bool = False
     voice_max_bytes: int = 10 * 1024 * 1024
-    voice_transcription_provider: Literal["openai", "groq", "local"] = "openai"
+    voice_transcription_providers: list[Literal["avt", "groq", "local", "openai"]] = field(
+        default_factory=lambda: ["avt", "groq", "local", "openai"]
+    )
     voice_transcription_model: str = "gpt-4o-mini-transcribe"
     voice_transcription_base_url: str | None = None
     # #378: SecretStr ferries the key without leaking it through repr/log.
@@ -230,7 +232,9 @@ class TelegramBridgeConfig:
         """
         self.voice_transcription = bool(settings.voice_transcription)
         self.voice_max_bytes = int(settings.voice_max_bytes)
-        self.voice_transcription_provider = settings.voice_transcription_provider
+        self.voice_transcription_providers = list(
+            settings.voice_transcription_providers
+        )
         self.voice_transcription_model = settings.voice_transcription_model
         self.voice_transcription_base_url = settings.voice_transcription_base_url
         self.voice_transcription_api_key = settings.voice_transcription_api_key

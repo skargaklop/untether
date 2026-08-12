@@ -1130,7 +1130,7 @@ def test_voice_provider_settings_defaults_and_groq_fields() -> None:
         }
     )
     voice = settings.transports.telegram
-    assert voice.voice_transcription_provider == "openai"
+    assert voice.voice_transcription_providers == ["avt", "groq", "local", "openai"]
     assert voice.voice_transcription_local_command.endswith("avt.exe")
     assert voice.voice_transcription_local_backend == "whisper"
     assert voice.voice_transcription_local_model == "base"

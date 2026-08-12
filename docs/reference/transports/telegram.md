@@ -22,9 +22,7 @@ This document captures current behavior so transport changes stay intentional.
 
 ### Voice transcription
 
-If voice transcription is enabled, untether downloads the voice payload from Telegram,
-transcribes it with OpenAI, and routes the transcript through the same command and
-directive pipeline as typed text.
+If voice transcription is enabled, Untether downloads the Telegram voice payload once and tries the configured providers in order. The first successful transcript follows the same command and directive pipeline as typed text.
 
 Configuration (under `[transports.telegram]`):
 
@@ -32,40 +30,24 @@ Configuration (under `[transports.telegram]`):
 
     ```sh
     untether config set transports.telegram.voice_transcription true
-    untether config set transports.telegram.voice_transcription_model "gpt-4o-mini-transcribe"
-
-    # local OpenAI-compatible transcription server (optional)
-    untether config set transports.telegram.voice_transcription_base_url "http://localhost:8000/v1"
-    untether config set transports.telegram.voice_transcription_api_key "local"
+    untether config set transports.telegram.voice_transcription_providers '["avt", "groq", "local", "openai"]'
     ```
 
 === "toml"
 
     ```toml
     voice_transcription = true
-    voice_transcription_model = "gpt-4o-mini-transcribe" # optional
-    voice_transcription_base_url = "http://localhost:8000/v1" # optional
-    voice_transcription_api_key = "local" # optional
-    voice_transcription_url_allowlist = ["127.0.0.0/8"] # required for a loopback/private base_url (SSRF guard, #381)
+    voice_transcription_providers = ["avt", "groq", "local", "openai"]
+    voice_transcription_groq_api_key = "gsk_..." # for groq
+    voice_transcription_local_backend = "whisper" # or "parakeet"
+    voice_transcription_local_model = "small" # for local
+    voice_transcription_api_key = "sk-..." # for openai
     voice_transcription_language = "en" # optional ISO-639-1 hint
     ```
 
-Set `OPENAI_API_KEY` in the environment (or `voice_transcription_api_key` in config).
-If transcription is enabled but no API key is available or the audio download fails,
-untether replies with a short error and skips the run.
+Providers are attempted strictly in the configured order; any nonempty subset is valid. `avt` requires the external AVT CLI and `voice_transcription_local_command`; `groq` requires `voice_transcription_groq_api_key` or `GROQ_API_KEY`; `local` requires `pip install untether[whisper]` or `pip install untether[parakeet]`; and `openai` requires `voice_transcription_api_key` or `OPENAI_API_KEY`. The `groq` and `local` providers are native adapters ported from AVT (Apache-2.0), while `avt` remains an external process.
 
-To use a local OpenAI-compatible Whisper server, set `voice_transcription_base_url`
-(and `voice_transcription_api_key` if the server expects one). This keeps engine
-requests on their own base URL without relying on `OPENAI_BASE_URL`. If your server
-requires a specific model name, set `voice_transcription_model` (for example,
-`whisper-1`).
-
-Since v0.35.4 the base URL is SSRF-validated ([#381](https://github.com/littlebearapps/untether/issues/381)): a loopback or private-network host (such as `http://localhost:8000/v1`) is refused unless you allowlist it with `voice_transcription_url_allowlist` (a list of CIDR/IP strings, e.g. `["127.0.0.0/8"]`). The default public path (`base_url` unset) skips validation.
-
-If your voice notes are always in one language, set `voice_transcription_language`
-to an ISO-639-1 code (for example, `en`). This is passed as the Whisper `language`
-parameter and prevents wrong-language transcriptions on short utterances. Unset,
-the provider auto-detects the language.
+Each provider failure advances to the next. If all configured providers fail, Untether sends one provider-neutral `voice transcription is unavailable` reply and skips the run. Provider settings are hot-reloadable.
 
 ### Trigger mode (mentions-only)
 

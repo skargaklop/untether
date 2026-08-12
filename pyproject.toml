@@ -7,7 +7,7 @@ keywords = ["telegram", "claude-code", "codex", "opencode", "pi", "gemini-cli", 
 description = "Run AI coding agents from your phone. Bridges Claude Code, Codex, OpenCode, Pi, Gemini CLI, and Amp to Telegram with interactive permissions, voice input, cost tracking, and live progress."
 readme = {file = "README.md", content-type = "text/markdown"}
 license = "MIT"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "LICENSES/*", "ATTRIBUTION.md"]
 requires-python = ">=3.12"
 dependencies = [
   "aiohttp>=3.9.0",
@@ -42,6 +42,10 @@ classifiers = [
   "Topic :: Software Development :: Build Tools",
   "Typing :: Typed",
 ]
+
+[project.optional-dependencies]
+whisper = ["faster-whisper>=1.1.0"]
+parakeet = ["onnx-asr[cpu,hub]>=0.11.0"]
 
 [project.urls]
 Homepage = "https://github.com/littlebearapps/untether"

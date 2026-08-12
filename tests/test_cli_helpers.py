@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import importlib
+
 import pytest
 
 from untether import cli
 from untether.config import ConfigError
 from untether.lockfile import LockError
 from untether.settings import UntetherSettings
+
+doctor_module = importlib.import_module("untether.cli.doctor")
 
 
 def _settings(overrides: dict | None = None) -> UntetherSettings:
@@ -121,13 +125,10 @@ def test_doctor_file_checks() -> None:
 
 def test_doctor_voice_checks(monkeypatch) -> None:
     settings = _settings()
-    checks = cli._doctor_voice_checks(settings)
-    assert checks[0].detail == "disabled"
+    assert cli._doctor_voice_checks(settings)[0].detail == "disabled"
 
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv(
-        "UNTETHER__TRANSPORTS__TELEGRAM__VOICE_TRANSCRIPTION_API_KEY", raising=False
-    )
+    monkeypatch.delenv("OPENAI_ADMIN_KEY", raising=False)
     settings = _settings(
         {
             "transports": {
@@ -136,13 +137,14 @@ def test_doctor_voice_checks(monkeypatch) -> None:
                     "chat_id": 1,
                     "allow_any_user": True,
                     "voice_transcription": True,
+                    "voice_transcription_providers": ["openai"],
                 }
             }
         }
     )
     checks = cli._doctor_voice_checks(settings)
     assert checks[0].status == "error"
-    assert checks[0].detail == "API key not set"
+    assert checks[0].detail == "no OpenAI API key"
 
     settings_with_key = _settings(
         {
@@ -152,23 +154,18 @@ def test_doctor_voice_checks(monkeypatch) -> None:
                     "chat_id": 1,
                     "allow_any_user": True,
                     "voice_transcription": True,
-                    "voice_transcription_api_key": "local",
+                    "voice_transcription_providers": ["openai"],
+                    "voice_transcription_api_key": "secret",
                 }
             }
         }
     )
-    checks = cli._doctor_voice_checks(settings_with_key)
-    assert checks[0].status == "ok"
-    assert checks[0].detail == "voice_transcription_api_key set"
-
-    monkeypatch.setenv("OPENAI_API_KEY", "key")
-    checks = cli._doctor_voice_checks(settings)
-    assert checks[0].status == "ok"
+    check = cli._doctor_voice_checks(settings_with_key)[0]
+    assert check.status == "ok"
+    assert check.detail == "voice_transcription_api_key set"
 
 
-def test_doctor_voice_checks_local_provider(tmp_path) -> None:
-    executable = tmp_path / "avt.exe"
-    executable.touch()
+def test_doctor_voice_checks_local_provider(monkeypatch) -> None:
     settings = _settings(
         {
             "transports": {
@@ -177,17 +174,138 @@ def test_doctor_voice_checks_local_provider(tmp_path) -> None:
                     "chat_id": 1,
                     "allow_any_user": True,
                     "voice_transcription": True,
-                    "voice_transcription_provider": "local",
-                    "voice_transcription_local_command": str(executable),
-                    "voice_transcription_local_backend": "parakeet",
+                    "voice_transcription_providers": ["local"],
+                    "voice_transcription_local_backend": "whisper",
                     "voice_transcription_local_model": "small",
                 }
             }
         }
     )
+    monkeypatch.setattr(
+        doctor_module, "_check_voice_provider", lambda *_: ("ok", "ready")
+    )
     check = cli._doctor_voice_checks(settings)[0]
+    assert check.label == "voice transcription [local]"
     assert check.status == "ok"
-    assert check.detail == "backend=parakeet, model=small"
+
+
+def test_doctor_voice_checks_default_providers(monkeypatch) -> None:
+    monkeypatch.setattr(
+        doctor_module, "_check_voice_provider", lambda *_: ("ok", "ready")
+    )
+    settings = _settings(
+        {
+            "transports": {
+                "telegram": {
+                    "bot_token": "token",
+                    "chat_id": 1,
+                    "allow_any_user": True,
+                    "voice_transcription": True,
+                }
+            }
+        }
+    )
+    checks = cli._doctor_voice_checks(settings)
+    assert [check.label for check in checks[:-1]] == [
+        "voice transcription [avt]",
+        "voice transcription [groq]",
+        "voice transcription [local]",
+        "voice transcription [openai]",
+    ]
+    assert checks[-1].detail == "4/4 providers usable"
+
+
+def test_doctor_voice_checks_all_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(
+        doctor_module, "_check_voice_provider", lambda *_: ("error", "missing")
+    )
+    settings = _settings(
+        {
+            "transports": {
+                "telegram": {
+                    "bot_token": "token",
+                    "chat_id": 1,
+                    "allow_any_user": True,
+                    "voice_transcription": True,
+                }
+            }
+        }
+    )
+    checks = cli._doctor_voice_checks(settings)
+    assert all(check.status == "error" for check in checks)
+    assert checks[-1].detail == "no usable providers"
+
+
+def test_doctor_voice_checks_partial_availability(monkeypatch) -> None:
+    statuses = iter(
+        [("error", "missing"), ("ok", "ready"), ("error", "missing"), ("ok", "ready")]
+    )
+    monkeypatch.setattr(
+        doctor_module, "_check_voice_provider", lambda *_: next(statuses)
+    )
+    settings = _settings(
+        {
+            "transports": {
+                "telegram": {
+                    "bot_token": "token",
+                    "chat_id": 1,
+                    "allow_any_user": True,
+                    "voice_transcription": True,
+                }
+            }
+        }
+    )
+    checks = cli._doctor_voice_checks(settings)
+    assert checks[-1].status == "warning"
+    assert checks[-1].detail == "2/4 providers usable"
+
+
+def test_doctor_voice_checks_all_available(monkeypatch) -> None:
+    monkeypatch.setattr(
+        doctor_module, "_check_voice_provider", lambda *_: ("ok", "ready")
+    )
+    settings = _settings(
+        {
+            "transports": {
+                "telegram": {
+                    "bot_token": "token",
+                    "chat_id": 1,
+                    "allow_any_user": True,
+                    "voice_transcription": True,
+                }
+            }
+        }
+    )
+    assert cli._doctor_voice_checks(settings)[-1].status == "ok"
+
+
+def test_doctor_voice_checks_disabled() -> None:
+    settings = _settings()
+    assert cli._doctor_voice_checks(settings) == [
+        cli.DoctorCheck("voice transcription", "ok", "disabled")
+    ]
+
+
+def test_doctor_voice_checks_never_prints_keys(monkeypatch) -> None:
+    monkeypatch.setenv("GROQ_API_KEY", "groq-secret")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-secret")
+    settings = _settings(
+        {
+            "transports": {
+                "telegram": {
+                    "bot_token": "token",
+                    "chat_id": 1,
+                    "allow_any_user": True,
+                    "voice_transcription": True,
+                    "voice_transcription_providers": ["groq", "openai"],
+                    "voice_transcription_groq_api_key": "explicit-groq-secret",
+                    "voice_transcription_api_key": "explicit-openai-secret",
+                }
+            }
+        }
+    )
+    details = [check.detail or "" for check in cli._doctor_voice_checks(settings)]
+    assert all("secret" not in detail for detail in details)
 
 
 def test_load_settings_optional(monkeypatch, tmp_path) -> None:

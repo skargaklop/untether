@@ -14,7 +14,11 @@ from ..config import ConfigError
 from ..engines import list_backend_ids
 from ..ids import RESERVED_CHAT_COMMANDS
 from ..runtime_loader import resolve_plugins_allowlist
-from ..settings import TelegramTopicsSettings, UntetherSettings
+from ..settings import (
+    TelegramTopicsSettings,
+    TelegramTransportSettings,
+    UntetherSettings,
+)
 from ..telegram.client import TelegramClient
 from ..telegram.topics import _validate_topics_setup_for
 
@@ -48,36 +52,86 @@ def _doctor_voice_checks(settings: UntetherSettings) -> list[DoctorCheck]:
     if not settings.transports.telegram.voice_transcription:
         return [DoctorCheck("voice transcription", "ok", "disabled")]
     telegram = settings.transports.telegram
-    provider = telegram.voice_transcription_provider
-    if provider == "local":
-        command = Path(telegram.voice_transcription_local_command)
-        detail = (
-            f"backend={telegram.voice_transcription_local_backend}, "
-            f"model={telegram.voice_transcription_local_model}"
+    providers = telegram.voice_transcription_providers
+    checks: list[DoctorCheck] = []
+    usable_count = 0
+
+    for provider_id in providers:
+        status, detail = _check_voice_provider(telegram, provider_id)
+        if status == "ok":
+            usable_count += 1
+        checks.append(
+            DoctorCheck(f"voice transcription [{provider_id}]", status, detail)
         )
-        if command.is_file():
-            return [DoctorCheck("voice transcription", "ok", detail)]
-        return [
+
+    if not checks:
+        return [DoctorCheck("voice transcription", "error", "no providers configured")]
+    if usable_count == 0:
+        return checks + [
+            DoctorCheck("voice transcription", "error", "no usable providers")
+        ]
+    if usable_count < len(providers):
+        return checks + [
             DoctorCheck(
-                "voice transcription", "error", "local transcription unavailable"
+                "voice transcription",
+                "warning",
+                f"{usable_count}/{len(providers)} providers usable",
             )
         ]
-    api_key = (
-        telegram.voice_transcription_groq_api_key
-        if provider == "groq"
-        else telegram.voice_transcription_api_key
-    )
-    environment_key = "GROQ_API_KEY" if provider == "groq" else "OPENAI_API_KEY"
-    if api_key:
-        detail = (
-            "voice_transcription_api_key set"
-            if provider == "openai"
-            else "groq API key set"
+    return checks + [
+        DoctorCheck(
+            "voice transcription",
+            "ok",
+            f"{usable_count}/{len(providers)} providers usable",
         )
-        return [DoctorCheck("voice transcription", "ok", detail)]
-    if os.environ.get(environment_key):
-        return [DoctorCheck("voice transcription", "ok", f"{environment_key} set")]
-    return [DoctorCheck("voice transcription", "error", "API key not set")]
+    ]
+
+
+def _check_voice_provider(
+    telegram: TelegramTransportSettings, provider_id: str
+) -> tuple[Literal["ok", "error"], str]:
+    """Check one voice provider without exposing credentials."""
+    if provider_id == "avt":
+        command = Path(telegram.voice_transcription_local_command)
+        if command.is_file():
+            return "ok", f"executable: {command}"
+        return "error", f"avt executable not found: {command}"
+
+    if provider_id == "groq":
+        if telegram.voice_transcription_groq_api_key:
+            return "ok", "groq API key set"
+        if os.environ.get("GROQ_API_KEY"):
+            return "ok", "GROQ_API_KEY set"
+        return "error", "no Groq API key"
+
+    if provider_id == "local":
+        from ..telegram.voice_local import local_backend_available
+
+        backend = telegram.voice_transcription_local_backend
+        if local_backend_available(backend):
+            if backend == "parakeet":
+                import shutil
+
+                if not shutil.which("ffmpeg"):
+                    return "error", f"{backend} backend available but ffmpeg not found"
+            return (
+                "ok",
+                f"backend={backend}, model={telegram.voice_transcription_local_model}",
+            )
+        extra = "whisper" if backend == "whisper" else "parakeet"
+        return "error", (
+            f"{backend} backend not available (install: pip install untether[{extra}])"
+        )
+
+    if provider_id == "openai":
+        if telegram.voice_transcription_api_key:
+            return "ok", "voice_transcription_api_key set"
+        for env_key in ("OPENAI_API_KEY", "OPENAI_ADMIN_KEY"):
+            if os.environ.get(env_key):
+                return "ok", f"{env_key} set"
+        return "error", "no OpenAI API key"
+
+    return "error", f"unknown provider: {provider_id}"
 
 
 async def _doctor_telegram_checks(

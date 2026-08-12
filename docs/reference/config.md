@@ -84,11 +84,16 @@ systemctl --user restart untether-dev    # dev
 | `forward_coalesce_s` | float | `1.0` | Quiet window for combining a prompt with immediately-following forwarded messages; set `0` to disable. |
 | `voice_transcription` | bool | `false` | Enable voice note transcription. |
 | `voice_max_bytes` | int | `10485760` | Max voice note size (bytes). |
+| `voice_transcription_providers` | string[] | `["avt", "groq", "local", "openai"]` | Ordered provider chain for voice transcription. Each provider failure advances to the next; exhaustion produces a single "voice transcription is unavailable" reply. Provider IDs: `avt` (external AVT CLI), `groq` (native Groq multipart adapter), `local` (native Whisper/Parakeet), `openai` (OpenAI SDK). Any nonempty subset in any order. Hot-reloadable. |
 | `voice_transcription_model` | string | `"gpt-4o-mini-transcribe"` | OpenAI transcription model name. |
-| `voice_transcription_base_url` | string\|null | `null` | Override base URL for voice transcription only. **SSRF-validated ([#381](https://github.com/littlebearapps/untether/issues/381)):** the resolved host must be public — loopback/private endpoints (e.g. a local Whisper server at `http://localhost:8000/v1`) are **rejected** unless allowlisted via `voice_transcription_url_allowlist`. Unset (the default public `api.openai.com` path) skips validation. |
-| `voice_transcription_url_allowlist` | string[] | `[]` | ([#381](https://github.com/littlebearapps/untether/issues/381)) CIDR/IP allowlist that opts specific private/loopback transcription endpoints back in past the SSRF guard — e.g. `["127.0.0.0/8"]` for a local Whisper server, or an Azure private-link range. Only consulted when `voice_transcription_base_url` is set. |
-| `voice_transcription_api_key` | string\|null | `null` | Override API key for voice transcription only. |
-| `voice_transcription_language` | string\|null | `null` | ([#638](https://github.com/littlebearapps/untether/issues/638)) Optional ISO-639-1 language hint (e.g. `"en"`) passed to the Whisper `language` param — stops wrong-language guesses on short voice notes. Unset = provider auto-detect. Hot-reloadable. |
+| `voice_transcription_base_url` | string\|null | `null` | Override base URL for the OpenAI provider only. **SSRF-validated ([#381](https://github.com/littlebearapps/untether/issues/381)):** the resolved host must be public — loopback/private endpoints are rejected unless allowlisted via `voice_transcription_url_allowlist`. |
+| `voice_transcription_url_allowlist` | string[] | `[]` | CIDR/IP allowlist that opts private/loopback OpenAI endpoints back in past the SSRF guard. |
+| `voice_transcription_api_key` | string\|null | `null` | Override API key for the OpenAI provider only. |
+| `voice_transcription_groq_api_key` | string\|null | `null` | Groq API key for the `groq` provider; `GROQ_API_KEY` is also supported. |
+| `voice_transcription_local_command` | string\|null | `null` | Path to the AVT executable for the `avt` provider. |
+| `voice_transcription_local_backend` | `"whisper"`\|`"parakeet"` | `"whisper"` | Native engine backend for the `local` provider. |
+| `voice_transcription_local_model` | string | (backend default) | Model name for the `local` provider. |
+| `voice_transcription_language` | string\|null | `null` | ([#638](https://github.com/littlebearapps/untether/issues/638)) Optional ISO-639-1 language hint passed to transcription providers. Hot-reloadable. |
 | `session_mode` | `"stateless"`\|`"chat"` | `"stateless"` | 🔄 Auto-resume mode. See [workflow modes](modes.md) — `"chat"` for assistant/workspace, `"stateless"` for handoff. Restart-required. |
 | `show_resume_line` | bool | `true` | Show resume line in message footer. See [workflow modes](modes.md) — `false` for assistant/workspace, `true` for handoff. |
 

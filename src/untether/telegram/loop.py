@@ -1994,6 +1994,8 @@ async def run_main_loop(
                                 transport="telegram",
                                 keys=hot_keys,
                             )
+                        if hot_keys:
+                            cfg.update_from(reload.settings.transports.telegram)
                         state.transport_snapshot = new_snapshot
                 if (
                     state.transport_id is not None
@@ -3304,7 +3306,7 @@ async def run_main_loop(
                         model=cfg.voice_transcription_model,
                         max_bytes=cfg.voice_max_bytes,
                         reply=reply,
-                        provider=cfg.voice_transcription_provider,
+                        providers=cfg.voice_transcription_providers,
                         base_url=cfg.voice_transcription_base_url,
                         api_key=(
                             cfg.voice_transcription_api_key.get_secret_value()

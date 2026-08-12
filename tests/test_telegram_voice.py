@@ -16,8 +16,8 @@ from untether.telegram.api_models import (
 from untether.telegram.client import BotClient
 from untether.telegram.types import TelegramIncomingMessage, TelegramVoice
 from untether.telegram.voice import (
-    VOICE_TRANSCRIPTION_CONNECTION_HINT,
     VOICE_TRANSCRIPTION_DISABLED_HINT,
+    VOICE_TRANSCRIPTION_UNAVAILABLE,
     transcribe_voice,
 )
 
@@ -337,7 +337,7 @@ async def test_transcribe_voice_handles_transcriber_error() -> None:
     )
 
     assert result is None
-    assert replies[-1] == "boom"
+    assert replies[-1] == VOICE_TRANSCRIPTION_UNAVAILABLE
     assert transcriber.calls
 
 
@@ -393,15 +393,14 @@ async def test_transcribe_voice_passes_language_hint() -> None:
 
 
 @pytest.mark.anyio
-async def test_transcribe_voice_blocks_private_base_url() -> None:
-    """#381: a base_url pointing at a private/reserved address is blocked at
-    the chokepoint before any outbound call (transcriber never runs)."""
+async def test_transcribe_voice_blocks_private_base_url(monkeypatch) -> None:
+    """#381: a base_url pointing at a private/reserved address is blocked
+    when the openai provider is reached in the chain (transcriber never runs)."""
     replies: list[str] = []
 
     async def reply(**kwargs) -> None:
         replies.append(kwargs["text"])
 
-    transcriber = _Transcriber(result="should-not-run")
     bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"ok")
     result = await transcribe_voice(
         bot=bot,
@@ -409,13 +408,13 @@ async def test_transcribe_voice_blocks_private_base_url() -> None:
         enabled=True,
         model="whisper-1",
         reply=reply,
-        transcriber=transcriber,
+        providers=("openai",),
         base_url="http://127.0.0.1:8080/v1",
     )
 
     assert result is None
-    assert replies[-1] == "voice transcription endpoint is not permitted."
-    assert transcriber.calls == []
+    assert replies[-1] == VOICE_TRANSCRIPTION_UNAVAILABLE
+    assert len(replies) == 1
 
 
 @pytest.mark.anyio
@@ -467,7 +466,7 @@ async def test_transcribe_voice_connection_error_replies_with_hint() -> None:
     )
 
     assert result is None
-    assert replies[-1] == VOICE_TRANSCRIPTION_CONNECTION_HINT
+    assert replies[-1] == VOICE_TRANSCRIPTION_UNAVAILABLE
     assert transcriber.calls
 
 
@@ -492,7 +491,7 @@ async def test_transcribe_voice_timeout_error_replies_with_hint() -> None:
     )
 
     assert result is None
-    assert replies[-1] == VOICE_TRANSCRIPTION_CONNECTION_HINT
+    assert replies[-1] == VOICE_TRANSCRIPTION_UNAVAILABLE
     assert transcriber.calls
 
 
@@ -517,7 +516,7 @@ async def test_transcribe_voice_non_connection_openai_error_sanitised() -> None:
     )
 
     assert result is None
-    assert replies[-1] == "model not found"
+    assert replies[-1] == VOICE_TRANSCRIPTION_UNAVAILABLE
     assert transcriber.calls
 
 
@@ -542,27 +541,19 @@ async def test_transcribe_voice_stdlib_timeout_branch_reachable() -> None:
     )
 
     assert result is None
-    assert replies[-1] == "voice transcription timed out"
+    assert replies[-1] == VOICE_TRANSCRIPTION_UNAVAILABLE
     assert transcriber.calls
 
 
 @pytest.mark.anyio
-async def test_594_transcribe_error_log_includes_endpoint_and_cause() -> None:
-    """#594: the openai.transcribe.error log must carry the resolved
-    endpoint and the underlying __cause__ — APIConnectionError's str() is a
-    bare "Connection error." which made the channelo outage (illegal
-    Authorization header from a malformed api_key) undiagnosable from
-    logs."""
+async def test_594_transcribe_error_log_includes_safe_metadata() -> None:
     from structlog.testing import capture_logs
 
     async def reply(**kwargs) -> None:
         pass
 
-    err = APIConnectionError(request=_REQUEST)
-    err.__cause__ = RuntimeError("Illegal header value b'Bearer sk-a\\nsk-b'")
-    transcriber = _Transcriber(error=err)
+    transcriber = _Transcriber(error=RuntimeError("secret detail"))
     bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"ok")
-
     with capture_logs() as logs:
         result = await transcribe_voice(
             bot=bot,
@@ -571,19 +562,18 @@ async def test_594_transcribe_error_log_includes_endpoint_and_cause() -> None:
             model="whisper-1",
             reply=reply,
             transcriber=transcriber,
-            base_url="https://api.groq.com/openai/v1",
         )
-
     assert result is None
-    rec = next(r for r in logs if r["event"] == "openai.transcribe.error")
-    assert rec["endpoint"] == "https://api.groq.com/openai/v1"
-    assert "Illegal header value" in (rec["cause"] or "")
+    rec = next(r for r in logs if r["event"] == "voice.transcribe.error")
+    assert rec["error_type"] == "RuntimeError"
+    assert "secret detail" not in str(rec)
 
 
 @pytest.mark.anyio
 async def test_594_transcribe_error_log_default_endpoint_marker() -> None:
-    """#594: with no base_url configured the log says "openai-default"
-    rather than omitting the field."""
+    """#594: the transcriber-seam error log records the error type without
+    leaking error detail. With the chain, the seam path logs
+    voice.transcribe.error (no endpoint field since the chain owns routing)."""
     from structlog.testing import capture_logs
 
     async def reply(**kwargs) -> None:
@@ -591,9 +581,8 @@ async def test_594_transcribe_error_log_default_endpoint_marker() -> None:
 
     transcriber = _Transcriber(error=OpenAIError("nope"))
     bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"ok")
-
     with capture_logs() as logs:
-        await transcribe_voice(
+        result = await transcribe_voice(
             bot=bot,
             msg=_voice_message(file_size=2),
             enabled=True,
@@ -601,10 +590,10 @@ async def test_594_transcribe_error_log_default_endpoint_marker() -> None:
             reply=reply,
             transcriber=transcriber,
         )
-
-    rec = next(r for r in logs if r["event"] == "openai.transcribe.error")
-    assert rec["endpoint"] == "openai-default"
-    assert rec["cause"] is None
+    assert result is None
+    rec = next(r for r in logs if r["event"] == "voice.transcribe.error")
+    assert rec["error_type"] == "OpenAIError"
+    assert "nope" not in str(rec)
 
 
 @pytest.mark.anyio
@@ -685,27 +674,225 @@ async def test_avt_transcriber_contract(monkeypatch) -> None:
 
 
 @pytest.mark.anyio
-async def test_transcribe_voice_selects_fixed_groq_boundary() -> None:
-    calls: list[tuple[str, str | None, str | None, str]] = []
+async def test_transcribe_voice_selects_fixed_groq_boundary(monkeypatch) -> None:
+    from untether.telegram.voice_groq import DEFAULT_GROQ_MODEL
 
-    class _GroqTranscriber:
-        async def transcribe(self, *, model, audio_bytes, language=None):
-            calls.append((model, audio_bytes, language, "unexpected"))
-            return "ok"
+    calls: list[tuple[str, bytes, str | None]] = []
 
+    async def fake_try_provider(**kwargs):
+        calls.append((kwargs["model"], kwargs["audio_bytes"], kwargs["language"]))
+        assert kwargs["provider_id"] == "groq"
+        return "ok"
+
+    monkeypatch.setattr("untether.telegram.voice._try_provider", fake_try_provider)
     bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"audio")
     result = await transcribe_voice(
         bot=bot,
         msg=_voice_message(file_size=5),
         enabled=True,
         model="ignored",
-        provider="groq",
+        providers=("groq",),
         reply=lambda **_: _done(),
-        transcriber=_GroqTranscriber(),
     )
     assert result == "ok"
-    assert calls == [("whisper-large-v3-turbo", b"audio", None, "unexpected")]
+    assert calls == [("ignored", b"audio", None)]
+    assert DEFAULT_GROQ_MODEL == "whisper-large-v3-turbo"
 
+
+
+@pytest.mark.anyio
+async def test_chain_default_order_tries_each_provider(monkeypatch) -> None:
+    """Default providers list tries each provider in order until one succeeds."""
+    tried: list[str] = []
+
+    async def fake_try(**kwargs):
+        pid = kwargs["provider_id"]
+        tried.append(pid)
+        if pid == "local":
+            return "transcribed by local"
+        raise RuntimeError(f"{pid} unavailable")
+
+    monkeypatch.setattr("untether.telegram.voice._try_provider", fake_try)
+    bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"audio")
+    result = await transcribe_voice(
+        bot=bot, msg=_voice_message(file_size=5), enabled=True,
+        model="whisper-1", reply=lambda **_: _done(),
+    )
+    assert result == "transcribed by local"
+    assert tried == ["avt", "groq", "local"]
+
+
+@pytest.mark.anyio
+async def test_chain_short_circuit_on_first_success(monkeypatch) -> None:
+    tried: list[str] = []
+
+    async def fake_try(**kwargs):
+        tried.append(kwargs["provider_id"])
+        return "first wins"
+
+    monkeypatch.setattr("untether.telegram.voice._try_provider", fake_try)
+    bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"audio")
+    result = await transcribe_voice(
+        bot=bot, msg=_voice_message(file_size=5), enabled=True,
+        model="whisper-1", reply=lambda **_: _done(),
+    )
+    assert result == "first wins"
+    assert tried == ["avt"]
+
+
+@pytest.mark.anyio
+async def test_chain_exhaustion_single_reply(monkeypatch) -> None:
+    tried: list[str] = []
+    replies: list[str] = []
+
+    async def fake_try(**kwargs):
+        tried.append(kwargs["provider_id"])
+        raise RuntimeError(f"{kwargs['provider_id']} failed")
+
+    async def reply(**kwargs):
+        replies.append(kwargs["text"])
+
+    monkeypatch.setattr("untether.telegram.voice._try_provider", fake_try)
+    bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"audio")
+    result = await transcribe_voice(
+        bot=bot, msg=_voice_message(file_size=5), enabled=True,
+        model="whisper-1", reply=reply,
+    )
+    assert result is None
+    assert len(replies) == 1
+    assert replies[0] == VOICE_TRANSCRIPTION_UNAVAILABLE
+    assert tried == ["avt", "groq", "local", "openai"]
+
+
+@pytest.mark.anyio
+async def test_chain_arbitrary_order(monkeypatch) -> None:
+    tried: list[str] = []
+
+    async def fake_try(**kwargs):
+        tried.append(kwargs["provider_id"])
+        return "ok"
+
+    monkeypatch.setattr("untether.telegram.voice._try_provider", fake_try)
+    bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"audio")
+    result = await transcribe_voice(
+        bot=bot, msg=_voice_message(file_size=5), enabled=True,
+        model="whisper-1", providers=("openai", "groq"),
+        reply=lambda **_: _done(),
+    )
+    assert result == "ok"
+    assert tried == ["openai"]
+
+
+@pytest.mark.anyio
+async def test_chain_language_propagation(monkeypatch) -> None:
+    received_languages: list[str | None] = []
+
+    async def fake_try(**kwargs):
+        received_languages.append(kwargs["language"])
+        return "ok"
+
+    monkeypatch.setattr("untether.telegram.voice._try_provider", fake_try)
+    bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"audio")
+    await transcribe_voice(
+        bot=bot, msg=_voice_message(file_size=5), enabled=True,
+        model="whisper-1", language="ja",
+        reply=lambda **_: _done(),
+    )
+    assert received_languages == ["ja"]
+
+
+@pytest.mark.anyio
+async def test_chain_download_once(monkeypatch) -> None:
+    download_count = 0
+
+    async def fake_try(**kwargs):
+        raise RuntimeError("fail")
+
+    monkeypatch.setattr("untether.telegram.voice._try_provider", fake_try)
+
+    class _CountingBot(_Bot):
+        async def download_file(self, file_path: str) -> bytes | None:
+            nonlocal download_count
+            download_count += 1
+            return await super().download_file(file_path)
+
+    bot = _CountingBot(file_info=File(file_path="voice.ogg"), audio=b"audio")
+    await transcribe_voice(
+        bot=bot, msg=_voice_message(file_size=5), enabled=True,
+        model="whisper-1", reply=lambda **_: _done(),
+    )
+    assert download_count == 1
+
+
+@pytest.mark.anyio
+async def test_chain_blank_transcript_treated_as_failure(monkeypatch) -> None:
+    tried: list[str] = []
+
+    async def fake_try(**kwargs):
+        pid = kwargs["provider_id"]
+        tried.append(pid)
+        if pid == "openai":
+            return "real text"
+        return "   "
+
+    monkeypatch.setattr("untether.telegram.voice._try_provider", fake_try)
+    bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"audio")
+    result = await transcribe_voice(
+        bot=bot, msg=_voice_message(file_size=5), enabled=True,
+        model="whisper-1", reply=lambda **_: _done(),
+    )
+    assert result == "real text"
+    assert "openai" in tried
+
+
+@pytest.mark.anyio
+async def test_try_provider_groq_missing_key_raises(monkeypatch) -> None:
+    from untether.telegram.voice import _try_provider
+
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="Groq API key not configured"):
+        await _try_provider(
+            provider_id="groq", audio_bytes=b"audio", model="whisper-1",
+            language=None, base_url=None, api_key=None,
+            url_allowlist=(), groq_api_key=None,
+            local_command=None, local_backend="whisper",
+            local_model="base", timeout_s=10,
+        )
+
+
+@pytest.mark.anyio
+async def test_try_provider_openai_ssrf_blocked(monkeypatch) -> None:
+    from untether.telegram.voice import _try_provider
+
+    with pytest.raises(RuntimeError, match="not permitted"):
+        await _try_provider(
+            provider_id="openai", audio_bytes=b"audio", model="whisper-1",
+            language=None, base_url="http://127.0.0.1:8080/v1", api_key="key",
+            url_allowlist=(), groq_api_key=None,
+            local_command=None, local_backend="whisper",
+            local_model="base", timeout_s=10,
+        )
+
+
+@pytest.mark.anyio
+async def test_try_provider_local_dispatch(monkeypatch) -> None:
+    """The local provider dispatches to get_local_transcriber."""
+    from untether.telegram.voice import _try_provider
+    import untether.telegram.voice_local as vlocal
+
+    class _FakeLocal:
+        async def transcribe(self, **kwargs):
+            return "local result"
+
+    monkeypatch.setattr(vlocal, "get_local_transcriber", lambda *a, **kw: _FakeLocal())
+    result = await _try_provider(
+        provider_id="local", audio_bytes=b"audio", model="base",
+        language="en", base_url=None, api_key=None,
+        url_allowlist=(), groq_api_key=None,
+        local_command=None, local_backend="whisper",
+        local_model="base", timeout_s=10,
+    )
+    assert result == "local result"
 
 async def _done() -> None:
     return None

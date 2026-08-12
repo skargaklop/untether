@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### changes
+
+- **telegram:** replace scalar `voice_transcription_provider` with ordered `voice_transcription_providers` array (default `["avt", "groq", "local", "openai"]`). Each provider failure advances to the next; exhaustion produces a single sanitized reply. Native Groq and local Whisper/Parakeet adapters are ported from [AI-Video-Transcriber](https://github.com/littlebearapps/AI-Video-Transcriber) (Apache-2.0); `avt` remains an external CLI integration and `openai` remains the SDK path. The hot-reload path now applies settings via `cfg.update_from()` rather than only reporting the diff. [#348]
+
+### fixes
+
+- **telegram:** hot-reload of voice settings now actually applies the new configuration at runtime; previously the reload handler reported the diff but never called `update_from()`.
+
 ## v0.35.5 (2026-08-11)
 
 ### fixes

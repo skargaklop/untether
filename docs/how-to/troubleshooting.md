@@ -271,19 +271,14 @@ To change:
     ```toml
     [transports.telegram]
     voice_transcription = true
+    voice_transcription_providers = ["avt", "groq", "local", "openai"]
     ```
 
-2. Make sure you have an OpenAI API key set (voice transcription uses the OpenAI transcription API by default)
-3. Check the voice note size — default max is 10 MiB (`voice_max_bytes`)
-4. If using a custom transcription server, verify `voice_transcription_base_url` is reachable
-5. **Since v0.35.4**, a `voice_transcription_base_url` that resolves to a private/loopback address (e.g. a self-hosted Whisper on `localhost`, `10.x`, or `192.168.x`) is **rejected by the SSRF guard** ([#381](https://github.com/littlebearapps/untether/issues/381)). Opt the endpoint back in with its CIDR range:
-
-    ```toml
-    [transports.telegram]
-    voice_transcription_url_allowlist = ["127.0.0.0/8"]   # or your private range
-    ```
-
-Run `untether doctor` to validate voice configuration.
+2. Run `untether doctor` to check each configured provider independently. It reports AVT executable resolution, Groq/OpenAI credential visibility, and local backend dependencies without making network probes.
+3. Check the voice note size — default max is 10 MiB (`voice_max_bytes`).
+4. If using the OpenAI provider with a custom transcription server, verify `voice_transcription_base_url` is reachable and allowlisted when it is private.
+5. For the `local` provider, install the selected optional engine: `pip install untether[whisper]` or `pip install untether[parakeet]`.
+6. Provider failures advance through `voice_transcription_providers`; if every configured provider fails, the single expected reply is `voice transcription is unavailable`.
 
 ## File transfer blocked
 

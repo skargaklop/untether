@@ -8,35 +8,24 @@ import subprocess
 import tempfile
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 import anyio
-from openai import APIConnectionError, AsyncOpenAI, OpenAIError
+from openai import AsyncOpenAI
 
 from ..logging import get_logger
 from ..triggers.ssrf import SSRFError, validate_url_with_dns
-from ..utils.error_display import user_safe_error
 from .client import BotClient
 from .types import TelegramIncomingMessage
 
 logger = get_logger(__name__)
-
-__all__ = ["AvtVoiceTranscriber", "OpenAIVoiceTranscriber", "transcribe_voice"]
-
-VOICE_TRANSCRIPTION_DISABLED_HINT = (
-    "voice transcription is disabled. enable it in config:\n"
-    "```toml\n"
-    "[transports.telegram]\n"
-    "voice_transcription = true\n"
-    "```"
-)
-VOICE_TRANSCRIPTION_CONNECTION_HINT = (
-    "couldn't reach the transcription service — transient network issue. "
-    "please resend the voice note, or type your message instead."
+VoiceTranscriptionProvider = Literal["avt", "groq", "local", "openai"]
+VOICE_TRANSCRIPTION_DISABLED_HINT = "voice transcription is disabled. enable it in config:\n```toml\n[transports.telegram]\nvoice_transcription = true\n```"
+VOICE_TRANSCRIPTION_CONNECTION_HINT = "couldn't reach the transcription service — transient network issue. please resend the voice note, or type your message instead."
+VOICE_TRANSCRIPTION_UNAVAILABLE = (
+    "voice transcription is unavailable. please type your message instead."
 )
 _VOICE_MAX_RETRIES = 4
-_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-_GROQ_MODEL = "whisper-large-v3-turbo"
 _AVT_OUTPUT_LIMIT = 64 * 1024
 
 
@@ -48,10 +37,7 @@ class VoiceTranscriber(Protocol):
 
 class OpenAIVoiceTranscriber:
     def __init__(
-        self,
-        *,
-        base_url: str | None = None,
-        api_key: str | None = None,
+        self, *, base_url: str | None = None, api_key: str | None = None
     ) -> None:
         self._base_url = base_url
         self._api_key = api_key
@@ -67,14 +53,11 @@ class OpenAIVoiceTranscriber:
             timeout=120,
             max_retries=_VOICE_MAX_RETRIES,
         ) as client:
-            if language is None:
-                response = await client.audio.transcriptions.create(
-                    model=model, file=audio_file
-                )
-            else:
-                response = await client.audio.transcriptions.create(
-                    model=model, file=audio_file, language=language
-                )
+            response = await client.audio.transcriptions.create(
+                model=model,
+                file=audio_file,
+                **({"language": language} if language is not None else {}),
+            )
         return response.text
 
 
@@ -82,10 +65,12 @@ class AvtVoiceTranscriber:
     def __init__(
         self, *, command: str, backend: str, model: str, timeout_s: float
     ) -> None:
-        self._command = command
-        self._backend = backend
-        self._model = model
-        self._timeout_s = timeout_s
+        self._command, self._backend, self._model, self._timeout_s = (
+            command,
+            backend,
+            model,
+            timeout_s,
+        )
 
     async def transcribe(
         self, *, model: str, audio_bytes: bytes, language: str | None = None
@@ -110,14 +95,11 @@ class AvtVoiceTranscriber:
             if self._backend == "whisper":
                 argv.extend(["--local-model", self._model])
             proc = await anyio.open_process(
-                argv,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
             if proc.stdout is None or proc.stderr is None:
                 raise RuntimeError("local transcription failed to open pipes")
-            stdout = bytearray()
-            stderr = bytearray()
+            stdout, stderr = bytearray(), bytearray()
 
             async def capture(stream, output: bytearray) -> None:
                 while True:
@@ -161,6 +143,55 @@ class AvtVoiceTranscriber:
                 path.unlink(missing_ok=True)
 
 
+async def _try_provider(
+    *,
+    provider_id: VoiceTranscriptionProvider,
+    audio_bytes: bytes,
+    model: str,
+    language: str | None,
+    base_url: str | None,
+    api_key: str | None,
+    url_allowlist: Sequence[ipaddress.IPv4Network | ipaddress.IPv6Network],
+    groq_api_key: str | None,
+    local_command: str | None,
+    local_backend: str,
+    local_model: str,
+    timeout_s: float,
+) -> str:
+    if provider_id == "avt":
+        return await AvtVoiceTranscriber(
+            command=local_command or "avt.exe",
+            backend=local_backend,
+            model=local_model,
+            timeout_s=timeout_s,
+        ).transcribe(model=local_model, audio_bytes=audio_bytes, language=language)
+    if provider_id == "groq":
+        from .voice_groq import DEFAULT_GROQ_MODEL, GroqVoiceTranscriber
+
+        key = groq_api_key or os.environ.get("GROQ_API_KEY")
+        if not key:
+            raise RuntimeError("Groq API key not configured")
+        return await GroqVoiceTranscriber(
+            api_key=key, model=DEFAULT_GROQ_MODEL, timeout_s=timeout_s
+        ).transcribe(
+            model=DEFAULT_GROQ_MODEL, audio_bytes=audio_bytes, language=language
+        )
+    if provider_id == "local":
+        from .voice_local import get_local_transcriber
+
+        return await get_local_transcriber(
+            local_backend, local_model, timeout_s=timeout_s
+        ).transcribe(model=local_model, audio_bytes=audio_bytes, language=language)
+    if base_url is not None:
+        try:
+            await validate_url_with_dns(base_url, allowlist=url_allowlist)
+        except SSRFError as exc:
+            raise RuntimeError(f"OpenAI base URL not permitted: {exc}") from exc
+    return await OpenAIVoiceTranscriber(base_url=base_url, api_key=api_key).transcribe(
+        model=model, audio_bytes=audio_bytes, language=language
+    )
+
+
 async def transcribe_voice(
     *,
     bot: BotClient,
@@ -174,7 +205,12 @@ async def transcribe_voice(
     api_key: str | None = None,
     url_allowlist: Sequence[ipaddress.IPv4Network | ipaddress.IPv6Network] = (),
     language: str | None = None,
-    provider: str = "openai",
+    providers: Sequence[VoiceTranscriptionProvider] = (
+        "avt",
+        "groq",
+        "local",
+        "openai",
+    ),
     groq_api_key: str | None = None,
     local_command: str | None = None,
     local_backend: str = "whisper",
@@ -196,109 +232,56 @@ async def transcribe_voice(
         return None
     file_info = await bot.get_file(voice.file_id)
     if file_info is None:
-        logger.warning(
-            "voice.file_info.failed", file_id=voice.file_id, file_size=voice.file_size
-        )
         await reply(text="failed to fetch voice file.")
         return None
     audio_bytes = await bot.download_file(file_info.file_path)
     if audio_bytes is None:
-        logger.warning(
-            "voice.download.failed",
-            file_id=voice.file_id,
-            file_size=voice.file_size,
-            file_path=file_info.file_path,
-        )
         await reply(text="failed to download voice file.")
         return None
     if max_bytes is not None and len(audio_bytes) > max_bytes:
         await reply(text="voice message is too large to transcribe.")
         return None
-    if provider == "openai" and base_url is not None:
+    if transcriber is not None:
         try:
-            await validate_url_with_dns(base_url, allowlist=url_allowlist)
-        except SSRFError as exc:
+            text = await transcriber.transcribe(
+                model=model, audio_bytes=audio_bytes, language=language
+            )
+            if text and text.strip():
+                return text
+        except Exception as exc:  # noqa: BLE001
             logger.error(
-                "voice.base_url.ssrf_blocked",
-                error=str(exc),
+                "voice.transcribe.error",
                 error_type=exc.__class__.__name__,
+                file_id=voice.file_id,
             )
-            await reply(text="voice transcription endpoint is not permitted.")
-            return None
-    endpoint = base_url or "openai-default"
-    actual_model = _GROQ_MODEL if provider == "groq" else model
-    if transcriber is None:
-        if provider == "groq":
-            transcriber = OpenAIVoiceTranscriber(
-                base_url=_GROQ_BASE_URL, api_key=groq_api_key
-            )
-            endpoint = _GROQ_BASE_URL
-        elif provider == "local":
-            transcriber = AvtVoiceTranscriber(
-                command=local_command or "avt.exe",
-                backend=local_backend,
-                model=local_model,
+        await reply(text=VOICE_TRANSCRIPTION_UNAVAILABLE)
+        return None
+    for provider_id in providers:
+        try:
+            text = await _try_provider(
+                provider_id=provider_id,
+                audio_bytes=audio_bytes,
+                model=model,
+                language=language,
+                base_url=base_url,
+                api_key=api_key,
+                url_allowlist=url_allowlist,
+                groq_api_key=groq_api_key,
+                local_command=local_command,
+                local_backend=local_backend,
+                local_model=local_model,
                 timeout_s=timeout_s,
             )
-            actual_model = local_model
-            endpoint = "local-avt"
-        else:
-            transcriber = OpenAIVoiceTranscriber(base_url=base_url, api_key=api_key)
-    try:
-        text = await transcriber.transcribe(
-            model=actual_model, audio_bytes=audio_bytes, language=language
-        )
-        logger.debug(
-            "voice.transcribe.success",
-            model=actual_model,
-            language=language,
-            audio_size=len(audio_bytes),
-        )
-        return text
-    except OpenAIError as exc:
-        logger.error(
-            "openai.transcribe.error",
-            error=str(exc),
-            error_type=exc.__class__.__name__,
-            cause=repr(exc.__cause__) if exc.__cause__ is not None else None,
-            endpoint=endpoint,
-            file_id=voice.file_id,
-            file_size=voice.file_size,
-        )
-        if isinstance(exc, APIConnectionError):
-            await reply(text=VOICE_TRANSCRIPTION_CONNECTION_HINT)
-            return None
-        await reply(text=user_safe_error(exc, fallback="voice transcription failed"))
-        return None
-    except TimeoutError as exc:
-        logger.error(
-            "voice.transcribe.timeout",
-            error=str(exc),
-            endpoint=endpoint,
-            file_id=voice.file_id,
-            file_size=voice.file_size,
-        )
-        await reply(text="voice transcription timed out")
-        return None
-    except (RuntimeError, OSError, ValueError) as exc:
-        logger.error(
-            "voice.transcribe.error",
-            error=str(exc),
-            error_type=exc.__class__.__name__,
-            endpoint=endpoint,
-            file_id=voice.file_id,
-            file_size=voice.file_size,
-        )
-        await reply(text=user_safe_error(exc, fallback="voice transcription failed"))
-        return None
-    except Exception as exc:  # noqa: BLE001
-        logger.error(
-            "voice.transcribe.unexpected",
-            error=str(exc),
-            error_type=exc.__class__.__name__,
-            endpoint=endpoint,
-            file_id=voice.file_id,
-            file_size=voice.file_size,
-        )
-        await reply(text=user_safe_error(exc, fallback="voice transcription failed"))
-        return None
+            if text and text.strip():
+                return text
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "voice.transcribe.provider_failed",
+                provider=provider_id,
+                error_type=exc.__class__.__name__,
+                file_id=voice.file_id,
+                file_size=voice.file_size,
+                audio_size=len(audio_bytes),
+            )
+    await reply(text=VOICE_TRANSCRIPTION_UNAVAILABLE)
+    return None
