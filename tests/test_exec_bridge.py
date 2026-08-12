@@ -9067,7 +9067,7 @@ async def test_timeout_without_session_fresh_retries_original_prompt() -> None:
             # Second call: fresh retry also has no resume.
             token = _resume_token(self.engine, self._resume_value)
             yield StartedEvent(engine=self.engine, resume=token, title=self.title)
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             yield CompletedEvent(
                 engine=self.engine,
                 resume=None,  # no scraped conversation id
@@ -9127,7 +9127,7 @@ async def test_timeout_fresh_retry_disabled_surfaces_error(monkeypatch) -> None:
             self._idx += 1
             token = _resume_token(self.engine, self._resume_value)
             yield StartedEvent(engine=self.engine, resume=token, title=self.title)
-            await anyio.lowlevel.checkpoint()
+            await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
             yield CompletedEvent(
                 engine=self.engine,
                 resume=None,  # no scraped conversation id

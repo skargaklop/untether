@@ -40,7 +40,7 @@ async def test_timed_jsonl_reader_accepts_real_anyio_process_stdout() -> None:
                 proc.stdout, startup_timeout_s=1.0, idle_timeout_s=1.0
             )
         ]
-        assert lines == [b"first\r", b"second\r"]
+        assert [ln.rstrip(b"\r") for ln in lines] == [b"first", b"second"]
     finally:
         await proc.wait()
 
@@ -91,7 +91,7 @@ async def test_timed_jsonl_reader_wired_for_omp_and_grok(engine: str) -> None:
                 proc.stdout, startup_timeout_s=1.0, idle_timeout_s=1.0
             )
         ]
-        assert lines == [b'{"type": "message_start"}\r']
+        assert [ln.rstrip(b"\r") for ln in lines] == [b'{"type": "message_start"}']
     finally:
         await proc.wait()
 

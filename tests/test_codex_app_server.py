@@ -323,6 +323,10 @@ async def test_app_server_close_forces_non_exiting_process(monkeypatch) -> None:
         proc.killed = True
         proc.returncode = -9
 
+    monkeypatch.setattr(
+        "untether.runners.codex.terminate_process",
+        lambda p: setattr(p, "terminated", True),
+    )
     monkeypatch.setattr("untether.runners.codex.wait_for_process", fake_wait)
     monkeypatch.setattr("untether.runners.codex.kill_process_tree", fake_tree)
     await client.close()
@@ -432,6 +436,10 @@ async def test_app_server_initialize_failure_closes_process_and_streams(
     proc = Proc()
     monkeypatch.setattr(
         "untether.runners.codex.anyio.open_process", lambda *a, **k: _return(proc)
+    )
+    monkeypatch.setattr(
+        "untether.runners.codex.terminate_process",
+        lambda p: setattr(p, "terminated", True),
     )
     monkeypatch.setattr(
         "untether.runners.codex.wait_for_process", lambda *_a, **_k: _done()

@@ -249,6 +249,7 @@ async def test_agy_started_meta_prefers_run_option_model(
         ]
 
     assert isinstance(events[0], StartedEvent)
+    assert events[0].meta is not None
     assert events[0].meta["model"] == "gemini-3-pro"
 
 
@@ -285,7 +286,7 @@ async def test_agy_started_meta_omits_unknown_model(
     events = [event async for event in AgyRunner().run_impl("hello", None)]
 
     assert isinstance(events[0], StartedEvent)
-    assert "model" not in events[0].meta
+    assert not events[0].meta or "model" not in events[0].meta
 
 
 @pytest.mark.anyio

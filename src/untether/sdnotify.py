@@ -46,7 +46,8 @@ def notify(message: str) -> bool:
         addr = sock_path
 
     try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:  # ty: ignore[unresolved-attribute]
+        af_unix = getattr(socket, "AF_UNIX", socket.AF_INET)
+        with socket.socket(af_unix, socket.SOCK_DGRAM) as sock:
             sock.sendto(message.encode("utf-8"), addr)
     except OSError as exc:
         logger.debug(

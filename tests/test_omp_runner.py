@@ -336,6 +336,7 @@ def test_omp_started_meta_prefers_run_option_model() -> None:
             found_session=None,
         )
     assert isinstance(events[0], StartedEvent)
+    assert events[0].meta is not None
     assert events[0].meta["model"] == "omp-override"
 
 
@@ -349,4 +350,5 @@ def test_omp_started_meta_reports_auto_when_model_is_unknown() -> None:
         found_session=None,
     )
     assert isinstance(events[0], StartedEvent)
+    assert events[0].meta is not None
     assert events[0].meta["model"] == "auto"

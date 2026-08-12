@@ -300,7 +300,8 @@ def test_grok_stream_end_without_end_event_starts_and_fails(
     events = runner.stream_end_events(
         resume=None, found_session=None, state=_grok_state()
     )
-    assert events[0].__class__.__name__ == "StartedEvent"
+    assert isinstance(events[0], StartedEvent)
+    assert events[0].meta is not None
     assert events[0].meta["model"] == "grok-default"
     completed = events[-1]
     assert isinstance(completed, CompletedEvent)
@@ -316,6 +317,7 @@ def test_grok_started_meta_prefers_run_option_model() -> None:
         run_options=EngineRunOptions(model="grok-override"),
     )
     assert isinstance(events[0], StartedEvent)
+    assert events[0].meta is not None
     assert events[0].meta["model"] == "grok-override"
 
 
@@ -329,7 +331,7 @@ def test_grok_started_meta_omits_unknown_model(monkeypatch: pytest.MonkeyPatch) 
     runner = GrokRunner(extra_args=[])
     events, _ = _translate_events(runner, [b'{"type":"text","data":"hi"}'])
     assert isinstance(events[0], StartedEvent)
-    assert "model" not in events[0].meta
+    assert not events[0].meta or "model" not in events[0].meta
 
 
 # --- `grok models` default-model probe parsing ---
@@ -425,6 +427,7 @@ def test_grok_started_meta_prefers_configured_over_probed_default(
     runner = GrokRunner(extra_args=[], model="grok-configured")
     events, _ = _translate_events(runner, [b'{"type":"text","data":"hi"}'])
     assert isinstance(events[0], StartedEvent)
+    assert events[0].meta is not None
     assert events[0].meta["model"] == "grok-configured"
 
 
@@ -437,6 +440,7 @@ def test_grok_started_meta_shows_probed_cli_default(
     runner = GrokRunner(extra_args=[])
     events, _ = _translate_events(runner, [b'{"type":"text","data":"hi"}'])
     assert isinstance(events[0], StartedEvent)
+    assert events[0].meta is not None
     assert events[0].meta["model"] == "glm-probed"
 
 

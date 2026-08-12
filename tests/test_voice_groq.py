@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import io
 import urllib.error
+import urllib.request
+from email.message import Message
+from typing import cast
 
 import pytest
 
@@ -46,7 +49,7 @@ async def test_groq_transcriber_http_error(monkeypatch: pytest.MonkeyPatch) -> N
             "https://example.test",
             401,
             "no",
-            {},
+            Message(),
             io.BytesIO(b'{"error":{"message":"bad key"}}'),
         )
 
@@ -97,9 +100,9 @@ async def test_groq_transcriber_empty_transcript(
 
 @pytest.mark.anyio
 async def test_groq_transcriber_with_language(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: list[object] = []
+    seen: list[urllib.request.Request] = []
 
-    def capture(request: object, **kwargs: object) -> _Response:
+    def capture(request: urllib.request.Request, **kwargs: object) -> _Response:
         seen.append(request)
         return _Response(b'{"text":"ok"}')
 
@@ -108,7 +111,8 @@ async def test_groq_transcriber_with_language(monkeypatch: pytest.MonkeyPatch) -
         model="m", audio_bytes=b"audio", language="en"
     )
     request = seen[0]
-    assert request.data and b'name="language"' in request.data and b"en" in request.data
+    data = cast(bytes, request.data)
+    assert data and b'name="language"' in data and b"en" in data
 
 
 def test_groq_transcriber_auto_language_normalized() -> None:
@@ -126,9 +130,9 @@ def test_groq_transcriber_multipart_format() -> None:
 
 @pytest.mark.anyio
 async def test_groq_transcriber_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: list[object] = []
+    seen: list[urllib.request.Request] = []
 
-    def capture(request: object, **kwargs: object) -> _Response:
+    def capture(request: urllib.request.Request, **kwargs: object) -> _Response:
         seen.append(request)
         return _Response(b'{"text":"ok"}')
 
@@ -136,7 +140,9 @@ async def test_groq_transcriber_user_agent(monkeypatch: pytest.MonkeyPatch) -> N
     await GroqVoiceTranscriber(api_key="secret").transcribe(
         model="m", audio_bytes=b"audio"
     )
-    assert seen[0].get_header("User-agent").startswith("untether/")
+    user_agent = seen[0].get_header("User-agent")
+    assert user_agent is not None
+    assert user_agent.startswith("untether/")
 
 
 def test_groq_transcriber_empty_api_key_raises() -> None:

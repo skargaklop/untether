@@ -260,7 +260,7 @@ class TestWhisperTranscription:
                 )
 
         fake_module = types.ModuleType("faster_whisper")
-        fake_module.WhisperModel = lambda *a, **kw: FakeModel()
+        fake_module.WhisperModel = lambda *a, **kw: FakeModel()  # ty: ignore[unresolved-attribute]
 
         monkeypatch.setattr(
             "untether.telegram.voice_local._find_spec_safe",
@@ -286,7 +286,7 @@ class TestWhisperTranscription:
                 return True
 
         fake_torch = types.ModuleType("torch")
-        fake_torch.cuda = FakeCuda
+        fake_torch.cuda = FakeCuda  # ty: ignore[unresolved-attribute]
 
         monkeypatch.setattr(
             "untether.telegram.voice_local._find_spec_safe",
@@ -346,8 +346,8 @@ class TestParakeetTranscription:
                 return self
 
         fake_module = types.ModuleType("onnx_asr")
-        fake_module.load_model = lambda *a, **kw: FakeModel()
-        fake_module.load_vad = lambda *a, **kw: object()
+        fake_module.load_model = lambda *a, **kw: FakeModel()  # ty: ignore[unresolved-attribute]
+        fake_module.load_vad = lambda *a, **kw: object()  # ty: ignore[unresolved-attribute]
 
         monkeypatch.setattr(
             "untether.telegram.voice_local._find_spec_safe",

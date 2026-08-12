@@ -5462,7 +5462,9 @@ async def test_655_limbo_grace_still_applies_when_cpu_inactive(monkeypatch) -> N
 
 
 @pytest.mark.anyio
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX shell process group only")
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="requires Linux /proc CPU accounting"
+)
 async def test_655_limbo_grace_real_busy_subprocess_survives() -> None:
     """End-to-end #655 with a REAL subprocess and REAL /proc CPU accounting —
     no monkeypatched diag. A genuinely busy process with no registered
