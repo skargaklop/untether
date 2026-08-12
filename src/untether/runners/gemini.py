@@ -266,7 +266,7 @@ def translate_gemini_event(
                 )
             )
         else:
-            error = f"gemini result status: {status}"
+            error = event.error if event.error else f"gemini result status: {status}"
             out.append(
                 CompletedEvent(
                     engine=ENGINE,

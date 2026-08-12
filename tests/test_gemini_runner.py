@@ -278,6 +278,26 @@ def test_translate_result_error() -> None:
     completed = events[0]
     assert isinstance(completed, CompletedEvent)
     assert completed.ok is False
+    assert completed.error == "gemini result status: error"
+
+
+def test_translate_result_error_with_error_field() -> None:
+    state = GeminiStreamState(session_id="ses1", emitted_started=True)
+    state.last_text = "partial answer text"
+    events = translate_gemini_event(
+        _decode_event(
+            {"type": "result", "status": "error", "error": "upstream timeout"}
+        ),
+        title="gemini",
+        state=state,
+        meta=None,
+    )
+    assert len(events) == 1
+    completed = events[0]
+    assert isinstance(completed, CompletedEvent)
+    assert completed.ok is False
+    assert completed.error == "upstream timeout"
+    assert "partial answer text" in completed.answer
 
 
 def test_translate_error_event() -> None:

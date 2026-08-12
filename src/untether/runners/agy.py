@@ -95,6 +95,7 @@ class AgyStreamState:
     started: bool = False
     answer: str = ""
     result_status: str | None = None
+    result_error: str | None = None
     usage: dict[str, Any] | None = None
 
 
@@ -327,6 +328,9 @@ class AgyRunner(HandoffCompactMixin, ResumeTokenMixin, BaseRunner):
         status = payload.get("status")
         if isinstance(status, str):
             state.result_status = status
+        error_val = payload.get("error")
+        if isinstance(error_val, str) and error_val.strip():
+            state.result_error = str(error_val)
         state.usage = self._build_usage(payload)
         return []
 
@@ -452,7 +456,10 @@ class AgyRunner(HandoffCompactMixin, ResumeTokenMixin, BaseRunner):
             error = None if ok else f"agy failed (rc={rc})."
             if state.result_status and state.result_status != "SUCCESS":
                 ok = False
-                error = f"agy result status: {state.result_status}"
+                if state.result_error:
+                    error = state.result_error[:500]
+                else:
+                    error = f"agy result status: {state.result_status}"
             answer = state.answer or ""
             if not ok and not answer and state.stderr_tail:
                 answer = "\n".join(state.stderr_tail[-20:])

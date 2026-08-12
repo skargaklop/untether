@@ -40,6 +40,7 @@ class ToolResult(_Event, tag="tool_result"):
 
 class GeminiResult(_Event, tag="result"):
     status: str | None = None
+    error: str | None = None
     stats: dict[str, Any] | None = None
     timestamp: str | None = None
 

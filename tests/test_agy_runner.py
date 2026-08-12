@@ -533,6 +533,64 @@ async def test_agy_stream_result_captures_answer_usage_status_resume(
 
 
 @pytest.mark.anyio
+async def test_agy_stream_result_captures_error_on_error_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_id = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+    result = {
+        "event": "result",
+        "result": {
+            "conversation_id": real_id,
+            "status": "ERROR",
+            "error": "timeout waiting for response",
+            "response": "partial answer",
+            "duration_seconds": 5.0,
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "total_tokens": 15,
+            },
+        },
+    }
+    monkeypatch.setattr(
+        agy_runner,
+        "manage_subprocess",
+        lambda *_a, **_k: _fake_manager([json.dumps(result)]),
+    )
+
+    events = [event async for event in AgyRunner().run_impl("hello", None)]
+    completed = events[-1]
+    assert isinstance(completed, CompletedEvent)
+    assert completed.ok is False
+    assert completed.error == "timeout waiting for response"
+    assert completed.answer == "partial answer"
+
+
+@pytest.mark.anyio
+async def test_agy_stream_error_status_without_error_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = {
+        "event": "result",
+        "result": {
+            "status": "ERROR",
+            "response": "",
+        },
+    }
+    monkeypatch.setattr(
+        agy_runner,
+        "manage_subprocess",
+        lambda *_a, **_k: _fake_manager([json.dumps(result)]),
+    )
+
+    events = [event async for event in AgyRunner().run_impl("hello", None)]
+    completed = events[-1]
+    assert isinstance(completed, CompletedEvent)
+    assert completed.ok is False
+    assert completed.error == "agy result status: ERROR"
+
+
+@pytest.mark.anyio
 async def test_agy_stream_ignores_malformed_unknown_non_tool(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
