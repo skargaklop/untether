@@ -109,6 +109,22 @@ _HINT_PATTERNS: list[tuple[str, str]] = [
         "The API gateway timed out (504). This is usually temporary"
         " \N{EM DASH} your session is saved. Try again shortly.",
     ),
+    (
+        "quality validation",
+        "The upstream provider rejected the response quality. This is usually"
+        " temporary \N{EM DASH} your session is saved. Try again shortly.",
+    ),
+    (
+        "streaming upstream error",
+        "The upstream streaming connection failed. This is usually temporary"
+        " \N{EM DASH} your session is saved. Try again shortly.",
+    ),
+    (
+        "serialization error",
+        "The upstream provider returned an invalid response format."
+        " This is usually temporary \N{EM DASH} your session is saved."
+        " Try again, or switch models with /config.",
+    ),
     # --- Rate limits ---
     (
         "rate limit",

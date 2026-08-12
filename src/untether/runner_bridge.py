@@ -395,6 +395,44 @@ def _format_stream_idle_retry_notice(retried_count: int) -> str:
     return notice
 
 
+# Patterns that indicate a transient upstream/provider error worth retrying.
+# Each is matched case-insensitively as a substring of the error text.
+_TRANSIENT_ERROR_PATTERNS: tuple[str, ...] = (
+    "bad gateway",
+    "bad_gateway",
+    "quality validation",
+    "streaming upstream error",
+    "serialization error",
+    "unknown variant",
+    "internal error",
+    "internal_server_error",
+    "service unavailable",
+    "gateway timeout",
+    "overloaded_error",
+    "server is overloaded",
+    "content_filter",
+    "content filter",
+    "prompt_blocked",
+    "safety_block",
+    "harm_category",
+)
+
+
+def _is_transient_upstream_error(error_text: str) -> bool:
+    """Classify an error string as a transient upstream/provider failure
+    worth an automatic retry. Returns True if any known pattern matches."""
+    lower = error_text.lower()
+    return any(pat in lower for pat in _TRANSIENT_ERROR_PATTERNS)
+
+
+def _format_transient_retry_notice(retried_count: int) -> str:
+    """Notice shown when a transient upstream error triggers auto-retry."""
+    notice = "\U0001f501 Upstream provider error — retrying automatically…"
+    if retried_count > 0:
+        notice += f" (attempt {retried_count + 1})"
+    return notice
+
+
 def _stream_idle_retry_budget_blocked(usage: dict[str, Any] | None) -> bool:
     """#572: read-only cost-budget guard for the Type-A auto-retry.
 
@@ -3280,9 +3318,6 @@ async def send_result_message(
         and replace_ref is None
     ):
         logger.debug(
-            "transport.delete_message",
-            channel_id=progress_ref.channel_id,
-            message_id=progress_ref.message_id,
             tag=delete_tag,
         )
         await cfg.transport.delete(ref=progress_ref)
@@ -3307,6 +3342,7 @@ async def handle_message(
     _auto_continued_count: int = 0,
     _empty_resent_count: int = 0,
     _stream_idle_retried_count: int = 0,
+    _transient_retried_count: int = 0,
 ) -> RunOutcome:
     logger.info(
         "handle.incoming",
@@ -4279,6 +4315,7 @@ async def handle_message(
             _auto_continued_count=_auto_continued_count,
             _empty_resent_count=_empty_resent_count + 1,
             _stream_idle_retried_count=_stream_idle_retried_count,
+            _transient_retried_count=_transient_retried_count,
         )
     # --- End auto-resend ---
 
@@ -4432,6 +4469,7 @@ async def handle_message(
             _auto_continued_count=_auto_continued_count + 1,
             _empty_resent_count=_empty_resent_count,
             _stream_idle_retried_count=_stream_idle_retried_count,
+            _transient_retried_count=_transient_retried_count,
         )
     # --- End auto-continue ---
 
@@ -4511,8 +4549,76 @@ async def handle_message(
             _auto_continued_count=_auto_continued_count,
             _empty_resent_count=_empty_resent_count,
             _stream_idle_retried_count=_stream_idle_retried_count + 1,
+            _transient_retried_count=_transient_retried_count,
         )
     # --- End #572 stream-idle auto-retry ---
+    # --- Transient upstream error auto-retry ---
+    # When the run fails with a transient upstream/provider error (502 bad
+    # gateway, serialization errors, quality-validation failures, content
+    # filter blocks, streaming upstream errors), auto-resume the session
+    # instead of surfacing a terminal error. These are provider-side failures
+    # where the session is still valid and retrying usually succeeds on the
+    # next attempt. The retry re-enters handle_message as a normal resumed
+    # run — all guards (quarantine, RAM, budget) apply.
+    _te_resume = completed.resume or outcome.resume or resume_token
+    _te_rc = edits.stream.proc_returncode if edits.stream else None
+    if (
+        run_ok is False
+        and not outcome.cancelled
+        and not final_delivery["sent"]
+        and _te_resume is not None
+        and completed.error
+        and _is_transient_upstream_error(str(completed.error))
+        and not _is_signal_death(_te_rc)
+        and ac_settings.transient_error_retry
+        and _transient_retried_count < ac_settings.transient_error_max_retries
+        and not _stream_idle_retry_budget_blocked(completed.usage)
+    ):
+        logger.warning(
+            "session.transient_retry",
+            session_id=_te_resume.value,
+            engine=runner.engine,
+            error=str(completed.error)[:200],
+            attempt=_transient_retried_count + 1,
+            max_retries=ac_settings.transient_error_max_retries,
+            proc_returncode=_te_rc,
+        )
+        notice = _format_transient_retry_notice(_transient_retried_count)
+        notice_msg = RenderedMessage(text=notice, extra={})
+        await cfg.transport.send(
+            channel_id=incoming.channel_id,
+            message=notice_msg,
+            options=SendOptions(
+                reply_to=user_ref,
+                notify=True,
+                thread_id=incoming.thread_id,
+            ),
+        )
+        return await handle_message(
+            cfg,
+            runner=runner,
+            incoming=IncomingMessage(
+                channel_id=incoming.channel_id,
+                message_id=incoming.message_id,
+                text="continue",
+                reply_to=incoming.reply_to,
+                thread_id=incoming.thread_id,
+            ),
+            resume_token=_te_resume,
+            context=context,
+            context_line=context_line,
+            strip_resume_line=strip_resume_line,
+            running_tasks=running_tasks,
+            on_thread_known=on_thread_known,
+            on_resume_failed=on_resume_failed,
+            clock=clock,
+            quarantine_store=_qstore,
+            _auto_continued_count=_auto_continued_count,
+            _empty_resent_count=_empty_resent_count,
+            _stream_idle_retried_count=_stream_idle_retried_count,
+            _transient_retried_count=_transient_retried_count + 1,
+        )
+    # --- End transient upstream error auto-retry ---
 
     # #591: deliver the final answer unless the early path already did.
     if not final_delivery["sent"]:

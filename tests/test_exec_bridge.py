@@ -8707,3 +8707,299 @@ async def _run_bridge(result, runner, edits, task):
             on_thread_known=None,
         )
     )
+
+
+# ===========================================================================
+# Transient upstream error auto-retry
+# ===========================================================================
+
+
+class TestIsTransientUpstreamError:
+    """Unit tests for the _is_transient_upstream_error classifier."""
+
+    @staticmethod
+    def _call(error_text: str) -> bool:
+        from untether.runner_bridge import _is_transient_upstream_error
+
+        return _is_transient_upstream_error(error_text)
+
+    def test_bad_gateway(self):
+        assert self._call("502: bad_gateway") is True
+
+    def test_quality_validation(self):
+        assert self._call("Upstream response failed quality validation") is True
+
+    def test_streaming_upstream_error(self):
+        assert self._call("streaming upstream error") is True
+
+    def test_serialization_error(self):
+        assert (
+            self._call(
+                "serialization error: unknown variant `other`, "
+                "expected one of `stop`, `length`, `tool_calls`"
+            )
+            is True
+        )
+
+    def test_content_filter(self):
+        assert self._call("content_filter blocked the request") is True
+
+    def test_safety_block(self):
+        assert self._call("safety_block: prompt blocked") is True
+
+    def test_overloaded(self):
+        assert self._call("overloaded_error from Anthropic") is True
+
+    def test_non_transient_error(self):
+        assert self._call("file not found: config.toml") is False
+
+    def test_auth_error_not_transient(self):
+        assert self._call("authentication_error: invalid key") is False
+
+    def test_empty_string(self):
+        assert self._call("") is False
+
+
+def test_transient_retry_notice_first_attempt() -> None:
+    from untether.runner_bridge import _format_transient_retry_notice
+
+    text = _format_transient_retry_notice(0)
+    assert text.startswith("\U0001f501 ")
+    assert "retrying" in text.lower()
+    assert "attempt" not in text
+
+
+def test_transient_retry_notice_repeat_attempt() -> None:
+    from untether.runner_bridge import _format_transient_retry_notice
+
+    text = _format_transient_retry_notice(1)
+    assert text.startswith("\U0001f501 ")
+    assert "(attempt 2)" in text
+
+
+def test_transient_error_settings_defaults() -> None:
+    from untether.settings import AutoContinueSettings
+
+    s = AutoContinueSettings()
+    assert s.transient_error_retry is True
+    assert s.transient_error_max_retries == 1
+
+
+def test_transient_error_settings_bounds() -> None:
+    from pydantic import ValidationError
+
+    from untether.settings import AutoContinueSettings
+
+    with pytest.raises(ValidationError):
+        AutoContinueSettings(transient_error_max_retries=5)
+    with pytest.raises(ValidationError):
+        AutoContinueSettings(transient_error_max_retries=-1)
+
+
+# Transient upstream error auto-retry — integration tests
+# ===========================================================================
+
+
+class _StatefulRunner(MockRunner):
+    """MockRunner that returns different results on each call.
+    Pass a list of (ok, answer, error) tuples; each run() consumes one."""
+
+    def __init__(self, results, *, engine, resume_value):
+        super().__init__(engine=engine, resume_value=resume_value)
+        self.calls: list[tuple[str, ResumeToken | None]] = []
+        self._results = list(results)
+        self._idx = 0
+
+    async def run(self, prompt, resume):
+        from untether.model import StartedEvent
+        from untether.runners.mock import _resume_token
+
+        self.calls.append((prompt, resume))
+        ok, answer, error = self._results[min(self._idx, len(self._results) - 1)]
+        self._idx += 1
+        token_value = resume.value if resume else self._resume_value
+        token = _resume_token(self.engine, token_value)
+        yield StartedEvent(engine=self.engine, resume=token, title=self.title)
+        await anyio.lowlevel.checkpoint()  # ty: ignore[unresolved-attribute]
+        yield CompletedEvent(
+            engine=self.engine,
+            resume=token,
+            ok=ok,
+            answer=answer,
+            error=error if not ok else None,
+            usage={"num_turns": 1},
+        )
+
+
+@pytest.mark.anyio
+async def test_transient_retry_succeeds_on_second_attempt() -> None:
+    """A transient upstream error on the first call triggers an auto-retry
+    that succeeds on the second call."""
+    transport = FakeTransport()
+    runner = _StatefulRunner(
+        [(False, "", "502: bad_gateway"), (True, "recovered", "")],
+        engine=CODEX_ENGINE,
+        resume_value="sess-502",
+    )
+    cfg = ExecBridgeConfig(
+        transport=transport, presenter=MarkdownPresenter(), final_notify=True
+    )
+    resume = ResumeToken(engine=CODEX_ENGINE, value="sess-502")
+
+    await handle_message(
+        cfg,
+        runner=runner,
+        incoming=IncomingMessage(channel_id=123, message_id=10, text="hi"),
+        resume_token=resume,
+    )
+    all_text = " ".join(
+        c["message"].text for c in transport.send_calls + transport.edit_calls
+    )
+    assert "recovered" in all_text
+    assert len(runner.calls) == 2
+
+
+@pytest.mark.anyio
+async def test_transient_retry_serialization_error() -> None:
+    """The serialization error from the issue triggers retry on grok."""
+    transport = FakeTransport()
+    runner = _StatefulRunner(
+        [
+            (False, "", "serialization error: unknown variant `other`"),
+            (True, "ok after retry", ""),
+        ],
+        engine="grok",
+        resume_value="sess-serial",
+    )
+    cfg = ExecBridgeConfig(
+        transport=transport, presenter=MarkdownPresenter(), final_notify=True
+    )
+    resume = ResumeToken(engine="grok", value="sess-serial")
+
+    await handle_message(
+        cfg,
+        runner=runner,
+        incoming=IncomingMessage(channel_id=123, message_id=10, text="hi"),
+        resume_token=resume,
+    )
+    all_text = " ".join(
+        c["message"].text for c in transport.send_calls + transport.edit_calls
+    )
+    assert "ok after retry" in all_text
+    assert len(runner.calls) == 2
+
+
+@pytest.mark.anyio
+async def test_transient_retry_content_filter() -> None:
+    """Content filter blocks trigger retry on any engine (pi here)."""
+    transport = FakeTransport()
+    runner = _StatefulRunner(
+        [
+            (False, "", "content_filter: Request blocked by safety filter"),
+            (True, "ok on retry", ""),
+        ],
+        engine="pi",
+        resume_value="sess-cf",
+    )
+    cfg = ExecBridgeConfig(
+        transport=transport, presenter=MarkdownPresenter(), final_notify=True
+    )
+    resume = ResumeToken(engine="pi", value="sess-cf")
+
+    await handle_message(
+        cfg,
+        runner=runner,
+        incoming=IncomingMessage(channel_id=123, message_id=10, text="hi"),
+        resume_token=resume,
+    )
+    all_text = " ".join(
+        c["message"].text for c in transport.send_calls + transport.edit_calls
+    )
+    assert "ok on retry" in all_text
+    assert len(runner.calls) == 2
+
+
+@pytest.mark.anyio
+async def test_transient_retry_exhausted_shows_error() -> None:
+    """When the retry also fails, the error is surfaced to the user."""
+    transport = FakeTransport()
+    runner = _StatefulRunner(
+        [(False, "", "502: bad_gateway"), (False, "", "502: bad_gateway")],
+        engine=CODEX_ENGINE,
+        resume_value="sess-exhaust",
+    )
+    cfg = ExecBridgeConfig(
+        transport=transport, presenter=MarkdownPresenter(), final_notify=True
+    )
+    resume = ResumeToken(engine=CODEX_ENGINE, value="sess-exhaust")
+
+    await handle_message(
+        cfg,
+        runner=runner,
+        incoming=IncomingMessage(channel_id=123, message_id=10, text="hi"),
+        resume_token=resume,
+    )
+    assert len(runner.calls) == 2
+    all_text = " ".join(
+        c["message"].text for c in transport.send_calls + transport.edit_calls
+    )
+    assert "bad_gateway" in all_text.lower() or "bad gateway" in all_text.lower()
+
+
+@pytest.mark.anyio
+async def test_transient_retry_disabled(monkeypatch) -> None:
+    """When transient_error_retry is off, no retry happens."""
+    from untether.settings import AutoContinueSettings
+
+    monkeypatch.setattr(
+        "untether.runner_bridge._load_auto_continue_settings",
+        lambda: AutoContinueSettings(transient_error_retry=False),
+    )
+    transport = FakeTransport()
+    runner = _StatefulRunner(
+        [(False, "", "502: bad_gateway"), (True, "should not reach", "")],
+        engine=CODEX_ENGINE,
+        resume_value="sess-disabled",
+    )
+    cfg = ExecBridgeConfig(
+        transport=transport, presenter=MarkdownPresenter(), final_notify=True
+    )
+    resume = ResumeToken(engine=CODEX_ENGINE, value="sess-disabled")
+
+    await handle_message(
+        cfg,
+        runner=runner,
+        incoming=IncomingMessage(channel_id=123, message_id=10, text="hi"),
+        resume_token=resume,
+    )
+    assert len(runner.calls) == 1
+    all_text = " ".join(
+        c["message"].text for c in transport.send_calls + transport.edit_calls
+    )
+    assert "bad_gateway" in all_text.lower() or "bad gateway" in all_text.lower()
+
+
+@pytest.mark.anyio
+async def test_transient_retry_skips_non_transient_errors() -> None:
+    """A non-transient error (e.g. auth error) does not trigger retry."""
+    transport = FakeTransport()
+    runner = _StatefulRunner(
+        [
+            (False, "", "authentication_error: invalid key"),
+            (True, "should not reach", ""),
+        ],
+        engine=CODEX_ENGINE,
+        resume_value="sess-auth",
+    )
+    cfg = ExecBridgeConfig(
+        transport=transport, presenter=MarkdownPresenter(), final_notify=True
+    )
+    resume = ResumeToken(engine=CODEX_ENGINE, value="sess-auth")
+
+    await handle_message(
+        cfg,
+        runner=runner,
+        incoming=IncomingMessage(channel_id=123, message_id=10, text="hi"),
+        resume_token=resume,
+    )
+    assert len(runner.calls) == 1

@@ -443,6 +443,13 @@ class AutoContinueSettings(BaseModel):
     # resume — quarantine them so resuming on the next message spins up a new
     # session rather than re-entering the poisoned state.
     quarantine_on_forced_teardown: bool = True
+    # Auto-retry on transient upstream errors (502 bad gateway, serialization
+    # errors, quality-validation failures, streaming upstream errors, content
+    # filter blocks). These are provider-side failures where the session is
+    # still valid and retrying usually succeeds. Default ON with 1 retry —
+    # enough to ride out single-flake failures without a retry storm.
+    transient_error_retry: bool = True
+    transient_error_max_retries: int = Field(default=1, ge=0, le=3)
     # #633 (W4): never resume a session whose previous subprocess is still
     # alive. rc7's quarantine-and-fresh recovers AFTER a session is poisoned;
     # this prevents the poisoning. Before spawning a `--resume`, wait (bounded)
