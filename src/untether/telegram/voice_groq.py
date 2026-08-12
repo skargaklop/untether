@@ -131,7 +131,9 @@ class GroqVoiceTranscriber:
             language=language or "",
         )
         payload["file"] = MultipartFile("audio.ogg", audio_bytes, "audio/ogg")
-        data = await anyio.to_thread.run_sync(self._post, payload)
+        data = await anyio.to_thread.run_sync(  # ty: ignore[unresolved-attribute]
+            self._post, payload
+        )
         if not isinstance(data, dict):
             raise GroqTranscriptionError("Groq returned a malformed response")
         text = data.get("text")
@@ -153,7 +155,11 @@ class GroqVoiceTranscriber:
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_s) as response:
+            # Endpoint is a fixed HTTPS constant; request URL is never
+            # user-controlled, so there is no SSRF surface here (B310).
+            with urllib.request.urlopen(  # nosec B310
+                request, timeout=self.timeout_s
+            ) as response:
                 body = response.read().decode("utf-8", errors="replace")
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")

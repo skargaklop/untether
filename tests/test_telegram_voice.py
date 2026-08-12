@@ -634,6 +634,8 @@ async def test_groq_transcriber_uses_fixed_endpoint_and_model(monkeypatch) -> No
 
 @pytest.mark.anyio
 async def test_avt_transcriber_contract(monkeypatch) -> None:
+    from pathlib import Path
+
     from untether.telegram.voice import AvtVoiceTranscriber
 
     seen = {}
@@ -662,15 +664,197 @@ async def test_avt_transcriber_contract(monkeypatch) -> None:
 
     async def fake_open_process(argv, **kwargs):
         seen["argv"] = argv
+        seen["file_path"] = argv[4]
+        seen["file_bytes"] = Path(argv[4]).read_bytes()
         return _Process()
 
     monkeypatch.setattr("untether.telegram.voice.anyio.open_process", fake_open_process)
     transcriber = AvtVoiceTranscriber(
         command="avt.exe", backend="whisper", model="base", timeout_s=1
     )
-    assert await transcriber.transcribe(model="ignored", audio_bytes=b"ogg") == "hello"
+    assert (
+        await transcriber.transcribe(model="ignored", audio_bytes=b"ogg-bytes")
+        == "hello"
+    )
     assert seen["argv"][0:4] == ["avt.exe", "--quiet", "transcribe", "--file"]
+    assert seen["file_path"].endswith(".ogg")
+    assert seen["file_bytes"] == b"ogg-bytes"
     assert seen["argv"][5:9] == ["--provider", "local", "--local-backend", "whisper"]
+    assert seen["argv"][9:11] == ["--local-model", "base"]
+
+
+@pytest.mark.anyio
+async def test_avt_transcriber_nonzero_exit_raises(monkeypatch) -> None:
+    """A non-zero AVT exit is surfaced as a bounded, safe RuntimeError."""
+    from untether.telegram.voice import AvtVoiceTranscriber
+
+    class _Stream:
+        def __init__(self, chunk: bytes) -> None:
+            self._chunk = chunk
+
+        async def receive(self, max_bytes: int) -> bytes:
+            chunk, self._chunk = self._chunk[:max_bytes], b""
+            return chunk
+
+    class _Process:
+        returncode = None
+        stdout = _Stream(b"")
+        stderr = _Stream(b"boom")
+
+        async def wait(self):
+            self.returncode = 1
+
+        def terminate(self):
+            self.returncode = 1
+
+        def kill(self):
+            self.returncode = 1
+
+    async def fake_open_process(argv, **kwargs):
+        return _Process()
+
+    monkeypatch.setattr("untether.telegram.voice.anyio.open_process", fake_open_process)
+    transcriber = AvtVoiceTranscriber(
+        command="avt.exe", backend="whisper", model="base", timeout_s=1
+    )
+    with pytest.raises(RuntimeError, match="local transcription failed"):
+        await transcriber.transcribe(model="ignored", audio_bytes=b"ogg")
+
+
+@pytest.mark.anyio
+async def test_avt_transcriber_timeout_terminates_process(monkeypatch) -> None:
+    """A bounded timeout is enforced and the hung process is terminated."""
+    import anyio
+
+    from untether.telegram.voice import AvtVoiceTranscriber
+
+    terminated: list[bool] = []
+
+    class _Stream:
+        async def receive(self, max_bytes: int) -> bytes:
+            return b""
+
+    class _Process:
+        returncode = None
+        stdout = _Stream()
+        stderr = _Stream()
+
+        async def wait(self):
+            while self.returncode is None:
+                await anyio.sleep(0.001)
+
+        def terminate(self):
+            terminated.append(True)
+            self.returncode = 1
+
+        def kill(self):
+            terminated.append(False)
+            self.returncode = 1
+
+    async def fake_open_process(argv, **kwargs):
+        return _Process()
+
+    monkeypatch.setattr("untether.telegram.voice.anyio.open_process", fake_open_process)
+    transcriber = AvtVoiceTranscriber(
+        command="avt.exe", backend="whisper", model="base", timeout_s=0.05
+    )
+    with pytest.raises(TimeoutError):
+        await transcriber.transcribe(model="ignored", audio_bytes=b"ogg")
+    assert terminated
+
+
+@pytest.mark.anyio
+async def test_avt_transcriber_invalid_json_raises(monkeypatch) -> None:
+    """Non-JSON/empty AVT output is rejected rather than returned as a transcript."""
+    from untether.telegram.voice import AvtVoiceTranscriber
+
+    class _Stream:
+        def __init__(self, chunk: bytes) -> None:
+            self._chunk = chunk
+
+        async def receive(self, max_bytes: int) -> bytes:
+            chunk, self._chunk = self._chunk[:max_bytes], b""
+            return chunk
+
+    class _Process:
+        returncode = None
+        stdout = _Stream(b"not json")
+        stderr = _Stream(b"")
+
+        async def wait(self):
+            self.returncode = 0
+
+        def terminate(self):
+            self.returncode = 1
+
+        def kill(self):
+            self.returncode = 1
+
+    async def fake_open_process(argv, **kwargs):
+        return _Process()
+
+    monkeypatch.setattr("untether.telegram.voice.anyio.open_process", fake_open_process)
+    transcriber = AvtVoiceTranscriber(
+        command="avt.exe", backend="whisper", model="base", timeout_s=1
+    )
+    with pytest.raises(ValueError, match="invalid output"):
+        await transcriber.transcribe(model="ignored", audio_bytes=b"ogg")
+
+
+@pytest.mark.anyio
+async def test_chain_avt_failure_falls_back_to_groq(monkeypatch) -> None:
+    """The configured AvtVoiceTranscriber path fails and the chain falls back to
+    Groq without re-downloading the audio."""
+    from untether.telegram.voice import transcribe_voice
+
+    tried: list[str] = []
+
+    class _Stream:
+        def __init__(self, chunk: bytes) -> None:
+            self._chunk = chunk
+
+        async def receive(self, max_bytes: int) -> bytes:
+            chunk, self._chunk = self._chunk[:max_bytes], b""
+            return chunk
+
+    class _Process:
+        returncode = None
+        stdout = _Stream(b"")
+        stderr = _Stream(b"avt boom")
+
+        async def wait(self):
+            self.returncode = 1
+
+        def terminate(self):
+            self.returncode = 1
+
+        def kill(self):
+            self.returncode = 1
+
+    async def fake_open_process(argv, **kwargs):
+        return _Process()
+
+    class _FakeGroq:
+        def __init__(self, **kwargs):
+            tried.append("groq")
+
+        async def transcribe(self, **kwargs):
+            return "groq transcript"
+
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    monkeypatch.setattr("untether.telegram.voice.anyio.open_process", fake_open_process)
+    monkeypatch.setattr("untether.telegram.voice_groq.GroqVoiceTranscriber", _FakeGroq)
+    bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"audio")
+    result = await transcribe_voice(
+        bot=bot,
+        msg=_voice_message(file_size=5),
+        enabled=True,
+        model="whisper-1",
+        providers=("avt", "groq"),
+        reply=lambda **_: _done(),
+    )
+    assert result == "groq transcript"
+    assert tried == ["groq"]
 
 
 @pytest.mark.anyio
@@ -699,7 +883,6 @@ async def test_transcribe_voice_selects_fixed_groq_boundary(monkeypatch) -> None
     assert DEFAULT_GROQ_MODEL == "whisper-large-v3-turbo"
 
 
-
 @pytest.mark.anyio
 async def test_chain_default_order_tries_each_provider(monkeypatch) -> None:
     """Default providers list tries each provider in order until one succeeds."""
@@ -715,8 +898,11 @@ async def test_chain_default_order_tries_each_provider(monkeypatch) -> None:
     monkeypatch.setattr("untether.telegram.voice._try_provider", fake_try)
     bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"audio")
     result = await transcribe_voice(
-        bot=bot, msg=_voice_message(file_size=5), enabled=True,
-        model="whisper-1", reply=lambda **_: _done(),
+        bot=bot,
+        msg=_voice_message(file_size=5),
+        enabled=True,
+        model="whisper-1",
+        reply=lambda **_: _done(),
     )
     assert result == "transcribed by local"
     assert tried == ["avt", "groq", "local"]
@@ -733,8 +919,11 @@ async def test_chain_short_circuit_on_first_success(monkeypatch) -> None:
     monkeypatch.setattr("untether.telegram.voice._try_provider", fake_try)
     bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"audio")
     result = await transcribe_voice(
-        bot=bot, msg=_voice_message(file_size=5), enabled=True,
-        model="whisper-1", reply=lambda **_: _done(),
+        bot=bot,
+        msg=_voice_message(file_size=5),
+        enabled=True,
+        model="whisper-1",
+        reply=lambda **_: _done(),
     )
     assert result == "first wins"
     assert tried == ["avt"]
@@ -755,8 +944,11 @@ async def test_chain_exhaustion_single_reply(monkeypatch) -> None:
     monkeypatch.setattr("untether.telegram.voice._try_provider", fake_try)
     bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"audio")
     result = await transcribe_voice(
-        bot=bot, msg=_voice_message(file_size=5), enabled=True,
-        model="whisper-1", reply=reply,
+        bot=bot,
+        msg=_voice_message(file_size=5),
+        enabled=True,
+        model="whisper-1",
+        reply=reply,
     )
     assert result is None
     assert len(replies) == 1
@@ -775,8 +967,11 @@ async def test_chain_arbitrary_order(monkeypatch) -> None:
     monkeypatch.setattr("untether.telegram.voice._try_provider", fake_try)
     bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"audio")
     result = await transcribe_voice(
-        bot=bot, msg=_voice_message(file_size=5), enabled=True,
-        model="whisper-1", providers=("openai", "groq"),
+        bot=bot,
+        msg=_voice_message(file_size=5),
+        enabled=True,
+        model="whisper-1",
+        providers=("openai", "groq"),
         reply=lambda **_: _done(),
     )
     assert result == "ok"
@@ -794,8 +989,11 @@ async def test_chain_language_propagation(monkeypatch) -> None:
     monkeypatch.setattr("untether.telegram.voice._try_provider", fake_try)
     bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"audio")
     await transcribe_voice(
-        bot=bot, msg=_voice_message(file_size=5), enabled=True,
-        model="whisper-1", language="ja",
+        bot=bot,
+        msg=_voice_message(file_size=5),
+        enabled=True,
+        model="whisper-1",
+        language="ja",
         reply=lambda **_: _done(),
     )
     assert received_languages == ["ja"]
@@ -818,8 +1016,11 @@ async def test_chain_download_once(monkeypatch) -> None:
 
     bot = _CountingBot(file_info=File(file_path="voice.ogg"), audio=b"audio")
     await transcribe_voice(
-        bot=bot, msg=_voice_message(file_size=5), enabled=True,
-        model="whisper-1", reply=lambda **_: _done(),
+        bot=bot,
+        msg=_voice_message(file_size=5),
+        enabled=True,
+        model="whisper-1",
+        reply=lambda **_: _done(),
     )
     assert download_count == 1
 
@@ -838,8 +1039,11 @@ async def test_chain_blank_transcript_treated_as_failure(monkeypatch) -> None:
     monkeypatch.setattr("untether.telegram.voice._try_provider", fake_try)
     bot = _Bot(file_info=File(file_path="voice.ogg"), audio=b"audio")
     result = await transcribe_voice(
-        bot=bot, msg=_voice_message(file_size=5), enabled=True,
-        model="whisper-1", reply=lambda **_: _done(),
+        bot=bot,
+        msg=_voice_message(file_size=5),
+        enabled=True,
+        model="whisper-1",
+        reply=lambda **_: _done(),
     )
     assert result == "real text"
     assert "openai" in tried
@@ -852,11 +1056,18 @@ async def test_try_provider_groq_missing_key_raises(monkeypatch) -> None:
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="Groq API key not configured"):
         await _try_provider(
-            provider_id="groq", audio_bytes=b"audio", model="whisper-1",
-            language=None, base_url=None, api_key=None,
-            url_allowlist=(), groq_api_key=None,
-            local_command=None, local_backend="whisper",
-            local_model="base", timeout_s=10,
+            provider_id="groq",
+            audio_bytes=b"audio",
+            model="whisper-1",
+            language=None,
+            base_url=None,
+            api_key=None,
+            url_allowlist=(),
+            groq_api_key=None,
+            local_command=None,
+            local_backend="whisper",
+            local_model="base",
+            timeout_s=10,
         )
 
 
@@ -866,19 +1077,26 @@ async def test_try_provider_openai_ssrf_blocked(monkeypatch) -> None:
 
     with pytest.raises(RuntimeError, match="not permitted"):
         await _try_provider(
-            provider_id="openai", audio_bytes=b"audio", model="whisper-1",
-            language=None, base_url="http://127.0.0.1:8080/v1", api_key="key",
-            url_allowlist=(), groq_api_key=None,
-            local_command=None, local_backend="whisper",
-            local_model="base", timeout_s=10,
+            provider_id="openai",
+            audio_bytes=b"audio",
+            model="whisper-1",
+            language=None,
+            base_url="http://127.0.0.1:8080/v1",
+            api_key="key",
+            url_allowlist=(),
+            groq_api_key=None,
+            local_command=None,
+            local_backend="whisper",
+            local_model="base",
+            timeout_s=10,
         )
 
 
 @pytest.mark.anyio
 async def test_try_provider_local_dispatch(monkeypatch) -> None:
     """The local provider dispatches to get_local_transcriber."""
-    from untether.telegram.voice import _try_provider
     import untether.telegram.voice_local as vlocal
+    from untether.telegram.voice import _try_provider
 
     class _FakeLocal:
         async def transcribe(self, **kwargs):
@@ -886,13 +1104,21 @@ async def test_try_provider_local_dispatch(monkeypatch) -> None:
 
     monkeypatch.setattr(vlocal, "get_local_transcriber", lambda *a, **kw: _FakeLocal())
     result = await _try_provider(
-        provider_id="local", audio_bytes=b"audio", model="base",
-        language="en", base_url=None, api_key=None,
-        url_allowlist=(), groq_api_key=None,
-        local_command=None, local_backend="whisper",
-        local_model="base", timeout_s=10,
+        provider_id="local",
+        audio_bytes=b"audio",
+        model="base",
+        language="en",
+        base_url=None,
+        api_key=None,
+        url_allowlist=(),
+        groq_api_key=None,
+        local_command=None,
+        local_backend="whisper",
+        local_model="base",
+        timeout_s=10,
     )
     assert result == "local result"
+
 
 async def _done() -> None:
     return None

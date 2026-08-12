@@ -186,8 +186,8 @@ class TelegramBridgeConfig:
     show_resume_line: bool = True
     voice_transcription: bool = False
     voice_max_bytes: int = 10 * 1024 * 1024
-    voice_transcription_providers: list[Literal["avt", "groq", "local", "openai"]] = field(
-        default_factory=lambda: ["avt", "groq", "local", "openai"]
+    voice_transcription_providers: list[Literal["avt", "groq", "local", "openai"]] = (
+        field(default_factory=lambda: ["avt", "groq", "local", "openai"])
     )
     voice_transcription_model: str = "gpt-4o-mini-transcribe"
     voice_transcription_base_url: str | None = None

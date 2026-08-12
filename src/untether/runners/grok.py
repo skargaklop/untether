@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
@@ -58,6 +59,13 @@ _RESUME_RE = re.compile(
 _RESUME_LINE_RE = re.compile(
     r"(?im)^\s*`?grok\s+(?:resume|--resume|-r)\s+(?P<token>[^`\s]+)`?\s*$"
 )
+
+# Display-only CLI-default model discovery (never fed back as ``-m``).
+# Bounded subprocess probe of ``grok models`` cached per executable so a run
+# session probes at most once per CLI binary.
+_DEFAULT_MODEL_PROBE_TIMEOUT = 3.0
+# Cache of executable -> probed default model (None = probe failed / unknown).
+_DEFAULT_MODEL_CACHE: dict[str, str | None] = {}
 
 
 @dataclass(slots=True)
@@ -413,6 +421,64 @@ def translate_grok_event(
             return out
 
 
+def _parse_grok_models_default(output: str) -> str | None:
+    """Extract the CLI's default model from ``grok models`` output.
+
+    Recognized shapes (anything else is schema drift -> None so the caller
+    omits the model rather than guessing):
+
+    * ``Default model: glm-5.2-1m-combined``
+    * ``* glm-5.2-1m-combined (default)`` (asterisk-marked default row)
+    """
+    for line in output.splitlines():
+        match = re.match(r"Default model:\s*(\S+)", line.strip(), flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    for line in output.splitlines():
+        match = re.match(r"^\*\s+(\S+)(?:\s+\(.*\))?$", line.strip())
+        if match:
+            return match.group(1)
+    return None
+
+
+def _run_grok_models(cmd: str, *, timeout: float) -> str | None:
+    """Run ``<cmd> models`` and return stdout, or None on failure.
+
+    Mirrors the bounded ``--version`` probe in ``telegram/backend.py``: the
+    executable comes from ``EngineBackend.cli_cmd`` (``"grok"``), a fixed
+    entrypoint table, so no shell and no untrusted input.
+    """
+    try:
+        result = subprocess.run(  # nosec B603
+            [cmd, "models"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout or ""
+
+
+def _probe_grok_default_model(
+    cmd: str, *, timeout: float = _DEFAULT_MODEL_PROBE_TIMEOUT
+) -> str | None:
+    """Probe the CLI's default model, cached per executable.
+
+    Returns None on missing CLI, timeout, nonzero exit, or schema drift so the
+    caller omits the model. Display-only: callers must never pass the result
+    back as a ``-m`` argument.
+    """
+    if cmd in _DEFAULT_MODEL_CACHE:
+        return _DEFAULT_MODEL_CACHE[cmd]
+    stdout = _run_grok_models(cmd, timeout=timeout)
+    model = _parse_grok_models_default(stdout) if stdout is not None else None
+    _DEFAULT_MODEL_CACHE[cmd] = model
+    return model
+
+
 @dataclass(slots=True)
 class GrokRunner(HandoffCompactMixin, ResumeTokenMixin, JsonlSubprocessRunner):
     engine: EngineId = ENGINE
@@ -576,11 +642,19 @@ class GrokRunner(HandoffCompactMixin, ResumeTokenMixin, JsonlSubprocessRunner):
         return []
 
     def selected_model(self) -> str | None:
-        """Return the explicit model selected for this invocation."""
+        """Return the resolved model for display.
+
+        Precedence: per-run override, configured ``grok.model``, then the CLI
+        default probed from ``grok models`` (cached per executable). Returns
+        None when nothing is known so the caller omits the model rather than
+        claiming a placeholder like ``auto``.
+        """
         run_options = get_run_options()
         if run_options is not None and run_options.model:
             return run_options.model
-        return self.model
+        if self.model is not None:
+            return self.model
+        return _probe_grok_default_model(self.command())
 
     def translate(
         self,
@@ -590,10 +664,10 @@ class GrokRunner(HandoffCompactMixin, ResumeTokenMixin, JsonlSubprocessRunner):
         resume: ResumeToken | None,
         found_session: ResumeToken | None,
     ) -> list[UntetherEvent]:
-        meta: dict[str, Any] = {
-            "cwd": os.getcwd(),
-            "model": self.selected_model() or "auto",
-        }
+        model = self.selected_model()
+        meta: dict[str, Any] = {"cwd": os.getcwd()}
+        if model is not None:
+            meta["model"] = model
         return translate_grok_event(
             data,
             title=self.session_title,
@@ -641,10 +715,15 @@ class GrokRunner(HandoffCompactMixin, ResumeTokenMixin, JsonlSubprocessRunner):
         message = "grok finished without an end event"
         out: list[UntetherEvent] = []
         if not state.started:
+            model = self.selected_model()
+            meta: dict[str, Any] = {"cwd": os.getcwd()}
+            if model is not None:
+                meta["model"] = model
             out.append(
                 state.factory.started(
                     resume_for_completed or state.resume,
                     title=self.session_title,
+                    meta=meta,
                 )
             )
         state.started = True

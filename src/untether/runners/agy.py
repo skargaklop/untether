@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -18,7 +19,7 @@ from ..backends import EngineBackend, EngineConfig
 from ..config import ConfigError
 from ..events import EventFactory
 from ..logging import get_logger, log_pipeline
-from ..model import CompletedEvent, EngineId, ResumeToken, UntetherEvent
+from ..model import ActionKind, CompletedEvent, EngineId, ResumeToken, UntetherEvent
 from ..runner import BaseRunner, ResumeTokenMixin, Runner
 from ..utils.paths import get_run_base_dir
 from ..utils.streams import iter_bytes_lines
@@ -30,6 +31,7 @@ from ..utils.transient_failures import (
 from ._compact_mixin import HandoffCompactMixin
 from .modes import run_modes
 from .run_options import get_run_options
+from .tool_actions import tool_kind_and_title
 
 logger = get_logger(__name__)
 
@@ -56,6 +58,33 @@ _BARE_UUID_RE = re.compile(
     r"(?i)\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b"
 )
 
+# Minimal normalization for Antigravity tool names -> canonical names understood
+# by tool_kind_and_title. Unknown tool names pass through unchanged.
+_AGY_TOOL_NAME_MAP: dict[str, str] = {
+    "edit_file": "edit",
+    "write_file": "write",
+    "write_to_file": "write",
+    "list_dir": "ls",
+    "grep_search": "grep",
+    "find_by_name": "find",
+    "invoke_subagent": "task",
+    "run_command": "bash",
+    "execute_command": "bash",
+}
+
+# Antigravity tool parameters use PascalCase keys; normalize the common ones to
+# the snake_case keys tool_kind_and_title reads.
+_AGY_PARAM_MAP: dict[str, str] = {
+    "targetfile": "file_path",
+    "filepath": "file_path",
+    "directorypath": "path",
+    "path": "path",
+    "command": "command",
+    "pattern": "pattern",
+    "query": "query",
+    "url": "url",
+}
+
 
 @dataclass(slots=True)
 class AgyStreamState:
@@ -64,6 +93,9 @@ class AgyStreamState:
     factory: EventFactory = field(default_factory=lambda: EventFactory(ENGINE))
     stderr_tail: list[str] = field(default_factory=list)
     started: bool = False
+    answer: str = ""
+    result_status: str | None = None
+    usage: dict[str, Any] | None = None
 
 
 def parse_conversation_id(text: str | None) -> str | None:
@@ -128,6 +160,7 @@ class AgyRunner(HandoffCompactMixin, ResumeTokenMixin, BaseRunner):
             note = f"(autonomous goal — work until: {goal})"
             prompt = f"{note}\n\n{body}" if body else note
         args: list[str] = [*self.extra_args]
+        args.extend(["--output-format", "stream-json"])
 
         model = self.selected_model()
         if model is not None:
@@ -178,15 +211,146 @@ class AgyRunner(HandoffCompactMixin, ResumeTokenMixin, BaseRunner):
         state.resume = ResumeToken(engine=ENGINE, value=candidate)
         state.allow_id_promotion = False
 
-    async def _collect_stdout(self, stdout: Any) -> str:
-        chunks: list[bytes] = []
-        async for line in iter_bytes_lines(stdout):
-            chunks.append(line)
-            if not line.endswith(b"\n"):
-                chunks.append(b"\n")
-        # Also try trailing incomplete read handled by iter_bytes_lines
-        raw = b"".join(chunks)
-        return raw.decode("utf-8", errors="replace").strip()
+    def _agy_tool_kind_and_title(
+        self, tool_name: str, parameters: dict[str, Any]
+    ) -> tuple[ActionKind, str]:
+        canonical = _AGY_TOOL_NAME_MAP.get(tool_name.lower(), tool_name)
+        normalized: dict[str, Any] = {}
+        for key, value in parameters.items():
+            normalized[_AGY_PARAM_MAP.get(str(key).lower(), str(key))] = value
+        return tool_kind_and_title(
+            canonical, normalized, path_keys=("file_path", "path")
+        )
+
+    @staticmethod
+    def _bound_tool_error(tool_info: Any) -> str:
+        if not isinstance(tool_info, dict):
+            return "tool failed"
+        err = tool_info.get("error")
+        if isinstance(err, dict):
+            msg = err.get("message")
+            if isinstance(msg, str) and msg.strip():
+                return msg.strip()[:500]
+        return "tool failed"
+
+    @staticmethod
+    def _build_usage(result: dict[str, Any]) -> dict[str, Any] | None:
+        usage: dict[str, Any] = {}
+        raw = result.get("usage")
+        if isinstance(raw, dict):
+            token_usage: dict[str, Any] = {}
+            for key in (
+                "input_tokens",
+                "output_tokens",
+                "thinking_tokens",
+                "cache_read_tokens",
+            ):
+                value = raw.get(key)
+                if isinstance(value, int) and value >= 0:
+                    token_usage[key] = value
+            if token_usage:
+                usage["usage"] = token_usage
+        duration = result.get("duration_seconds")
+        if isinstance(duration, (int, float)):
+            usage["duration_ms"] = round(float(duration) * 1000)
+        return usage or None
+
+    def _handle_init(
+        self, record: dict[str, Any], state: AgyStreamState
+    ) -> list[UntetherEvent]:
+        conversation_id = record.get("conversation_id")
+        if isinstance(conversation_id, str) and conversation_id:
+            self._maybe_promote(state, conversation_id)
+        return []
+
+    def _handle_step_update(
+        self, payload: Any, state: AgyStreamState
+    ) -> list[UntetherEvent]:
+        if not isinstance(payload, dict):
+            return []
+        if payload.get("step_type") != "tool":
+            return []
+        step_state = payload.get("state")
+        step_index = payload.get("step_index")
+        if not isinstance(step_index, int):
+            return []
+        tool_info = payload.get("tool_info")
+        parameters = (
+            tool_info.get("parameters") if isinstance(tool_info, dict) else None
+        )
+        tool_name = payload.get("tool_name")
+        name = str(tool_name or "tool")
+        params = parameters if isinstance(parameters, dict) else {}
+        kind, title = self._agy_tool_kind_and_title(name, params)
+        action_id = f"tool-{step_index}"
+        detail: dict[str, Any] = {"tool_name": name}
+        if params:
+            detail["input"] = params
+        if step_state == "ACTIVE":
+            return [
+                state.factory.action_started(
+                    action_id=action_id, kind=kind, title=title, detail=detail
+                )
+            ]
+        if step_state == "DONE":
+            return [
+                state.factory.action_completed(
+                    action_id=action_id, kind=kind, title=title, ok=True, detail=detail
+                )
+            ]
+        if step_state == "ERROR":
+            message = self._bound_tool_error(tool_info)
+            detail["error"] = message
+            return [
+                state.factory.action_completed(
+                    action_id=action_id,
+                    kind=kind,
+                    title=title,
+                    ok=False,
+                    detail=detail,
+                    message=message,
+                )
+            ]
+        return []
+
+    def _handle_result(
+        self, payload: Any, state: AgyStreamState
+    ) -> list[UntetherEvent]:
+        if not isinstance(payload, dict):
+            return []
+        conversation_id = payload.get("conversation_id")
+        if isinstance(conversation_id, str) and conversation_id:
+            self._maybe_promote(state, conversation_id)
+        response = payload.get("response")
+        if isinstance(response, str):
+            state.answer = response
+        status = payload.get("status")
+        if isinstance(status, str):
+            state.result_status = status
+        state.usage = self._build_usage(payload)
+        return []
+
+    def _handle_stream_text(
+        self, text: str, state: AgyStreamState
+    ) -> list[UntetherEvent]:
+        """Translate one line of agy stream-json output into Untether events."""
+        line = text.strip()
+        if not line:
+            return []
+        try:
+            record = json.loads(line)
+        except (ValueError, TypeError):
+            return []
+        if not isinstance(record, dict):
+            return []
+        kind = record.get("event")
+        if kind == "init":
+            return self._handle_init(record, state)
+        if kind == "step_update":
+            return self._handle_step_update(record.get("step_update"), state)
+        if kind == "result":
+            return self._handle_result(record.get("result"), state)
+        return []
 
     async def _drain_stderr_capture(
         self,
@@ -223,10 +387,13 @@ class AgyRunner(HandoffCompactMixin, ResumeTokenMixin, BaseRunner):
     ) -> AsyncIterator[UntetherEvent]:
         state = self.new_state(prompt, resume)
         # Emit Started early for session lock (BaseRunner acquires on StartedEvent).
+        meta: dict[str, str] = {"cwd": os.getcwd()}
+        if model := self.selected_model():
+            meta["model"] = model
         yield state.factory.started(
             state.resume,
             title=self.session_title,
-            meta={"cwd": os.getcwd(), "model": self.selected_model() or "auto"},
+            meta=meta,
         )
         state.started = True
 
@@ -262,7 +429,6 @@ class AgyRunner(HandoffCompactMixin, ResumeTokenMixin, BaseRunner):
                 pid=proc.pid,
             )
 
-            answer = ""
             async with anyio.create_task_group() as tg:
                 tg.start_soon(
                     self._drain_stderr_capture,
@@ -270,17 +436,24 @@ class AgyRunner(HandoffCompactMixin, ResumeTokenMixin, BaseRunner):
                     state,
                     str(self.engine),
                 )
-                answer = await self._collect_stdout(proc.stdout)
+                async for chunk in iter_bytes_lines(proc.stdout):
+                    text = chunk.decode("utf-8", errors="replace")
+                    for event in self._handle_stream_text(text, state):
+                        yield event
                 rc = await proc.wait()
 
             self.logger.info("subprocess.exit", pid=proc.pid, rc=rc)
 
             # Scrape id from combined stderr + stdout (resume banners).
-            combined = "\n".join(state.stderr_tail) + "\n" + answer
+            combined = "\n".join(state.stderr_tail) + "\n" + state.answer
             self._maybe_promote(state, parse_conversation_id(combined))
 
             ok = rc == 0
             error = None if ok else f"agy failed (rc={rc})."
+            if state.result_status and state.result_status != "SUCCESS":
+                ok = False
+                error = f"agy result status: {state.result_status}"
+            answer = state.answer or ""
             if not ok and not answer and state.stderr_tail:
                 answer = "\n".join(state.stderr_tail[-20:])
 
@@ -310,6 +483,7 @@ class AgyRunner(HandoffCompactMixin, ResumeTokenMixin, BaseRunner):
                 answer=answer,
                 resume=completed_resume,
                 error=error,
+                usage=state.usage,
             )
             yield completed
 

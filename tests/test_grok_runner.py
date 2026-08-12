@@ -289,12 +289,19 @@ def test_grok_error_event_preserves_answer_and_session() -> None:
     assert completed.resume == ResumeToken(engine="grok", value="replacement")
 
 
-def test_grok_stream_end_without_end_event_starts_and_fails() -> None:
+def test_grok_stream_end_without_end_event_starts_and_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "untether.runners.grok._probe_grok_default_model",
+        lambda _cmd: "grok-default",
+    )
     runner = GrokRunner(extra_args=[])
     events = runner.stream_end_events(
         resume=None, found_session=None, state=_grok_state()
     )
     assert events[0].__class__.__name__ == "StartedEvent"
+    assert events[0].meta["model"] == "grok-default"
     completed = events[-1]
     assert isinstance(completed, CompletedEvent)
     assert completed.ok is False
@@ -312,8 +319,136 @@ def test_grok_started_meta_prefers_run_option_model() -> None:
     assert events[0].meta["model"] == "grok-override"
 
 
-def test_grok_started_meta_reports_auto_when_model_is_unknown() -> None:
+def test_grok_started_meta_omits_unknown_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    # No override, no configured model, and the CLI probe yields nothing
+    # (missing CLI / timeout / schema drift): the model key must be omitted,
+    # never claimed as "auto".
+    import untether.runners.grok as grok_mod
+
+    monkeypatch.setattr(grok_mod, "_probe_grok_default_model", lambda cmd: None)
     runner = GrokRunner(extra_args=[])
     events, _ = _translate_events(runner, [b'{"type":"text","data":"hi"}'])
     assert isinstance(events[0], StartedEvent)
-    assert events[0].meta["model"] == "auto"
+    assert "model" not in events[0].meta
+
+
+# --- `grok models` default-model probe parsing ---
+
+
+def test_grok_parse_models_default_line() -> None:
+    from untether.runners.grok import _parse_grok_models_default
+
+    output = (
+        "You are logged in with grok.com.\n\n"
+        "Default model: glm-5.2-1m-combined\n\n"
+        "Available models:\n"
+        "  - grok-4.5\n"
+        "  * glm-5.2-1m-combined (default)\n"
+    )
+    assert _parse_grok_models_default(output) == "glm-5.2-1m-combined"
+
+
+def test_grok_parse_models_default_asterisk_marker() -> None:
+    from untether.runners.grok import _parse_grok_models_default
+
+    output = "Available models:\n  - grok-4.5\n  * grok-4.5 (default)\n"
+    assert _parse_grok_models_default(output) == "grok-4.5"
+
+
+def test_grok_parse_models_default_schema_drift_is_none() -> None:
+    from untether.runners.grok import _parse_grok_models_default
+
+    assert _parse_grok_models_default("") is None
+    assert (
+        _parse_grok_models_default("Available models:\n  - grok-4.5\n  - grok-3\n")
+        is None
+    )
+    assert _parse_grok_models_default("?garbage output {not a model list") is None
+
+
+# --- `grok models` default-model probe caching + failure handling ---
+
+
+def test_grok_default_model_probe_caches_per_executable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import untether.runners.grok as grok_mod
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: str, **_: object) -> str | None:
+        calls.append([cmd])
+        return "Default model: glm-1\n"
+
+    monkeypatch.setattr(grok_mod, "_run_grok_models", fake_run)
+    monkeypatch.setattr(grok_mod, "_DEFAULT_MODEL_CACHE", {})
+    probe = grok_mod._probe_grok_default_model
+    assert probe("grok") == "glm-1"
+    assert probe("grok") == "glm-1"  # cache hit: no second subprocess
+    assert probe("grok-custom") == "glm-1"
+    assert [call[0] for call in calls] == ["grok", "grok-custom"]
+
+
+def test_grok_default_model_probe_omits_on_missing_or_bad_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import untether.runners.grok as grok_mod
+
+    # None simulates a missing CLI / timeout / nonzero exit; the other two are
+    # schema-drift outputs. Each omission is cached per executable.
+    bad_outputs: list[str | None] = [
+        None,
+        "Available models:\n  - grok-4.5\n",
+        "unparseable output",
+    ]
+    for bad in bad_outputs:
+        monkeypatch.setattr(
+            grok_mod,
+            "_run_grok_models",
+            lambda cmd, bad=bad, **_: bad,
+        )
+        monkeypatch.setattr(grok_mod, "_DEFAULT_MODEL_CACHE", {})
+        assert grok_mod._probe_grok_default_model("grok") is None
+
+
+# --- precedence + stream-start metadata ---
+
+
+def test_grok_started_meta_prefers_configured_over_probed_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import untether.runners.grok as grok_mod
+
+    monkeypatch.setattr(
+        grok_mod, "_probe_grok_default_model", lambda cmd: "probed-default"
+    )
+    runner = GrokRunner(extra_args=[], model="grok-configured")
+    events, _ = _translate_events(runner, [b'{"type":"text","data":"hi"}'])
+    assert isinstance(events[0], StartedEvent)
+    assert events[0].meta["model"] == "grok-configured"
+
+
+def test_grok_started_meta_shows_probed_cli_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import untether.runners.grok as grok_mod
+
+    monkeypatch.setattr(grok_mod, "_probe_grok_default_model", lambda cmd: "glm-probed")
+    runner = GrokRunner(extra_args=[])
+    events, _ = _translate_events(runner, [b'{"type":"text","data":"hi"}'])
+    assert isinstance(events[0], StartedEvent)
+    assert events[0].meta["model"] == "glm-probed"
+
+
+def test_grok_probed_default_never_passed_as_model_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Display-only: the probed CLI default must never become a ``-m`` argument.
+    import untether.runners.grok as grok_mod
+
+    monkeypatch.setattr(
+        grok_mod, "_probe_grok_default_model", lambda cmd: "probed-default"
+    )
+    runner = GrokRunner(extra_args=[])
+    args = runner.build_args("hi", None, state=_grok_state())
+    assert "-m" not in args

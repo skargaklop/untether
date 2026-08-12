@@ -163,13 +163,15 @@ class LocalVoiceTranscriber:
                     file.write(audio_bytes)
                 audio_path = source
                 if self._backend == "parakeet" and source.suffix.lower() != ".wav":
-                    converted = await anyio.to_thread.run_sync(
+                    converted = await anyio.to_thread.run_sync(  # ty: ignore[unresolved-attribute]
                         ensure_backend_audio_file, source, self._backend
                     )
                     audio_path = converted
-                model_obj = await anyio.to_thread.run_sync(self._load_model)
+                model_obj = await anyio.to_thread.run_sync(  # ty: ignore[unresolved-attribute]
+                    self._load_model
+                )
                 if self._backend == "whisper":
-                    result = await anyio.to_thread.run_sync(
+                    result = await anyio.to_thread.run_sync(  # ty: ignore[unresolved-attribute]
                         lambda: model_obj.transcribe(
                             str(audio_path),
                             language=language or None,
@@ -193,7 +195,7 @@ class LocalVoiceTranscriber:
                         for item in segments
                         if self._extract_text(item)
                     ).strip()
-                result = await anyio.to_thread.run_sync(
+                result = await anyio.to_thread.run_sync(  # ty: ignore[unresolved-attribute]
                     lambda: model_obj.recognize(str(audio_path))
                 )
                 return (
@@ -322,7 +324,9 @@ def ensure_backend_audio_file(source: Path, backend: str) -> Path:
         return source
     target = source.with_name(f"{source.stem}_parakeet.wav")
     ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
-    subprocess.run(
+    # No shell, fixed argv (ffmpeg resolves via shutil.which or a fixed
+    # literal); the only interpolated values are trusted local file paths.
+    subprocess.run(  # nosec B603 B607
         [ffmpeg, "-y", "-i", str(source), "-ac", "1", "-ar", "16000", str(target)],
         check=True,
         capture_output=True,
