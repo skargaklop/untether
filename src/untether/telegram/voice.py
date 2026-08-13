@@ -76,7 +76,7 @@ class AvtVoiceTranscriber:
     async def transcribe(
         self, *, model: str, audio_bytes: bytes, language: str | None = None
     ) -> str:
-        _ = model, language
+        _ = model
         path: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as file:
@@ -93,6 +93,8 @@ class AvtVoiceTranscriber:
                 "--local-backend",
                 self._backend,
             ]
+            if language:
+                argv.extend(["--language", language])
             if self._backend == "whisper":
                 argv.extend(["--local-model", self._model])
             proc = await anyio.open_process(
