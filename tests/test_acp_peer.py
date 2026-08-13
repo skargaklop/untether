@@ -31,6 +31,40 @@ print(json.dumps({'jsonrpc':'2.0','id':req['id'],'result':{'ok':True}}), flush=T
 
 
 @pytest.mark.anyio
+async def test_unknown_reverse_method_returns_json_rpc_error() -> None:
+    code = """
+import json, sys
+request = json.loads(sys.stdin.readline())
+print(json.dumps({'jsonrpc':'2.0','id':'reverse','method':'client/unknown','params':{}}), flush=True)
+reply = json.loads(sys.stdin.readline())
+assert reply['error']['code'] == -32601
+print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{}}), flush=True)
+"""
+    async with AcpPeer(sys.executable, fixture(code)) as peer:
+        assert await peer.request("hello", {}) == {}
+
+
+@pytest.mark.anyio
+async def test_async_reverse_handler_does_not_block_reader() -> None:
+    code = """
+import json, sys, time
+request = json.loads(sys.stdin.readline())
+print(json.dumps({'jsonrpc':'2.0','id':'reverse','method':'client/wait','params':{}}), flush=True)
+time.sleep(0.05)
+print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'live':True}}), flush=True)
+reverse = json.loads(sys.stdin.readline())
+assert reverse['result']['done'] is True
+"""
+    async with AcpPeer(sys.executable, fixture(code)) as peer:
+        async def handler(_params):
+            await anyio.sleep(0.2)
+            return {"done": True}
+        import anyio
+        peer.register_handler("client/wait", handler)
+        assert await peer.request("hello", {}) == {"live": True}
+
+
+@pytest.mark.anyio
 async def test_peer_eof_and_malformed_input_are_protocol_errors() -> None:
     for output, match in [("", "EOF"), ("not json\n", "malformed")]:
         code = f"import sys; sys.stdout.write({output!r}); sys.stdout.flush()"

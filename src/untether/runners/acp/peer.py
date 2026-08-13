@@ -53,6 +53,7 @@ class AcpPeer:
     _reader_task: asyncio.Task[None] | None = field(
         default=None, init=False, repr=False
     )
+    _reverse_tasks: set[asyncio.Task[None]] = field(default_factory=set, init=False, repr=False)
     closed: bool = field(default=False, init=False)
     _failure: BaseException | None = field(default=None, init=False, repr=False)
     _next_id: int = field(default=1, init=False, repr=False)
@@ -168,14 +169,20 @@ class AcpPeer:
                 await self._notify_send.send(message)
                 return
             handler = self._handlers.get(message["method"])
-            result = (
-                handler(message.get("params", {}))
-                if handler
-                else {"error": "method not found"}
+            if handler is None:
+                await self._write(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": message["id"],
+                        "error": {"code": -32601, "message": "Method not found"},
+                    }
+                )
+                return
+            task = asyncio.create_task(
+                self._handle_reverse(message["id"], handler, message.get("params", {}))
             )
-            if inspect.isawaitable(result):
-                result = await result
-            await self._write({"jsonrpc": "2.0", "id": message["id"], "result": result})
+            self._reverse_tasks.add(task)
+            task.add_done_callback(self._reverse_tasks.discard)
             return
         request_id = message.get("id")
         if request_id not in self._pending or request_id in self._results:
@@ -187,6 +194,13 @@ class AcpPeer:
             raise AcpProtocolError("ACP response result is not an object")
         self._results[request_id] = result
         self._pending[request_id].set()
+
+    async def _handle_reverse(self, request_id: Any, handler: Handler, params: Json) -> None:
+        result = handler(params)
+        if inspect.isawaitable(result):
+            result = await result
+        if not self.closed:
+            await self._write({"jsonrpc": "2.0", "id": request_id, "result": result})
 
     async def close(self) -> None:
         if self.closed:
