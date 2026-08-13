@@ -32,11 +32,10 @@ class RunnerEntry:
     runner: Runner
     status: EngineStatus = "ok"
     issue: str | None = None
-    # Model-catalog and resume-model capability, populated only from proven
-    # runner behavior and stable engine commands/APIs. Discovery is cached
-    # per-executable for the process lifetime in the runner layer; configured
-    # catalogs supplement a successful live catalog.
-    supports_model_on_resume: bool = False
+    # Model-catalog discovery: populated only from proven runner behavior
+    # and stable engine commands/APIs. Discovery is cached per-executable
+    # for the process lifetime in the runner layer; configured catalogs
+    # supplement a successful live catalog.
     list_models: Callable[[], tuple[str, ...] | None] | None = None
 
     @property
@@ -85,10 +84,6 @@ class AutoRouter:
         if entry is None:
             raise RunnerUnavailableError(engine, "engine not configured")
         return entry
-
-    def supports_model_on_resume(self, engine: EngineId | None) -> bool:
-        """Whether the engine can change model when resuming an authentic session."""
-        return self.entry_for_engine(engine).supports_model_on_resume
 
     def list_models(self, engine: EngineId | None) -> tuple[str, ...] | None:
         """Return the engine's model catalog, or None when unavailable."""

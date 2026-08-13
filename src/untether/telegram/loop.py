@@ -286,8 +286,6 @@ class _ModelCatalogRuntime(Protocol):
 
     def list_models(self, engine: EngineId | None) -> tuple[str, ...] | None: ...
 
-    def supports_model_on_resume(self, engine: EngineId | None) -> bool: ...
-
 
 class _ModelValidationResult:
     """Outcome of validating a one-message model directive before enqueue.
@@ -344,23 +342,6 @@ def _validate_model_override(
     )
 
 
-def _check_resume_model_capability(
-    *,
-    engine: EngineId,
-    runtime: _ModelCatalogRuntime,
-    model: str,
-) -> str | None:
-    """Return a limitation message if the engine can't change model on resume.
-
-    None means the override is allowed. A non-None message means: send the
-    message, perform zero runner starts, and create no fresh session.
-    """
-    if runtime.supports_model_on_resume(engine):
-        return None
-    return (
-        f"`{engine}` does not support changing the model while resuming a session; "
-        f"the model override (`{model}`) was not applied."
-    )
 
 
 def _apply_trigger_permission_override(
@@ -2864,24 +2845,6 @@ async def run_main_loop(
                         if resume_token is not None
                         else engine_override
                     )
-                    # Resume-model capability: reject before job creation
-                    # when resuming an authentic session and the engine
-                    # can't change model on resume.
-                    if resume_token is not None:
-                        limit_msg = _check_resume_model_capability(
-                            engine=effective_engine,
-                            runtime=cfg.runtime,
-                            model=effective_model,
-                        )
-                        if limit_msg is not None:
-                            await send_plain(
-                                cfg.exec_cfg.transport,
-                                chat_id=chat_id,
-                                user_msg_id=user_msg_id,
-                                text=limit_msg,
-                                thread_id=msg.thread_id,
-                            )
-                            return
                     # Catalog validation: reject or fall back per policy.
                     validation = _validate_model_override(
                         effective_model,

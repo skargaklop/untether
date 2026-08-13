@@ -152,10 +152,6 @@ class TransportRuntime:
     def missing_engine_ids(self) -> tuple[EngineId, ...]:
         return self.engine_ids_with_status("missing_cli")
 
-    def supports_model_on_resume(self, engine: EngineId | None) -> bool:
-        """Whether the engine can change model when resuming an authentic session."""
-        return self._router.supports_model_on_resume(engine)
-
     def list_models(self, engine: EngineId | None) -> tuple[str, ...] | None:
         """Return the engine's model catalog, or None when discovery is unavailable.
 

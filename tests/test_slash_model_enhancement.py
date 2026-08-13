@@ -2,10 +2,12 @@
 
 Covers the directive grammar (``/model``, ``--model``, ``--model=``, quoted
 ``/goal``), chat/topic persistent model overrides, one-message propagation
-(``ResolvedMessage.model`` → ``_directive_options``), the router capability
-surface (``list_models`` / ``supports_model_on_resume``), the pre-enqueue
+(``ResolvedMessage.model`` → ``_directive_options``), the pre-enqueue
 validation gate, the ``unknown_model_fallback`` setting, and prompt-batch
 stickiness for the new model forms.
+
+All engines receive ``--model`` on resume; Untether does not pre-reject model
+overrides based on engine capabilities — the engine CLI is authoritative.
 """
 
 from __future__ import annotations
@@ -21,7 +23,6 @@ from untether.settings import TelegramTransportSettings
 from untether.telegram.chat_prefs import ChatPrefsStore
 from untether.telegram.engine_overrides import EngineOverrides, merge_overrides
 from untether.telegram.loop import (
-    _check_resume_model_capability,
     _directive_options,
     _validate_model_override,
 )
@@ -333,20 +334,13 @@ def test_list_models_exception_returns_none() -> None:
     assert router.list_models("claude") is None
 
 
-def test_supports_model_on_resume_default_false() -> None:
-    runner = ScriptRunner([Return(answer="ok")], engine="claude")
-    entry = RunnerEntry(engine=runner.engine, runner=runner)
-    router = AutoRouter(entries=[entry], default_engine=runner.engine)
-    assert router.supports_model_on_resume("claude") is False
+def test_runner_entry_no_supports_model_on_resume_field() -> None:
+    """supports_model_on_resume was removed: Untether always passes --model to
+    the engine CLI and lets the engine report its own errors."""
+    import dataclasses
 
-
-def test_supports_model_on_resume_true() -> None:
-    runner = ScriptRunner([Return(answer="ok")], engine="claude")
-    entry = RunnerEntry(
-        engine=runner.engine, runner=runner, supports_model_on_resume=True
-    )
-    router = AutoRouter(entries=[entry], default_engine=runner.engine)
-    assert router.supports_model_on_resume("claude") is True
+    field_names = {f.name for f in dataclasses.fields(RunnerEntry)}
+    assert "supports_model_on_resume" not in field_names
 
 
 # ---------------------------------------------------------------------------
@@ -357,16 +351,11 @@ class _FakeRuntime:
     def __init__(
         self,
         models: tuple[str, ...] | None = None,
-        supports_resume: bool = False,
     ) -> None:
         self._models = models
-        self._supports_resume = supports_resume
 
     def list_models(self, engine: str | None) -> tuple[str, ...] | None:
         return self._models
-
-    def supports_model_on_resume(self, engine: str | None) -> bool:
-        return self._supports_resume
 
 
 def test_validation_catalog_hit_allows() -> None:
@@ -407,25 +396,6 @@ def test_validation_catalog_unavailable_passes_through() -> None:
     )
     assert result.action == "allow"
     assert result.model == "haiku"
-
-
-def test_resume_model_capability_supported() -> None:
-    runtime = _FakeRuntime(supports_resume=True)
-    message = _check_resume_model_capability(
-        engine="claude", runtime=runtime, model="opus"
-    )
-    assert message is None
-
-
-def test_resume_model_capability_unsupported() -> None:
-    runtime = _FakeRuntime(supports_resume=False)
-    message = _check_resume_model_capability(
-        engine="claude", runtime=runtime, model="opus"
-    )
-    assert message is not None
-    assert "claude" in message
-    assert "opus" in message
-
 
 # ---------------------------------------------------------------------------
 # 6. Settings case
