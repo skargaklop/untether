@@ -38,7 +38,9 @@ async def test_terminal_is_argv_only_bounded_and_root_restricted(tmp_path) -> No
 
 def test_facilities_advertise_enabled_v1_only() -> None:
     facilities = AcpClientFacilities(
-        filesystem=RootFilesystem([]), terminal=TerminalExecutor([]), elicitation=True,
+        filesystem=RootFilesystem([]),
+        terminal=TerminalExecutor([]),
+        elicitation=True,
         broker=InteractionBroker(),
     )
     assert facilities.capabilities(1) == {

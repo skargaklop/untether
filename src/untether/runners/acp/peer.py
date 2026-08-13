@@ -53,7 +53,9 @@ class AcpPeer:
     _reader_task: asyncio.Task[None] | None = field(
         default=None, init=False, repr=False
     )
-    _reverse_tasks: set[asyncio.Task[None]] = field(default_factory=set, init=False, repr=False)
+    _reverse_tasks: set[asyncio.Task[None]] = field(
+        default_factory=set, init=False, repr=False
+    )
     closed: bool = field(default=False, init=False)
     _failure: BaseException | None = field(default=None, init=False, repr=False)
     _next_id: int = field(default=1, init=False, repr=False)
@@ -199,7 +201,9 @@ class AcpPeer:
         self._results[request_id] = result
         self._pending[request_id].set()
 
-    async def _handle_reverse(self, request_id: Any, handler: Handler, params: Json) -> None:
+    async def _handle_reverse(
+        self, request_id: Any, handler: Handler, params: Json
+    ) -> None:
         result = handler(params)
         if inspect.isawaitable(result):
             result = await result

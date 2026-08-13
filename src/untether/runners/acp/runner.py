@@ -59,14 +59,20 @@ class AcpRunner(ResumeTokenMixin):
             yield event
 
     async def _prompt_with_updates(
-        self, peer: Any, adapter: ProtocolAdapter, sid: str, prompt: str,
+        self,
+        peer: Any,
+        adapter: ProtocolAdapter,
+        sid: str,
+        prompt: str,
         state: AcpSessionState,
     ) -> tuple[Any, list[Any]]:
         """Keep consuming duplex traffic while the prompt request is pending."""
+
         async def request_prompt() -> Any:
             try:
                 return await peer.request(
-                    "session/prompt", adapter.prompt_params(sid, prompt),
+                    "session/prompt",
+                    adapter.prompt_params(sid, prompt),
                     timeout_s=self.turn_timeout_s,
                 )
             except TypeError as exc:
@@ -85,7 +91,8 @@ class AcpRunner(ResumeTokenMixin):
             while True:
                 timeout = max(0.0, deadline - asyncio.get_running_loop().time())
                 done, _ = await asyncio.wait(
-                    {request, *notifications}, timeout=timeout,
+                    {request, *notifications},
+                    timeout=timeout,
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 if not done:
@@ -117,13 +124,17 @@ class AcpRunner(ResumeTokenMixin):
                             notifications.discard(task)
                             if task.exception() is not None:
                                 continue
-                            notifications.add(asyncio.create_task(peer.next_notification()))
+                            notifications.add(
+                                asyncio.create_task(peer.next_notification())
+                            )
                             item = task.result()
                             if item.get("method") == "session/update":
                                 params = item.get("params", {})
-                                actions.extend(state.apply(
-                                    params if isinstance(params, dict) else {}
-                                ))
+                                actions.extend(
+                                    state.apply(
+                                        params if isinstance(params, dict) else {}
+                                    )
+                                )
                 for task in done:
                     if task is request:
                         for notification in notifications:
@@ -135,9 +146,11 @@ class AcpRunner(ResumeTokenMixin):
                                 item = notification.result()
                                 if item.get("method") == "session/update":
                                     params = item.get("params", {})
-                                    actions.extend(state.apply(
-                                        params if isinstance(params, dict) else {}
-                                    ))
+                                    actions.extend(
+                                        state.apply(
+                                            params if isinstance(params, dict) else {}
+                                        )
+                                    )
                         return task.result(), actions
                     notifications.discard(task)
                     if task.exception() is not None:
@@ -148,9 +161,9 @@ class AcpRunner(ResumeTokenMixin):
                     item = task.result()
                     if item.get("method") == "session/update":
                         params = item.get("params", {})
-                        actions.extend(state.apply(
-                            params if isinstance(params, dict) else {}
-                        ))
+                        actions.extend(
+                            state.apply(params if isinstance(params, dict) else {})
+                        )
         finally:
             if not request.done():
                 request.cancel()
@@ -233,15 +246,26 @@ class AcpRunner(ResumeTokenMixin):
             )
             adapter = negotiate(self.protocol, init)
             advertised = init.get("authMethods", init.get("auth_methods", []))
-            auth_ids = {
-                str(item.get("id", item.get("method", ""))) if isinstance(item, dict) else str(item)
-                for item in advertised if isinstance(item, (dict, str))
-            } if isinstance(advertised, list) else set()
+            auth_ids = (
+                {
+                    str(item.get("id", item.get("method", "")))
+                    if isinstance(item, dict)
+                    else str(item)
+                    for item in advertised
+                    if isinstance(item, (dict, str))
+                }
+                if isinstance(advertised, list)
+                else set()
+            )
             selected_auth = self.auth_method
             if selected_auth is not None and selected_auth not in auth_ids:
-                raise RuntimeError(f"authenticate: ACP auth method unavailable: {selected_auth}")
+                raise RuntimeError(
+                    f"authenticate: ACP auth method unavailable: {selected_auth}"
+                )
             if selected_auth is not None:
-                await peer.request(adapter.authenticate_method(), {"methodId": selected_auth})
+                await peer.request(
+                    adapter.authenticate_method(), {"methodId": selected_auth}
+                )
             method = "session/resume" if resume is not None else "session/new"
             params = (
                 {"sessionId": resume.value}
@@ -257,7 +281,9 @@ class AcpRunner(ResumeTokenMixin):
                     raise RuntimeError(
                         f"authenticate: ACP auth required; eligible methods: {sorted(auth_ids)}"
                     ) from exc
-                await peer.request(adapter.authenticate_method(), {"methodId": next(iter(auth_ids))})
+                await peer.request(
+                    adapter.authenticate_method(), {"methodId": next(iter(auth_ids))}
+                )
                 created = await peer.request(method, params)
             sid = created.get("sessionId")
             if not isinstance(sid, str) or not sid:

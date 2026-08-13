@@ -67,14 +67,22 @@ class TerminalExecutor:
         return resolved
 
     async def run(self, argv: list[str], *, cwd: str | Path) -> TerminalResult:
-        if not isinstance(argv, list) or not all(isinstance(item, str) for item in argv):
+        if not isinstance(argv, list) or not all(
+            isinstance(item, str) for item in argv
+        ):
             raise TypeError("terminal argv must be a list of strings")
         if not argv:
             raise ValueError("terminal argv cannot be empty")
-        process = await anyio.open_process(argv, cwd=self._cwd(cwd), stdout=-1, stderr=-2)
-        stdout = await process.stdout.receive(self.max_output + 1) if process.stdout else b""
+        process = await anyio.open_process(
+            argv, cwd=self._cwd(cwd), stdout=-1, stderr=-2
+        )
+        stdout = (
+            await process.stdout.receive(self.max_output + 1) if process.stdout else b""
+        )
         await process.wait()
-        return TerminalResult(stdout[: self.max_output].decode(errors="replace"), process.returncode or 0)
+        return TerminalResult(
+            stdout[: self.max_output].decode(errors="replace"), process.returncode or 0
+        )
 
 
 @dataclass(slots=True)

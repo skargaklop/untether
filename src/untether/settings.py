@@ -760,9 +760,7 @@ class AcpEngineSettings(BaseModel):
     close_timeout_s: float = Field(default=5.0, gt=0)
     config_option_map: dict[
         Literal["model", "reasoning", "permission_mode", "plan"], NonEmptyStr
-    ] = Field(
-        default_factory=dict
-    )
+    ] = Field(default_factory=dict)
 
 
 class AcpSettings(BaseModel):

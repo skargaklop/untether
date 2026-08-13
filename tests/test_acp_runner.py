@@ -126,13 +126,17 @@ async def test_resume_rejects_model_absent_from_returned_options():
 async def test_runner_advertises_auth_methods_and_authenticates_before_session():
     peer = AuthPeer(auth_methods=[{"id": "device"}])
     runner = AcpRunner(
-        engine="acp_test", command="unused", peer_factory=lambda: peer,
+        engine="acp_test",
+        command="unused",
+        peer_factory=lambda: peer,
         auth_method="device",
     )
     events = [event async for event in runner.run("hello", None)]
     assert events[-1].ok
     assert [method for method, _ in peer.requests][:3] == [
-        "initialize", "authenticate", "session/new",
+        "initialize",
+        "authenticate",
+        "session/new",
     ]
     assert peer.requests[1][1] == {"methodId": "device"}
 
@@ -142,7 +146,9 @@ async def test_runner_advertises_auth_methods_and_authenticates_before_session()
 async def test_runner_auth_required_retries_session_operation_once(resumed):
     peer = AuthPeer(auth_methods=["device"], auth_required_once=True)
     runner = AcpRunner(
-        engine="acp_test", command="unused", peer_factory=lambda: peer,
+        engine="acp_test",
+        command="unused",
+        peer_factory=lambda: peer,
         auto_auth=True,
     )
     resume = ResumeToken("acp_test", "old") if resumed else None
@@ -158,7 +164,9 @@ async def test_runner_auth_required_retries_session_operation_once(resumed):
 async def test_runner_second_auth_required_fails_without_retry_loop():
     peer = AuthPeer(auth_methods=["device"], auth_required_always=True)
     runner = AcpRunner(
-        engine="acp_test", command="unused", peer_factory=lambda: peer,
+        engine="acp_test",
+        command="unused",
+        peer_factory=lambda: peer,
         auto_auth=True,
     )
     events = [event async for event in runner.run("hello", None)]
@@ -168,14 +176,19 @@ async def test_runner_second_auth_required_fails_without_retry_loop():
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("version, auth_method, expected", [
-    (1, "device", "authenticate"),
-    (2, "device", "auth/login"),
-])
+@pytest.mark.parametrize(
+    "version, auth_method, expected",
+    [
+        (1, "device", "authenticate"),
+        (2, "device", "auth/login"),
+    ],
+)
 async def test_runner_uses_version_specific_auth_method(version, auth_method, expected):
     peer = AuthPeer(version=version, auth_methods=[auth_method])
     runner = AcpRunner(
-        engine="acp_test", command="unused", peer_factory=lambda: peer,
+        engine="acp_test",
+        command="unused",
+        peer_factory=lambda: peer,
         auth_method=auth_method,
     )
     events = [event async for event in runner.run("hello", None)]
@@ -188,8 +201,14 @@ class AuthRequired(RuntimeError):
 
 
 class AuthPeer(FakePeer):
-    def __init__(self, *, auth_methods=None, auth_required_once=False,
-                 auth_required_always=False, **kwargs):
+    def __init__(
+        self,
+        *,
+        auth_methods=None,
+        auth_required_once=False,
+        auth_required_always=False,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.auth_methods = auth_methods or []
         self.auth_required_once = auth_required_once
@@ -224,10 +243,17 @@ async def test_runner_consumes_updates_while_prompt_is_pending_and_drains_v1_ord
 
         async def request(self, method, params):
             if method == "session/prompt":
-                await self._updates.put({"method": "session/update", "params": {
-                    "sessionUpdate": "tool_call", "toolCallId": "call-1",
-                    "title": "shell", "status": "completed",
-                }})
+                await self._updates.put(
+                    {
+                        "method": "session/update",
+                        "params": {
+                            "sessionUpdate": "tool_call",
+                            "toolCallId": "call-1",
+                            "title": "shell",
+                            "status": "completed",
+                        },
+                    }
+                )
                 await asyncio.sleep(0.01)
             return await super().request(method, params)
 
@@ -239,7 +265,10 @@ async def test_runner_consumes_updates_while_prompt_is_pending_and_drains_v1_ord
     events = [event async for event in runner.run("hello", None)]
     assert any(isinstance(event, ActionEvent) for event in events)
     assert events[-1].ok
-    assert events.index(next(event for event in events if isinstance(event, ActionEvent))) < len(events) - 1
+    assert (
+        events.index(next(event for event in events if isinstance(event, ActionEvent)))
+        < len(events) - 1
+    )
 
 
 @pytest.mark.anyio
@@ -252,8 +281,11 @@ async def test_runner_turn_timeout_is_distinct_from_peer_request_timeout():
 
     peer = SlowPromptPeer()
     runner = AcpRunner(
-        engine="acp_test", command="unused", peer_factory=lambda: peer,
-        turn_timeout_s=0.01, cancel_grace_s=0.01,
+        engine="acp_test",
+        command="unused",
+        peer_factory=lambda: peer,
+        turn_timeout_s=0.01,
+        cancel_grace_s=0.01,
     )
     events = [event async for event in runner.run("hello", None)]
     assert isinstance(events[-1], CompletedEvent)
@@ -281,8 +313,11 @@ async def test_runner_turn_timeout_cancels_session_and_accepts_cancelled_complet
 
     peer = CancelledPromptPeer()
     runner = AcpRunner(
-        engine="acp_test", command="unused", peer_factory=lambda: peer,
-        turn_timeout_s=0.01, cancel_grace_s=0.1,
+        engine="acp_test",
+        command="unused",
+        peer_factory=lambda: peer,
+        turn_timeout_s=0.01,
+        cancel_grace_s=0.1,
     )
     events = [event async for event in runner.run("hello", None)]
 
@@ -301,8 +336,11 @@ async def test_runner_turn_timeout_tears_down_after_cancel_grace_expires():
 
     peer = UnresponsivePromptPeer()
     runner = AcpRunner(
-        engine="acp_test", command="unused", peer_factory=lambda: peer,
-        turn_timeout_s=0.01, cancel_grace_s=0.01,
+        engine="acp_test",
+        command="unused",
+        peer_factory=lambda: peer,
+        turn_timeout_s=0.01,
+        cancel_grace_s=0.01,
     )
     events = [event async for event in runner.run("hello", None)]
 

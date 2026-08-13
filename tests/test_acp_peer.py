@@ -56,10 +56,13 @@ reverse = json.loads(sys.stdin.readline())
 assert reverse['result']['done'] is True
 """
     async with AcpPeer(sys.executable, fixture(code)) as peer:
+
         async def handler(_params):
             await anyio.sleep(0.2)
             return {"done": True}
+
         import anyio
+
         peer.register_handler("client/wait", handler)
         assert await peer.request("hello", {}) == {"live": True}
 
