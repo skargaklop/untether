@@ -342,8 +342,6 @@ def _validate_model_override(
     )
 
 
-
-
 def _apply_trigger_permission_override(
     run_options: EngineRunOptions | None,
     context: RunContext | None,
@@ -3019,8 +3017,7 @@ async def run_main_loop(
                     if command_id not in state.command_ids:
                         refresh_commands()
                     if command_id in state.command_ids and not (
-                        command_id == "model"
-                        and not is_sticky_model_args(args_text)
+                        command_id == "model" and not is_sticky_model_args(args_text)
                     ):
                         chat_id = pending.msg.chat_id
                         topic_key = pending.topic_key
@@ -3497,8 +3494,7 @@ async def run_main_loop(
                     if command_id not in state.command_ids:
                         refresh_commands()
                     if command_id in state.command_ids and not (
-                        command_id == "model"
-                        and not is_sticky_model_args(args_text)
+                        command_id == "model" and not is_sticky_model_args(args_text)
                     ):
                         engine_resolution = await resolve_engine_defaults(
                             explicit_engine=None,

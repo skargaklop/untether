@@ -397,6 +397,7 @@ def test_validation_catalog_unavailable_passes_through() -> None:
     assert result.action == "allow"
     assert result.model == "haiku"
 
+
 # ---------------------------------------------------------------------------
 # 6. Settings case
 
