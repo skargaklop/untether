@@ -253,12 +253,63 @@ async def test_runner_turn_timeout_is_distinct_from_peer_request_timeout():
     peer = SlowPromptPeer()
     runner = AcpRunner(
         engine="acp_test", command="unused", peer_factory=lambda: peer,
-        turn_timeout_s=0.01,
+        turn_timeout_s=0.01, cancel_grace_s=0.01,
     )
     events = [event async for event in runner.run("hello", None)]
     assert isinstance(events[-1], CompletedEvent)
     assert not events[-1].ok
-    assert "timeout" in (events[-1].error or "")
+    assert "cancel grace" in (events[-1].error or "")
+
+
+@pytest.mark.anyio
+async def test_runner_turn_timeout_cancels_session_and_accepts_cancelled_completion():
+    class CancelledPromptPeer(FakePeer):
+        def __init__(self):
+            super().__init__()
+            self.cancelled = asyncio.Event()
+
+        async def request(self, method, params, **kwargs):
+            if method == "session/prompt":
+                await self.cancelled.wait()
+                return {"stopReason": "cancelled"}
+            return await super().request(method, params)
+
+        async def notify(self, method, params):
+            await super().notify(method, params)
+            if method == "session/cancel":
+                self.cancelled.set()
+
+    peer = CancelledPromptPeer()
+    runner = AcpRunner(
+        engine="acp_test", command="unused", peer_factory=lambda: peer,
+        turn_timeout_s=0.01, cancel_grace_s=0.1,
+    )
+    events = [event async for event in runner.run("hello", None)]
+
+    assert events[-1].ok
+    assert [method for method, _ in peer.requests].count("session/cancel") == 1
+    assert peer.closed
+
+
+@pytest.mark.anyio
+async def test_runner_turn_timeout_tears_down_after_cancel_grace_expires():
+    class UnresponsivePromptPeer(FakePeer):
+        async def request(self, method, params, **kwargs):
+            if method == "session/prompt":
+                await asyncio.sleep(1)
+            return await super().request(method, params)
+
+    peer = UnresponsivePromptPeer()
+    runner = AcpRunner(
+        engine="acp_test", command="unused", peer_factory=lambda: peer,
+        turn_timeout_s=0.01, cancel_grace_s=0.01,
+    )
+    events = [event async for event in runner.run("hello", None)]
+
+    assert not events[-1].ok
+    assert "cancel grace" in (events[-1].error or "")
+    assert [method for method, _ in peer.requests].count("session/cancel") == 1
+    assert peer.closed
 
 
 @pytest.mark.anyio

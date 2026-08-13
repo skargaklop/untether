@@ -36,6 +36,22 @@ async def test_broker_bounds_and_timeout_cancel() -> None:
 
 
 @pytest.mark.anyio
+async def test_broker_cancels_all_pending_interactions_for_owner() -> None:
+    broker = InteractionBroker(timeout_s=1)
+    first = await broker.open("session-1", "permission", {})
+    second = await broker.open("session-1", "elicitation", {})
+    other = await broker.open("session-2", "permission", {})
+
+    assert await broker.cancel_owner("session-1") == 2
+    assert broker.pending_count == 1
+    with pytest.raises(RuntimeError, match="cancelled"):
+        await first.wait()
+    with pytest.raises(RuntimeError, match="cancelled"):
+        await second.wait()
+    assert await broker.resolve("session-2", other.nonce, {"ok": True})
+
+
+@pytest.mark.anyio
 async def test_turn_control_sends_cancel_notification_and_cannot_steer() -> None:
     sent: list[tuple[str, dict[str, object]]] = []
 

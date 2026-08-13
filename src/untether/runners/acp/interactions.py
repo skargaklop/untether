@@ -92,6 +92,20 @@ class InteractionBroker:
         item._event.set()
         return True
 
+    async def cancel_owner(
+        self, owner: str, error: BaseException | None = None
+    ) -> int:
+        async with self._lock:
+            items = [
+                self._pending.pop(nonce)
+                for nonce, item in list(self._pending.items())
+                if item.owner == owner
+            ]
+        for item in items:
+            item._error = error or RuntimeError("interaction cancelled")
+            item._event.set()
+        return len(items)
+
     async def _take(self, owner: str, nonce: str) -> PendingInteraction:
         async with self._lock:
             item = self._pending.get(nonce)

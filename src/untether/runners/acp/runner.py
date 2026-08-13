@@ -31,6 +31,7 @@ class AcpRunner(ResumeTokenMixin):
     auth_method: str | None = None
     auto_auth: bool = False
     turn_timeout_s: float = 1800.0
+    cancel_grace_s: float = 5.0
     request_timeout_s: float = 60.0
     close_timeout_s: float = 5.0
     config_option_map: dict[str, str] = field(default_factory=dict)
@@ -88,7 +89,41 @@ class AcpRunner(ResumeTokenMixin):
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 if not done:
-                    raise TimeoutError(f"ACP turn timeout after {self.turn_timeout_s}s")
+                    await peer.notify("session/cancel", {"sessionId": sid})
+                    cancel_deadline = (
+                        asyncio.get_running_loop().time() + self.cancel_grace_s
+                    )
+                    while True:
+                        remaining = max(
+                            0.0,
+                            cancel_deadline - asyncio.get_running_loop().time(),
+                        )
+                        if remaining == 0:
+                            raise TimeoutError(
+                                f"ACP cancel grace expired after {self.cancel_grace_s}s"
+                            )
+                        done, _ = await asyncio.wait(
+                            {request, *notifications},
+                            timeout=remaining,
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        if not done:
+                            raise TimeoutError(
+                                f"ACP cancel grace expired after {self.cancel_grace_s}s"
+                            )
+                        for task in done:
+                            if task is request:
+                                return task.result(), actions
+                            notifications.discard(task)
+                            if task.exception() is not None:
+                                continue
+                            notifications.add(asyncio.create_task(peer.next_notification()))
+                            item = task.result()
+                            if item.get("method") == "session/update":
+                                params = item.get("params", {})
+                                actions.extend(state.apply(
+                                    params if isinstance(params, dict) else {}
+                                ))
                 for task in done:
                     if task is request:
                         for notification in notifications:
@@ -259,7 +294,7 @@ class AcpRunner(ResumeTokenMixin):
                         yield action
             answer = state.answer
             reason = str(response.get("stopReason", ""))
-            ok = reason not in {"error", "failed", "cancelled", "canceled"}
+            ok = reason not in {"error", "failed"}
             if ok:
                 with suppress(Exception):
                     await peer.request("session/close", {"sessionId": sid})
