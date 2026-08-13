@@ -22,6 +22,10 @@ class ProtocolAdapter:
     def config_key(self, name: str) -> str:
         return name
 
+    def config_options(self, session: Json) -> list[Json]:
+        value = session.get("configOptions", session.get("config_options", []))
+        return value if isinstance(value, list) else []
+
     def responses(self, message: list[Json] | Json) -> dict[Any, Json]:
         items = message if isinstance(message, list) else [message]
         return {

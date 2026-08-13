@@ -18,11 +18,16 @@ def build_acp_runner(config: EngineConfig, project_dir: Path) -> _BackendRunner:
         engine=str(config.get("engine", "acp")),
         command=command,
         args=args,
-        cwd=str(project_dir),
+        cwd=str(config.get("cwd") or project_dir),
         env=config.get("env"),
         protocol=str(config.get("protocol", "auto")),
         turn_timeout_s=float(config.get("turn_timeout_s", 1800.0)),
         request_timeout_s=float(config.get("request_timeout_s", 60.0)),
+        close_timeout_s=float(config.get("close_timeout_s", 5.0)),
+        config_option_map={
+            str(key): str(value)
+            for key, value in dict(config.get("config_option_map", {})).items()
+        },
     )
 
 

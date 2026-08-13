@@ -12,8 +12,9 @@ import anyio
 from ...events import EventFactory
 from ...model import EngineId, ResumeToken
 from ...runner import ResumeTokenMixin
+from ..run_options import get_run_options
 from .peer import AcpPeer
-from .protocol import negotiate
+from .protocol import Json, ProtocolAdapter, negotiate
 from .state import AcpSessionState
 from .turn import AcpTurnControl
 
@@ -29,6 +30,7 @@ class AcpRunner(ResumeTokenMixin):
     turn_timeout_s: float = 1800.0
     request_timeout_s: float = 60.0
     close_timeout_s: float = 5.0
+    config_option_map: dict[str, str] = field(default_factory=dict)
     peer_factory: Callable[[], Any] | None = None
     resume_re: re.Pattern[str] = field(
         default=re.compile(
@@ -51,6 +53,66 @@ class AcpRunner(ResumeTokenMixin):
     async def run(self, prompt: str, resume: ResumeToken | None) -> Any:
         async for event in self._run(prompt, resume):
             yield event
+
+    async def _apply_run_options(
+        self,
+        peer: Any,
+        adapter: ProtocolAdapter,
+        session_id: str,
+        session: Json,
+        resumed: bool,
+    ) -> None:
+        options = get_run_options()
+        if options is None:
+            return
+        overrides: dict[str, str] = {}
+        if options.model:
+            overrides["model"] = options.model
+        if options.reasoning:
+            overrides["reasoning"] = options.reasoning
+        if options.permission_mode:
+            overrides["permission_mode"] = options.permission_mode
+        if options.plan:
+            overrides["plan"] = "plan"
+        available = adapter.config_options(session)
+        by_category = {
+            str(item.get("category")): item
+            for item in available
+            if isinstance(item, dict)
+        }
+        for name, value in overrides.items():
+            config_id = self.config_option_map.get(name)
+            if config_id is None:
+                if name == "model":
+                    item = by_category.get("model_config")
+                elif name == "reasoning":
+                    item = by_category.get("thought_level")
+                else:
+                    item = None
+                config_id = str(item.get("id")) if item and item.get("id") else None
+            if config_id is None:
+                raise RuntimeError(f"configure: ACP cannot map {name} override")
+            item = next(
+                (
+                    candidate
+                    for candidate in available
+                    if candidate.get("id") == config_id
+                ),
+                None,
+            )
+            values = item.get("options", []) if item else []
+            if resumed and name == "model" and value not in values:
+                raise RuntimeError("configure: resume model override is unavailable")
+            if values and value not in values:
+                raise RuntimeError(f"configure: ACP rejected {name} override")
+            await peer.request(
+                "session/set_config_option",
+                {
+                    "sessionId": session_id,
+                    "configId": adapter.config_key(config_id),
+                    "value": value,
+                },
+            )
 
     async def _run(self, prompt: str, resume: ResumeToken | None):
         factory = EventFactory(self.engine)
@@ -76,6 +138,9 @@ class AcpRunner(ResumeTokenMixin):
             if not isinstance(sid, str) or not sid:
                 raise RuntimeError("ACP session creation returned no sessionId")
             token = ResumeToken(self.engine, sid)
+            await self._apply_run_options(
+                peer, adapter, sid, created, resume is not None
+            )
             notify = getattr(peer, "notify", None)
             control = AcpTurnControl(notify, sid) if callable(notify) else None
             meta = {"acp_protocol": adapter.version}

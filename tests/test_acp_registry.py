@@ -44,8 +44,17 @@ def test_acp_settings_are_strict_and_share_positive_default_ttl() -> None:
 
 
 def test_explicit_acp_engine_id_and_command_are_validated() -> None:
-    engine = AcpEngineSettings(command="C:/Tools/agent.exe")
+    engine = AcpEngineSettings(
+        command="C:/Tools/agent.exe",
+        config_option_map={"permission_mode": "approval_policy", "plan": "mode"},
+    )
     assert engine.command == "C:/Tools/agent.exe"
+    assert engine.config_option_map == {
+        "permission_mode": "approval_policy",
+        "plan": "mode",
+    }
+    assert engine.request_timeout_s == 60.0
+    assert engine.close_timeout_s == 5.0
     with pytest.raises(ValueError, match="engine id"):
         UntetherSettings.model_validate(
             {

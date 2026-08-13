@@ -750,6 +750,17 @@ class AcpEngineSettings(BaseModel):
     args: list[NonEmptyStr] = Field(default_factory=list)
     protocol: Literal["auto", "1", "2"] = "auto"
     env: dict[NonEmptyStr, str] = Field(default_factory=dict)
+    cwd: NonEmptyStr | None = None
+    turn_timeout_s: float = Field(default=1800.0, gt=0)
+    startup_timeout_s: float = Field(default=30.0, gt=0)
+    request_timeout_s: float = Field(default=60.0, gt=0)
+    cancel_grace_s: float = Field(default=5.0, gt=0)
+    close_timeout_s: float = Field(default=5.0, gt=0)
+    config_option_map: dict[
+        Literal["model", "reasoning", "permission_mode", "plan"], NonEmptyStr
+    ] = Field(
+        default_factory=dict
+    )
 
 
 class AcpSettings(BaseModel):
