@@ -34,6 +34,9 @@ from ..model import EngineId, ResumeToken, UntetherEvent
 from ..utils.streams import drain_stderr
 from ..utils.subprocess import manage_subprocess
 
+# Phase A transport and adapters live in ``runners.acp``; the legacy compact
+# exports below remain unchanged until its callers migrate.
+
 logger = get_logger(__name__)
 
 #: JSON-RPC protocol version tag for every outgoing object.

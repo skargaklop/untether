@@ -732,6 +732,48 @@ class SecuritySettings(BaseModel):
         return cleaned
 
 
+class AcpRegistrySettings(BaseModel):
+    """Settings for optional official ACP registry discovery."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    enabled: bool = True
+    cache_ttl_days: StrictInt = Field(default=3, gt=0)
+
+
+class AcpEngineSettings(BaseModel):
+    """Explicit ACP engine configuration."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    command: NonEmptyStr
+    args: list[NonEmptyStr] = Field(default_factory=list)
+    protocol: Literal["auto", "1", "2"] = "auto"
+    env: dict[NonEmptyStr, str] = Field(default_factory=dict)
+
+
+class AcpSettings(BaseModel):
+    """Generic ACP settings; runtime discovery is intentionally separate."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    allow_v1: bool = True
+    registry: AcpRegistrySettings = Field(default_factory=AcpRegistrySettings)
+    engines: dict[str, AcpEngineSettings] = Field(default_factory=dict)
+
+    @field_validator("engines")
+    @classmethod
+    def _validate_engine_ids(
+        cls, value: dict[str, AcpEngineSettings]
+    ) -> dict[str, AcpEngineSettings]:
+        import re
+
+        for engine_id in value:
+            if not re.fullmatch(r"[a-z0-9_]{1,32}", engine_id):
+                raise ValueError("engine id must match [a-z0-9_]{1,32}")
+        return value
+
+
 class RunnerSettings(BaseModel):
     """Global lifecycle settings applied to ALL runners.
 
@@ -784,6 +826,7 @@ class UntetherSettings(BaseSettings):
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     runners: RunnerSettings = Field(default_factory=RunnerSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    acp: AcpSettings = Field(default_factory=AcpSettings)
 
     @model_validator(mode="before")
     @classmethod

@@ -6,6 +6,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from .acp_registry import (
+    choose_binary_distribution,
+    current_platform_target,
+    discover_installation,
+    explicit_backend,
+    load_registry_agents,
+    normalise_registry_id,
+    registry_backend,
+)
 from .backends import EngineBackend
 from .config import ConfigError, ProjectsConfig
 from .engines import get_backend, list_backend_ids
@@ -248,7 +257,46 @@ def build_runtime_spec(
     reserved: Iterable[str] = RESERVED_CHAT_COMMANDS,
 ) -> RuntimeSpec:
     allowlist = resolve_plugins_allowlist(settings)
-    engine_ids = list_backend_ids(allowlist=allowlist)
+    static_ids = list_backend_ids(allowlist=allowlist)
+    backends = load_backends(
+        engine_ids=static_ids,
+        allowlist=allowlist,
+        default_engine=settings.default_engine,
+    )
+    engine_ids = list(static_ids)
+    explicit_ids = set(settings.acp.engines)
+    for engine_id, engine_settings in settings.acp.engines.items():
+        if engine_id in engine_ids:
+            engine_ids.remove(engine_id)
+        backends = [backend for backend in backends if backend.id != engine_id]
+        try:
+            backends.append(explicit_backend(engine_id, engine_settings))
+        except (ValueError, OSError) as exc:
+            raise ConfigError(f"Invalid ACP engine {engine_id!r}: {exc}") from exc
+    if settings.acp.registry.enabled:
+        cache_path = config_path.parent / "cache" / "acp-registry-v1.json"
+        agents = load_registry_agents(
+            cache_path, ttl_days=settings.acp.registry.cache_ttl_days
+        )
+        for agent in agents:
+            try:
+                engine_id = normalise_registry_id(agent.id)
+                if (
+                    engine_id in explicit_ids
+                    or engine_id in engine_ids
+                    or engine_id in RESERVED_CHAT_COMMANDS
+                ):
+                    continue
+                distribution = choose_binary_distribution(
+                    agent, target=current_platform_target()
+                )
+                record = discover_installation(agent, target=None, cache=None)
+                if record.installed and distribution is not None and record.executable:
+                    backends.append(registry_backend(record, distribution))
+                    engine_ids.append(engine_id)
+            except (ValueError, OSError):
+                continue
+    engine_ids = [backend.id for backend in backends]
     projects = settings.to_projects_config(
         config_path=config_path,
         engine_ids=engine_ids,
@@ -259,11 +307,6 @@ def build_runtime_spec(
         settings=settings,
         config_path=config_path,
         engine_ids=engine_ids,
-    )
-    backends = load_backends(
-        engine_ids=engine_ids,
-        allowlist=allowlist,
-        default_engine=default_engine,
     )
     router = build_router(
         settings=settings,

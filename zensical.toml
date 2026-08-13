@@ -75,6 +75,7 @@ nav = [
     { "Telegram transport" = "reference/transports/telegram.md" },
     { "Runners" = [
       { "Overview" = "reference/runners/index.md" },
+      { "Generic ACP" = "reference/runners/acp.md" },
       { "Claude" = [
         { "Runner" = "reference/runners/claude/runner.md" },
         { "Stream JSON cheatsheet" = "reference/runners/claude/stream-json-cheatsheet.md" },

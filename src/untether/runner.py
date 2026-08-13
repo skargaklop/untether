@@ -1681,6 +1681,8 @@ class Runner(Protocol):
 
 
 class RunnerTurnControl(Protocol):
+    can_steer: bool
+
     async def steer(self, text: str) -> None: ...
 
     async def interrupt(self) -> bool: ...

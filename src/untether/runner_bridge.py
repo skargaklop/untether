@@ -3124,9 +3124,13 @@ async def run_runner_with_cancel(
                                     running_task.resume = evt.resume
                                 if evt.meta:
                                     control = evt.meta.get("control")
-                                    if callable(
-                                        getattr(control, "steer", None)
-                                    ) and callable(getattr(control, "interrupt", None)):
+                                    if (
+                                        callable(getattr(control, "steer", None))
+                                        and callable(
+                                            getattr(control, "interrupt", None)
+                                        )
+                                        and (getattr(control, "can_steer", True))
+                                    ):
                                         running_task.control = cast(
                                             RunnerTurnControl, control
                                         )

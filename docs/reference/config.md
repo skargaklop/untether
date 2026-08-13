@@ -403,6 +403,52 @@ Global subprocess lifecycle settings shared by every native runner. Values are v
 | `retry_max_attempts` | int | `3` | Total allowed attempts, including the initial attempt. Must be at least one. Only failures before visible output are retried. |
 | `retry_base_delay_s` | float | `5.0` | Non-negative linear retry base: waits are `base × attempt` before attempts two and later. Exhausted transient failures are rendered without provider payloads. |
 
+### `[acp]`
+
+ACP settings apply to the generic ACP runner. ACP registry discovery is enabled by
+default and uses two files under `~/.untether/cache/`:
+`acp-registry-v1.json` for the official registry document and
+`acp-install-state-v1.json` for per-agent installation results. Both caches use
+one shared positive `cache_ttl_days` value, defaulting to three days. A fresh
+cache avoids network access and `PATH` scanning; an expired installation record
+is rescanned. Registry fetch failures use a valid stale registry cache, and do
+not remove static or explicitly configured engines.
+
+=== "toml"
+
+    ```toml
+    [acp]
+    allow_v1 = true
+
+    [acp.registry]
+    enabled = true
+    cache_ttl_days = 3
+
+    [acp.engines.local_agent]
+    command = "D:/Tools/local-agent.exe"
+    args = ["--acp"]
+    protocol = "auto"       # auto | 1 | 2
+    env = { NO_COLOR = "1" }
+    ```
+
+| Key | Type | Default | Notes |
+|-----|------|---------|-------|
+| `allow_v1` | bool | `true` | Allows `protocol = "auto"` to fall back to a clean ACP v1 initialization when the first connection rejects or closes before selecting a version. |
+| `registry.enabled` | bool | `true` | Enables official-registry refresh and automatic binary-agent discovery. Explicit engines remain available when this is `false`. |
+| `registry.cache_ttl_days` | int | `3` | Shared TTL for the registry document and installation-state caches. Must be positive. |
+| `engines.<id>.command` | string | (required) | Explicit ACP command. The production configuration requires an absolute path to an existing executable; it is never resolved through `PATH` at run time. |
+| `engines.<id>.args` | string[] | `[]` | Arguments passed as argv entries; no shell command is constructed. |
+| `engines.<id>.protocol` | `"auto"`\|`"1"`\|`"2"` | `"auto"` | Selects ACP negotiation. v1 is stable; v2 is draft. |
+| `engines.<id>.env` | table | `{}` | Static environment overlay. Values are not logged. |
+
+Registry discovery only considers a current-platform binary distribution and a
+locally resolvable executable. It does not download, install, execute, or probe
+registry entries at startup. `npx` and `uvx` are not auto-bound; using an
+absolute launcher with package arguments is an explicit user opt-in. Registry
+IDs are normalized from hyphens to underscores (for example, `amp-acp` becomes
+`amp_acp`) and must be valid, collision-free engine IDs. Explicit configuration
+wins over a registry entry with the same normalized ID.
+
 ### `[auto_continue]`
 
 Auto-continue detects when Claude Code exits after receiving tool results without processing them (upstream bugs [#34142](https://github.com/anthropics/claude-code/issues/34142), [#30333](https://github.com/anthropics/claude-code/issues/30333)) and automatically resumes the session. Detection is based on a protocol invariant: normal sessions always end with `last_event_type=result`, while premature exits show `last_event_type=user`.

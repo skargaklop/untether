@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+import anyio
 from watchfiles import awatch
 
 from .config import ConfigError
@@ -111,7 +112,8 @@ async def watch_config(
             continue
 
         try:
-            reload = _reload_config(
+            reload = await anyio.to_thread.run_sync(  # ty: ignore[unresolved-attribute]
+                _reload_config,
                 config_path,
                 default_engine_override,
                 reserved_tuple,
