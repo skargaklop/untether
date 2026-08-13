@@ -99,7 +99,9 @@ class AcpPeer:
             await self.start()
         await self._write({"jsonrpc": "2.0", "method": method, "params": params})
 
-    async def request(self, method: str, params: Json) -> Json:
+    async def request(
+        self, method: str, params: Json, *, timeout_s: float | None = None
+    ) -> Json:
         if self._proc is None or self._proc.stdin is None:
             await self.start()
         assert self._proc is not None and self._proc.stdin is not None
@@ -111,7 +113,9 @@ class AcpPeer:
             {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
         )
         try:
-            with anyio.fail_after(self.request_timeout_s):
+            with anyio.fail_after(
+                self.request_timeout_s if timeout_s is None else timeout_s
+            ):
                 await event.wait()
         except TimeoutError:
             with anyio.CancelScope(shield=True):

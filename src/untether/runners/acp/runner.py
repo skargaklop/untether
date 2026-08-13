@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 from collections.abc import Callable
 from contextlib import suppress
@@ -27,6 +28,8 @@ class AcpRunner(ResumeTokenMixin):
     cwd: str | None = None
     env: dict[str, str] | None = None
     protocol: str = "auto"
+    auth_method: str | None = None
+    auto_auth: bool = False
     turn_timeout_s: float = 1800.0
     request_timeout_s: float = 60.0
     close_timeout_s: float = 5.0
@@ -53,6 +56,73 @@ class AcpRunner(ResumeTokenMixin):
     async def run(self, prompt: str, resume: ResumeToken | None) -> Any:
         async for event in self._run(prompt, resume):
             yield event
+
+    async def _prompt_with_updates(
+        self, peer: Any, adapter: ProtocolAdapter, sid: str, prompt: str,
+        state: AcpSessionState,
+    ) -> tuple[Any, list[Any]]:
+        """Keep consuming duplex traffic while the prompt request is pending."""
+        async def request_prompt() -> Any:
+            try:
+                return await peer.request(
+                    "session/prompt", adapter.prompt_params(sid, prompt),
+                    timeout_s=self.turn_timeout_s,
+                )
+            except TypeError as exc:
+                if "timeout_s" not in str(exc):
+                    raise
+                return await peer.request(
+                    "session/prompt", adapter.prompt_params(sid, prompt)
+                )
+
+        request = asyncio.create_task(request_prompt())
+        notifications: set[asyncio.Task[Any]] = set()
+        actions: list[Any] = []
+        deadline = asyncio.get_running_loop().time() + self.turn_timeout_s
+        try:
+            notifications.add(asyncio.create_task(peer.next_notification()))
+            while True:
+                timeout = max(0.0, deadline - asyncio.get_running_loop().time())
+                done, _ = await asyncio.wait(
+                    {request, *notifications}, timeout=timeout,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if not done:
+                    raise TimeoutError(f"ACP turn timeout after {self.turn_timeout_s}s")
+                for task in done:
+                    if task is request:
+                        for notification in notifications:
+                            if (
+                                notification.done()
+                                and not notification.cancelled()
+                                and notification.exception() is None
+                            ):
+                                item = notification.result()
+                                if item.get("method") == "session/update":
+                                    params = item.get("params", {})
+                                    actions.extend(state.apply(
+                                        params if isinstance(params, dict) else {}
+                                    ))
+                        return task.result(), actions
+                    notifications.discard(task)
+                    if task.exception() is not None:
+                        if request.done():
+                            return request.result(), actions
+                        continue
+                    notifications.add(asyncio.create_task(peer.next_notification()))
+                    item = task.result()
+                    if item.get("method") == "session/update":
+                        params = item.get("params", {})
+                        actions.extend(state.apply(
+                            params if isinstance(params, dict) else {}
+                        ))
+        finally:
+            if not request.done():
+                request.cancel()
+            for task in notifications:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(request, *notifications, return_exceptions=True)
 
     async def _apply_run_options(
         self,
@@ -127,13 +197,33 @@ class AcpRunner(ResumeTokenMixin):
                 negotiate(self.protocol, {"protocolVersion": 1}).initialize_params(),
             )
             adapter = negotiate(self.protocol, init)
+            advertised = init.get("authMethods", init.get("auth_methods", []))
+            auth_ids = {
+                str(item.get("id", item.get("method", ""))) if isinstance(item, dict) else str(item)
+                for item in advertised if isinstance(item, (dict, str))
+            } if isinstance(advertised, list) else set()
+            selected_auth = self.auth_method
+            if selected_auth is not None and selected_auth not in auth_ids:
+                raise RuntimeError(f"authenticate: ACP auth method unavailable: {selected_auth}")
+            if selected_auth is not None:
+                await peer.request(adapter.authenticate_method(), {"methodId": selected_auth})
             method = "session/resume" if resume is not None else "session/new"
             params = (
                 {"sessionId": resume.value}
                 if resume is not None
                 else {"cwd": self.cwd or str(Path.cwd())}
             )
-            created = await peer.request(method, params)
+            try:
+                created = await peer.request(method, params)
+            except RuntimeError as exc:
+                if not self.auto_auth or "auth_required" not in str(exc):
+                    raise
+                if len(auth_ids) != 1:
+                    raise RuntimeError(
+                        f"authenticate: ACP auth required; eligible methods: {sorted(auth_ids)}"
+                    ) from exc
+                await peer.request(adapter.authenticate_method(), {"methodId": next(iter(auth_ids))})
+                created = await peer.request(method, params)
             sid = created.get("sessionId")
             if not isinstance(sid, str) or not sid:
                 raise RuntimeError("ACP session creation returned no sessionId")
@@ -148,9 +238,11 @@ class AcpRunner(ResumeTokenMixin):
                 meta["control"] = control
             yield factory.started(token, title=str(self.engine), meta=meta)
             started = True
-            response = await peer.request(
-                "session/prompt", adapter.prompt_params(sid, prompt)
+            response, pending_actions = await self._prompt_with_updates(
+                peer, adapter, sid, prompt, state
             )
+            for action in pending_actions:
+                yield action
             while True:
                 try:
                     with anyio.move_on_after(0.01) as scope:

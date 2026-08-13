@@ -6,6 +6,8 @@ from collections.abc import Callable
 
 
 class AcpAuth:
+    """Small stateful helper for ACP login, logout, and bounded retry."""
+
     def __init__(self, *, method: str) -> None:
         self.method = method
         self.logged_in = False

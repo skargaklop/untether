@@ -16,6 +16,9 @@ class ProtocolAdapter:
     def initialize_params(self) -> Json:
         raise NotImplementedError
 
+    def authenticate_method(self) -> str:
+        return "authenticate" if self.version == 1 else "auth/login"
+
     def prompt_params(self, session_id: str, text: str) -> Json:
         return {"sessionId": session_id, "prompt": [{"type": "text", "text": text}]}
 

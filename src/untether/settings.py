@@ -749,6 +749,8 @@ class AcpEngineSettings(BaseModel):
     command: NonEmptyStr
     args: list[NonEmptyStr] = Field(default_factory=list)
     protocol: Literal["auto", "1", "2"] = "auto"
+    auth_method: NonEmptyStr | None = None
+    auto_auth: bool = False
     env: dict[NonEmptyStr, str] = Field(default_factory=dict)
     cwd: NonEmptyStr | None = None
     turn_timeout_s: float = Field(default=1800.0, gt=0)

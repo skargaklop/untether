@@ -21,6 +21,8 @@ def build_acp_runner(config: EngineConfig, project_dir: Path) -> _BackendRunner:
         cwd=str(config.get("cwd") or project_dir),
         env=config.get("env"),
         protocol=str(config.get("protocol", "auto")),
+        auth_method=config.get("auth_method"),
+        auto_auth=bool(config.get("auto_auth", False)),
         turn_timeout_s=float(config.get("turn_timeout_s", 1800.0)),
         request_timeout_s=float(config.get("request_timeout_s", 60.0)),
         close_timeout_s=float(config.get("close_timeout_s", 5.0)),
