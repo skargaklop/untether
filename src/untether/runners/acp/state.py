@@ -13,6 +13,11 @@ class AcpSessionState:
     """Bounded, ordered projection of ACP session updates."""
 
     max_output: int = 64_000
+    max_answer: int = 64_000
+    max_message_content: int = 64_000
+    max_messages: int = 256
+    max_actions: int = 256
+    max_unknown_updates: int = 64
     answer: str = ""
     usage: dict[str, Any] = field(default_factory=dict)
     foreground_state: str | None = None
@@ -56,16 +61,17 @@ class AcpSessionState:
             previous = str(message.get("content", ""))
             replacing = update.get("replace") or update.get("contentType") == "replace"
             if replacing:
-                message["content"] = text
+                message["content"] = text[-self.max_message_content :]
                 if message["role"] == "assistant" and previous:
                     self.answer = self.answer.removesuffix(previous)
             else:
-                message["content"] = previous + text
+                message["content"] = (previous + text)[-self.max_message_content :]
             if text and message["role"] == "assistant":
                 if self._replayed_answer.startswith(text):
                     self._replayed_answer = self._replayed_answer[len(text) :]
                 else:
-                    self.answer += text
+                    self.answer = (self.answer + text)[-self.max_answer :]
+            self._trim_messages()
             return []
         if kind in {"metadata", "session_metadata"}:
             value = update.get("metadata", update.get("value", {}))
@@ -140,7 +146,21 @@ class AcpSessionState:
         if kind in {"session_end", "stop", "turn_complete", "error"}:
             return []
         self.unknown_updates.append(dict(update))
+        if len(self.unknown_updates) > self.max_unknown_updates:
+            del self.unknown_updates[: -self.max_unknown_updates]
         return []
+
+    def _trim_messages(self) -> None:
+        if len(self.messages) <= self.max_messages:
+            return
+        for ident in list(self.messages)[: -self.max_messages]:
+            del self.messages[ident]
+
+    def _trim_actions(self) -> None:
+        if len(self.actions) <= self.max_actions:
+            return
+        for ident in list(self.actions)[: -self.max_actions]:
+            del self.actions[ident]
 
     def _event(
         self,
@@ -156,6 +176,7 @@ class AcpSessionState:
             phase = "updated"
         action = Action(id=ident, kind=action_kind, title=title, detail=detail)
         self.actions[ident] = action
+        self._trim_actions()
         return ActionEvent(
             engine=self._factory.engine,
             action=action,

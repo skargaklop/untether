@@ -121,3 +121,39 @@ def test_terminal_base64_chunks_are_decoded_and_bounded() -> None:
         }
     )
     assert state.actions["terminal:x"].detail["output"] == "abcd"
+
+
+def test_reducer_bounds_answer_and_message_content() -> None:
+    state = AcpSessionState(max_answer=5, max_message_content=4)
+    for index in range(20):
+        state.apply(
+            {
+                "sessionUpdate": "message",
+                "messageId": f"message-{index}",
+                "content": "abcdefgh",
+            }
+        )
+
+    assert len(state.answer) <= 5
+    assert all(len(message["content"]) <= 4 for message in state.messages.values())
+
+
+def test_reducer_bounds_unique_actions_and_unknown_updates() -> None:
+    state = AcpSessionState(max_actions=3, max_unknown_updates=2)
+    for index in range(20):
+        state.apply(
+            {
+                "sessionUpdate": "tool_call",
+                "toolCallId": f"tool-{index}",
+                "title": "tool",
+            }
+        )
+        state.apply({"sessionUpdate": "future_extension", "value": f"unknown-{index}"})
+
+    assert len(state.actions) == 3
+    assert set(state.actions) == {"tool:tool-17", "tool:tool-18", "tool:tool-19"}
+    assert len(state.unknown_updates) == 2
+    assert [item["value"] for item in state.unknown_updates] == [
+        "unknown-18",
+        "unknown-19",
+    ]
