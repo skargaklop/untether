@@ -94,6 +94,19 @@ def write_cache(path: Path, value: Any) -> None:
     atomic_write_json(path, {"fetched_at": _now(), "value": value})
 
 
+def load_installation_cache(path: Path) -> dict[str, dict[str, Any]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return {}
+    records = payload.get("records", payload) if isinstance(payload, dict) else {}
+    return records if isinstance(records, dict) else {}
+
+
+def write_installation_cache(path: Path, records: dict[str, dict[str, Any]]) -> None:
+    atomic_write_json(path, {"records": records})
+
+
 def current_platform_target() -> str:
     system = sys.platform
     os_name = (

@@ -1,19 +1,24 @@
 from __future__ import annotations
 
 import shutil
+import time
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
 from .acp_registry import (
+    InstallationRecord,
+    build_install_state,
     choose_binary_distribution,
     current_platform_target,
     discover_installation,
     explicit_backend,
+    load_installation_cache,
     load_registry_agents,
     normalise_registry_id,
     registry_backend,
+    write_installation_cache,
 )
 from .backends import EngineBackend
 from .config import ConfigError, ProjectsConfig
@@ -274,10 +279,17 @@ def build_runtime_spec(
         except (ValueError, OSError) as exc:
             raise ConfigError(f"Invalid ACP engine {engine_id!r}: {exc}") from exc
     if settings.acp.registry.enabled:
-        cache_path = config_path.parent / "cache" / "acp-registry-v1.json"
+        cache_dir = config_path.parent / "cache"
+        cache_path = cache_dir / "acp-registry-v1.json"
+        install_path = cache_dir / "acp-install-state-v1.json"
         agents = load_registry_agents(
             cache_path, ttl_days=settings.acp.registry.cache_ttl_days
         )
+        install_cache = load_installation_cache(install_path)
+        changed = False
+        target = current_platform_target()
+        now = time.time()
+        ttl_s = settings.acp.registry.cache_ttl_days * 86400
         for agent in agents:
             try:
                 engine_id = normalise_registry_id(agent.id)
@@ -287,15 +299,36 @@ def build_runtime_spec(
                     or engine_id in RESERVED_CHAT_COMMANDS
                 ):
                     continue
-                distribution = choose_binary_distribution(
-                    agent, target=current_platform_target()
+                distribution = choose_binary_distribution(agent, target=target)
+                cache_key = f"{agent.id}:{agent.version}:{target}:{distribution.cmd if distribution else ''}"
+                cached = install_cache.get(cache_key)
+                fresh = (
+                    isinstance(cached, dict)
+                    and now - float(cached.get("checked_at", 0)) <= ttl_s
                 )
-                record = discover_installation(agent, target=None, cache=None)
+                record = (
+                    InstallationRecord(
+                        agent.id,
+                        agent.version,
+                        target,
+                        distribution.cmd if distribution else "",
+                        float(cached.get("checked_at", now)),
+                        bool(cached.get("installed")),
+                        cached.get("executable"),
+                    )
+                    if fresh and cached is not None
+                    else discover_installation(agent, target=target, cache=None)
+                )
+                if not fresh:
+                    install_cache[cache_key] = build_install_state(record)
+                    changed = True
                 if record.installed and distribution is not None and record.executable:
                     backends.append(registry_backend(record, distribution))
                     engine_ids.append(engine_id)
             except (ValueError, OSError):
                 continue
+        if changed:
+            write_installation_cache(install_path, install_cache)
     engine_ids = [backend.id for backend in backends]
     projects = settings.to_projects_config(
         config_path=config_path,
