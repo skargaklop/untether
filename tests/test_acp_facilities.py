@@ -31,7 +31,7 @@ async def test_terminal_is_argv_only_bounded_and_root_restricted(tmp_path) -> No
     result = await terminal.run(["python", "-c", "print('0123456789')"], cwd=".")
     assert result.output == "0123"
     with pytest.raises(TypeError):
-        await terminal.run("python -c pass", cwd=".")  # type: ignore[arg-type]
+        await terminal.run("python -c pass", cwd=".")  # ty: ignore[invalid-argument-type]
     with pytest.raises(PermissionError):
         await terminal.run(["python", "-c", "pass"], cwd="..")
 

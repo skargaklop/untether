@@ -363,7 +363,7 @@ class AuthPeer(FakePeer):
         self.auth_required_always = auth_required_always
         self.authenticated = False
 
-    async def request(self, method, params):
+    async def request(self, method, params, **kwargs):
         if method == "initialize":
             self.requests.append((method, params))
             return {
@@ -395,7 +395,7 @@ async def test_runner_consumes_updates_while_prompt_is_pending_and_drains_v1_ord
             super().__init__()
             self._updates = asyncio.Queue()
 
-        async def request(self, method, params):
+        async def request(self, method, params, **kwargs):
             if method == "session/prompt":
                 await self._updates.put(
                     {
@@ -486,7 +486,7 @@ async def test_runner_cancels_broker_interactions_on_teardown():
 @pytest.mark.anyio
 async def test_runner_turn_timeout_is_distinct_from_peer_request_timeout():
     class SlowPromptPeer(FakePeer):
-        async def request(self, method, params):
+        async def request(self, method, params, **kwargs):
             if method == "session/prompt":
                 await asyncio.sleep(0.05)
             return await super().request(method, params)

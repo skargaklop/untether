@@ -89,7 +89,9 @@ def test_choose_binary_distribution_for_current_platform_only() -> None:
             RegistryDistribution(target="windows-x86_64", type="source", cmd="python"),
         ),
     )
-    assert choose_binary_distribution(agent, target="windows-x86_64").cmd == "demo.exe"
+    distribution = choose_binary_distribution(agent, target="windows-x86_64")
+    assert distribution is not None
+    assert distribution.cmd == "demo.exe"
 
 
 def test_cache_freshness_and_stale_fallback(tmp_path: Path) -> None:
