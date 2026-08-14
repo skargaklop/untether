@@ -90,6 +90,30 @@ async def test_auto_negotiation_starts_with_v2_initialize_shape():
 
 
 @pytest.mark.anyio
+async def test_auto_negotiation_retries_v1_on_clean_rejected_connection():
+    class RejectV2Peer(FakePeer):
+        async def request(self, method, params, **kwargs):
+            if method == "initialize":
+                self.requests.append((method, params))
+                raise RuntimeError("ACP JSON-RPC error: unsupported protocol")
+            return await super().request(method, params, **kwargs)
+
+    first = RejectV2Peer(version=2)
+    second = FakePeer(version=1)
+    peers = iter([first, second])
+    runner = AcpRunner(
+        engine="acp_v1",
+        command="unused",
+        peer_factory=lambda: next(peers),
+    )
+    events = [event async for event in runner.run("hello", None)]
+    assert events[-1].ok
+    assert first.requests[0][1]["protocolVersion"] == 2
+    assert second.requests[0][1]["protocolVersion"] == 1
+    assert "clientInfo" in second.requests[0][1]
+
+
+@pytest.mark.anyio
 async def test_runner_emits_three_event_contract_for_new_and_resume():
     peer = FakePeer()
     peer.close_capability = True

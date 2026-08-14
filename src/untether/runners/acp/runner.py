@@ -317,10 +317,32 @@ class AcpRunner(ResumeTokenMixin):
                 if self.protocol == "auto"
                 else (V1Adapter() if self.protocol == "1" else V2Adapter())
             )
-            init = await peer.request(
-                "initialize",
-                requested_adapter.initialize_params(),
-            )
+            try:
+                init = await peer.request(
+                    "initialize",
+                    requested_adapter.initialize_params(),
+                )
+            except (RuntimeError, TimeoutError) as exc:
+                message = str(exc).lower()
+                can_fallback = (
+                    self.protocol == "auto"
+                    and self.allow_v1
+                    and any(
+                        marker in message
+                        for marker in (
+                            "unsupported protocol",
+                            "protocol version",
+                            "rejected",
+                            "reached eof",
+                        )
+                    )
+                )
+                if not can_fallback:
+                    raise
+                await peer.close()
+                peer = self._peer()
+                await peer.start()
+                init = await peer.request("initialize", V1Adapter().initialize_params())
             adapter = negotiate(self.protocol, init, allow_v1=self.allow_v1)
             advertised = init.get("authMethods", init.get("auth_methods", []))
             auth_ids = (
