@@ -17,6 +17,11 @@ def test_v1_and_v2_initialization_shapes() -> None:
     assert V2Adapter().config_key("model") == "configId"
 
 
+def test_initialization_shape_matches_requested_protocol() -> None:
+    assert "info" in V2Adapter().initialize_params()
+    assert "clientInfo" in V1Adapter().initialize_params()
+
+
 def test_v2_batch_normalizes_responses() -> None:
     adapter = V2Adapter()
     batch = [

@@ -16,7 +16,7 @@ from ...runner import ResumeTokenMixin
 from ..run_options import get_run_options
 from .interactions import InteractionBroker
 from .peer import AcpPeer
-from .protocol import Json, ProtocolAdapter, negotiate
+from .protocol import Json, ProtocolAdapter, V1Adapter, V2Adapter, negotiate
 from .state import AcpSessionState
 from .turn import AcpTurnControl
 
@@ -29,6 +29,7 @@ class AcpRunner(ResumeTokenMixin):
     cwd: str | None = None
     env: dict[str, str] | None = None
     protocol: str = "auto"
+    allow_v1: bool = True
     auth_method: str | None = None
     auto_auth: bool = False
     turn_timeout_s: float = 1800.0
@@ -311,11 +312,16 @@ class AcpRunner(ResumeTokenMixin):
         started = False
         try:
             await peer.start()
+            requested_adapter = (
+                V2Adapter()
+                if self.protocol == "auto"
+                else (V1Adapter() if self.protocol == "1" else V2Adapter())
+            )
             init = await peer.request(
                 "initialize",
-                negotiate(self.protocol, {"protocolVersion": 1}).initialize_params(),
+                requested_adapter.initialize_params(),
             )
-            adapter = negotiate(self.protocol, init)
+            adapter = negotiate(self.protocol, init, allow_v1=self.allow_v1)
             advertised = init.get("authMethods", init.get("auth_methods", []))
             auth_ids = (
                 {

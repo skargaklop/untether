@@ -78,6 +78,18 @@ class FakePeer:
 
 
 @pytest.mark.anyio
+async def test_auto_negotiation_starts_with_v2_initialize_shape():
+    peer = FakePeer(version=2)
+    runner = AcpRunner(engine="acp_v2", command="unused", peer_factory=lambda: peer)
+    events = [event async for event in runner.run("hello", None)]
+    init_params = peer.requests[0][1]
+    assert init_params["protocolVersion"] == 2
+    assert "info" in init_params
+    assert "capabilities" in init_params
+    assert events[-1].ok
+
+
+@pytest.mark.anyio
 async def test_runner_emits_three_event_contract_for_new_and_resume():
     peer = FakePeer()
     peer.close_capability = True
