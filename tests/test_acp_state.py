@@ -1,4 +1,36 @@
-from untether.runners.acp.state import AcpSessionState
+from untether.runners.acp.state import AcpMessageLedger, AcpSessionState
+
+
+def test_message_ledger_bounds_repeated_chunks_and_replacements() -> None:
+    ledger = AcpMessageLedger(max_answer=5, max_message_content=4, max_messages=2)
+    for chunk in ("abcdef", "ghijkl", "mnopqr"):
+        ledger.update("m1", "assistant", chunk)
+
+    assert ledger.answer == "nopqr"
+    assert ledger.answer_parts["m1"] == "nopqr"
+    assert ledger.messages["m1"]["content"] == "opqr"
+
+    ledger.update("m1", "assistant", "replacement", replace=True)
+    assert ledger.answer == "ement"
+    assert ledger.answer_parts["m1"] == "ement"
+    assert ledger.messages["m1"]["content"] == "ment"
+
+
+def test_session_reducer_uses_bounded_message_ledger_for_repeated_chunks() -> None:
+    state = AcpSessionState(max_answer=5, max_message_content=4)
+    for _ in range(1000):
+        state.apply(
+            {
+                "sessionUpdate": "message",
+                "messageId": "m1",
+                "content": "chunk",
+            }
+        )
+
+    assert not hasattr(state, "_answer_messages")
+    assert len(state._message_ledger.answer_parts["m1"]) <= 5
+    assert len(state.messages["m1"]["content"]) <= 4
+    assert len(state.answer) <= 5
 
 
 def test_message_replacements_and_metadata_are_reduced_without_corrupting_text():
@@ -100,6 +132,16 @@ def test_replayed_assistant_updates_are_not_appended_to_current_answer() -> None
     state.apply({"sessionUpdate": "agent_message_chunk", "content": "old"})
     state.apply({"sessionUpdate": "agent_message_chunk", "content": "new"})
     assert state.answer == "new"
+
+
+def test_replayed_assistant_updates_still_rebuild_message_projection() -> None:
+    state = AcpSessionState()
+    state.apply({"sessionUpdate": "message", "messageId": "m1", "content": "old"})
+    state.begin_prompt(state.answer)
+    state.apply({"sessionUpdate": "message", "messageId": "m1", "content": "old"})
+
+    assert state.messages["m1"]["content"] == "oldold"
+    assert state.answer == ""
 
 
 def test_terminal_base64_chunks_are_decoded_and_bounded() -> None:

@@ -9,6 +9,50 @@ from ...model import Action, ActionEvent, ActionKind, ActionPhase
 
 
 @dataclass(slots=True)
+class AcpMessageLedger:
+    """Bounded single-source ledger for ordered assistant message projections."""
+
+    max_answer: int = 64_000
+    max_message_content: int = 64_000
+    max_messages: int = 256
+    messages: dict[str, dict[str, Any]] = field(default_factory=dict)
+    answer_parts: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def answer(self) -> str:
+        return "".join(self.answer_parts.values())[-self.max_answer :]
+
+    def update(
+        self,
+        ident: str,
+        role: Any,
+        text: str,
+        *,
+        replace: bool = False,
+        include_answer: bool = True,
+    ) -> None:
+        message = self.messages.setdefault(ident, {"content": "", "role": "assistant"})
+        message["role"] = role
+        previous = str(message.get("content", ""))
+        content = text if replace else previous + text
+        message["content"] = content[-self.max_message_content :]
+        if role == "assistant" and include_answer:
+            previous_part = self.answer_parts.get(ident, "")
+            part = text if replace else previous_part + text
+            self.answer_parts[ident] = part[-self.max_answer :]
+        elif role != "assistant":
+            self.answer_parts.pop(ident, None)
+        self._trim()
+
+    def _trim(self) -> None:
+        if len(self.messages) <= self.max_messages:
+            return
+        for ident in list(self.messages)[: -self.max_messages]:
+            del self.messages[ident]
+            self.answer_parts.pop(ident, None)
+
+
+@dataclass(slots=True)
 class AcpSessionState:
     """Bounded, ordered projection of ACP session updates."""
 
@@ -27,15 +71,23 @@ class AcpSessionState:
     unknown_updates: list[dict[str, Any]] = field(default_factory=list)
     actions: dict[str, Action] = field(default_factory=dict)
     _output: dict[str, str] = field(default_factory=dict)
-    _answer_messages: dict[str, str] = field(default_factory=dict)
     _replayed_answer: str = ""
+    _message_ledger: AcpMessageLedger = field(init=False)
     _factory: EventFactory = field(default_factory=lambda: EventFactory("acp"))
+
+    def __post_init__(self) -> None:
+        self._message_ledger = AcpMessageLedger(
+            max_answer=self.max_answer,
+            max_message_content=self.max_message_content,
+            max_messages=self.max_messages,
+            messages=self.messages,
+        )
 
     def begin_prompt(self, replayed_answer: str = "") -> None:
         """Reset the answer while filtering history replayed by a resume."""
         self._replayed_answer = replayed_answer
         self.answer = ""
-        self._answer_messages.clear()
+        self._message_ledger.answer_parts.clear()
         self.foreground_state = None
         self.stop_reason = None
 
@@ -56,30 +108,23 @@ class AcpSessionState:
                 update.get("messageId") or update.get("message_id") or "current"
             )
             text = self._text(update.get("content", update.get("text", "")))
-            message = self.messages.setdefault(
-                ident, {"content": "", "role": "assistant"}
+            role = update.get(
+                "role", self.messages.get(ident, {}).get("role", "assistant")
             )
-            message["role"] = update.get("role", message.get("role", "assistant"))
-            previous = str(message.get("content", ""))
             replacing = update.get("replace") or update.get("contentType") == "replace"
-            if replacing:
-                message["content"] = text[-self.max_message_content :]
-            else:
-                message["content"] = (previous + text)[-self.max_message_content :]
-            if message["role"] != "assistant":
-                self._answer_messages.pop(ident, None)
-            elif text and self._replayed_answer.startswith(text):
+            include_answer = True
+            if text and role == "assistant" and self._replayed_answer.startswith(text):
                 self._replayed_answer = self._replayed_answer[len(text) :]
-            elif replacing:
-                self._answer_messages[ident] = text
-            elif text:
-                self._answer_messages[ident] = (
-                    self._answer_messages.get(ident, "") + text
-                )
-            else:
-                self._answer_messages.pop(ident, None)
-            self.answer = "".join(self._answer_messages.values())[-self.max_answer :]
-            self._trim_messages()
+                include_answer = False
+            self._message_ledger.update(
+                ident,
+                role,
+                text,
+                replace=replacing,
+                include_answer=include_answer,
+            )
+            self.messages = self._message_ledger.messages
+            self.answer = self._message_ledger.answer
             return []
         if kind in {"metadata", "session_metadata"}:
             value = update.get("metadata", update.get("value", {}))
@@ -157,12 +202,6 @@ class AcpSessionState:
         if len(self.unknown_updates) > self.max_unknown_updates:
             del self.unknown_updates[: -self.max_unknown_updates]
         return []
-
-    def _trim_messages(self) -> None:
-        if len(self.messages) <= self.max_messages:
-            return
-        for ident in list(self.messages)[: -self.max_messages]:
-            del self.messages[ident]
 
     def _trim_actions(self) -> None:
         if len(self.actions) <= self.max_actions:
