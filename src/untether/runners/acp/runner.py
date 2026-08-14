@@ -378,11 +378,16 @@ class AcpRunner(ResumeTokenMixin):
                         action_id=pending.nonce,
                         kind="tool",
                         title="Permission requested",
-                        detail={"nonce": pending.nonce, "options": params.get("options", [])},
+                        detail={
+                            "nonce": pending.nonce,
+                            "options": params.get("options", []),
+                        },
                     )
                 )
                 result = await pending.wait()
-                return result if isinstance(result, dict) else {"approved": bool(result)}
+                return (
+                    result if isinstance(result, dict) else {"approved": bool(result)}
+                )
 
             register_handler = getattr(peer, "register_handler", None)
             if callable(register_handler):
@@ -417,7 +422,9 @@ class AcpRunner(ResumeTokenMixin):
             if ok and adapter.supports_session_close(init):
                 with suppress(Exception):
                     await peer.request(
-                        "session/close", {"sessionId": sid}, timeout_s=self.close_timeout_s
+                        "session/close",
+                        {"sessionId": sid},
+                        timeout_s=self.close_timeout_s,
                     )
             yield factory.completed(
                 ok=ok,

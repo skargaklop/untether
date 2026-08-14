@@ -114,7 +114,10 @@ async def test_close_request_uses_close_timeout_and_preserves_success_on_failure
 
     peer = CloseFailPeer()
     runner = AcpRunner(
-        engine="acp_test", command="unused", peer_factory=lambda: peer, close_timeout_s=0.25
+        engine="acp_test",
+        command="unused",
+        peer_factory=lambda: peer,
+        close_timeout_s=0.25,
     )
     events = [event async for event in runner.run("hello", None)]
     assert events[-1].ok
@@ -130,8 +133,7 @@ async def test_v1_resume_uses_session_resume_when_capability_is_advertised():
     )
     runner = AcpRunner(engine="acp_test", command="unused", peer_factory=lambda: peer)
     events = [
-        event
-        async for event in runner.run("hello", ResumeToken("acp_test", "old"))
+        event async for event in runner.run("hello", ResumeToken("acp_test", "old"))
     ]
     assert events[-1].ok
     assert [method for method, _ in peer.requests] == [
@@ -147,8 +149,7 @@ async def test_v1_resume_falls_back_to_session_load():
     peer = FakePeer(capabilities={"loadSession": True})
     runner = AcpRunner(engine="acp_test", command="unused", peer_factory=lambda: peer)
     events = [
-        event
-        async for event in runner.run("hello", ResumeToken("acp_test", "old"))
+        event async for event in runner.run("hello", ResumeToken("acp_test", "old"))
     ]
     assert events[-1].ok
     assert [method for method, _ in peer.requests][1] == "session/load"
@@ -159,8 +160,7 @@ async def test_v1_resume_fails_before_prompt_without_resume_capability():
     peer = FakePeer(capabilities={})
     runner = AcpRunner(engine="acp_test", command="unused", peer_factory=lambda: peer)
     events = [
-        event
-        async for event in runner.run("hello", ResumeToken("acp_test", "old"))
+        event async for event in runner.run("hello", ResumeToken("acp_test", "old"))
     ]
     assert not events[-1].ok
     assert "load/resume" in (events[-1].error or "")
@@ -420,7 +420,9 @@ async def test_runner_routes_reverse_permission_to_broker_while_prompt_pending()
 async def test_runner_cancels_broker_interactions_on_teardown():
     broker = InteractionBroker(timeout_s=1)
     peer = FakePeer()
-    runner = AcpRunner(engine="acp_test", command="unused", peer_factory=lambda: peer, broker=broker)
+    runner = AcpRunner(
+        engine="acp_test", command="unused", peer_factory=lambda: peer, broker=broker
+    )
     pending = await broker.open("s1", "permission", {})
     events = [event async for event in runner.run("hello", None)]
     assert events[-1].ok

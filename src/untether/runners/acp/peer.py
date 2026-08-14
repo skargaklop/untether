@@ -64,7 +64,9 @@ class AcpPeer:
     closed: bool = field(default=False, init=False)
     _failure: BaseException | None = field(default=None, init=False, repr=False)
     _next_id: int = field(default=1, init=False, repr=False)
-    stderr_tail: deque[str] = field(default_factory=lambda: deque(maxlen=20), init=False)
+    stderr_tail: deque[str] = field(
+        default_factory=lambda: deque(maxlen=20), init=False
+    )
 
     async def __aenter__(self) -> AcpPeer:
         await self.start()
@@ -106,7 +108,9 @@ class AcpPeer:
             while True:
                 line = await buffered.receive_until(b"\n", 1024 * 1024)
                 text = line.decode("utf-8", errors="replace")
-                text = re.sub(r"/(?:home|Users|tmp|var|private/var)/[^ ]+", "[path]", text)
+                text = re.sub(
+                    r"/(?:home|Users|tmp|var|private/var)/[^ ]+", "[path]", text
+                )
                 self.stderr_tail.append(text)
         except (anyio.EndOfStream, anyio.IncompleteRead, anyio.ClosedResourceError):
             return
