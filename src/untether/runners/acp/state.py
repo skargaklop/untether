@@ -17,6 +17,9 @@ class AcpSessionState:
     usage: dict[str, Any] = field(default_factory=dict)
     foreground_state: str | None = None
     stop_reason: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    messages: dict[str, dict[str, Any]] = field(default_factory=dict)
+    unknown_updates: list[dict[str, Any]] = field(default_factory=list)
     actions: dict[str, Action] = field(default_factory=dict)
     _output: dict[str, str] = field(default_factory=dict)
     _replayed_answer: str = ""
@@ -26,6 +29,8 @@ class AcpSessionState:
         """Reset the answer while filtering history replayed by a resume."""
         self._replayed_answer = replayed_answer
         self.answer = ""
+        self.foreground_state = None
+        self.stop_reason = None
 
     def apply(self, update: dict[str, Any]) -> list[ActionEvent]:
         kind = update.get("sessionUpdate") or update.get("type") or update.get("update")
@@ -40,12 +45,28 @@ class AcpSessionState:
                 self.stop_reason = str(reason)
             return []
         if kind in {"agent_message_chunk", "message", "text", "assistant_message"}:
+            ident = str(
+                update.get("messageId") or update.get("message_id") or "current"
+            )
             text = self._text(update.get("content", update.get("text", "")))
-            if text and update.get("role", "assistant") == "assistant":
+            message = self.messages.setdefault(
+                ident, {"content": "", "role": "assistant"}
+            )
+            message["role"] = update.get("role", message.get("role", "assistant"))
+            if update.get("replace") or update.get("contentType") == "replace":
+                message["content"] = text
+            else:
+                message["content"] = str(message.get("content", "")) + text
+            if text and message["role"] == "assistant":
                 if self._replayed_answer.startswith(text):
                     self._replayed_answer = self._replayed_answer[len(text) :]
                 else:
                     self.answer += text
+            return []
+        if kind in {"metadata", "session_metadata"}:
+            value = update.get("metadata", update.get("value", {}))
+            if isinstance(value, dict):
+                self.metadata.update(value)
             return []
         if kind in {"tool_call", "tool_call_update", "tool"}:
             ident = self._id(update, "toolCallId", "callId", "id")
@@ -86,11 +107,6 @@ class AcpSessionState:
             if (
                 update.get("encoding") == "base64"
                 or update.get("dataEncoding") == "base64"
-                or (
-                    isinstance(data, str)
-                    and len(data) % 4 == 0
-                    and all(char.isalnum() or char in "+/=" for char in data)
-                )
             ):
                 try:
                     data = base64.b64decode(str(data)).decode("utf-8", "replace")
@@ -119,17 +135,8 @@ class AcpSessionState:
             return []
         if kind in {"session_end", "stop", "turn_complete", "error"}:
             return []
-        return [
-            self._event(
-                f"note:{len(self.actions)}",
-                "note",
-                "ACP update",
-                {"type": kind},
-                "updated",
-                None,
-                update,
-            )
-        ]
+        self.unknown_updates.append(dict(update))
+        return []
 
     def _event(
         self,
