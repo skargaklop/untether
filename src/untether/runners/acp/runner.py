@@ -14,6 +14,7 @@ from ...events import EventFactory
 from ...model import EngineId, ResumeToken
 from ...runner import ResumeTokenMixin
 from ..run_options import get_run_options
+from .facilities import AcpClientFacilities
 from .interactions import InteractionBroker
 from .peer import AcpPeer
 from .protocol import Json, ProtocolAdapter, V1Adapter, V2Adapter, negotiate
@@ -39,6 +40,7 @@ class AcpRunner(ResumeTokenMixin):
     config_option_map: dict[str, str] = field(default_factory=dict)
     peer_factory: Callable[[], Any] | None = None
     broker: InteractionBroker = field(default_factory=InteractionBroker)
+    facilities: AcpClientFacilities | None = None
     resume_re: re.Pattern[str] = field(
         default=re.compile(
             r"(?im)^\s*`?[\w-]+\s+(?:resume\s+)?(?P<token>[\w.-]+)`?\s*$"
@@ -317,10 +319,15 @@ class AcpRunner(ResumeTokenMixin):
                 if self.protocol == "auto"
                 else (V1Adapter() if self.protocol == "1" else V2Adapter())
             )
+            client_capabilities = (
+                self.facilities.capabilities(requested_adapter.version)
+                if self.facilities is not None
+                else {}
+            )
             try:
                 init = await peer.request(
                     "initialize",
-                    requested_adapter.initialize_params(),
+                    requested_adapter.initialize_params(client_capabilities),
                 )
             except (RuntimeError, TimeoutError) as exc:
                 message = str(exc).lower()
@@ -342,7 +349,14 @@ class AcpRunner(ResumeTokenMixin):
                 await peer.close()
                 peer = self._peer()
                 await peer.start()
-                init = await peer.request("initialize", V1Adapter().initialize_params())
+                init = await peer.request(
+                    "initialize",
+                    V1Adapter().initialize_params(
+                        self.facilities.capabilities(1)
+                        if self.facilities is not None
+                        else {}
+                    ),
+                )
             adapter = negotiate(self.protocol, init, allow_v1=self.allow_v1)
             advertised = init.get("authMethods", init.get("auth_methods", []))
             auth_ids = (

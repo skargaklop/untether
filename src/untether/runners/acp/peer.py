@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import os
 import re
 from collections import deque
 from collections.abc import Awaitable, Callable
@@ -90,7 +91,7 @@ class AcpPeer:
         if self.cwd is not None:
             kwargs["cwd"] = self.cwd
         if self.env is not None:
-            kwargs["env"] = self.env
+            kwargs["env"] = {**os.environ, **self.env}
         self._ctx = manage_subprocess([self.command, *self.args], **kwargs)
         self._proc = await self._ctx.__aenter__()
         if self._proc.stdin is None or self._proc.stdout is None:

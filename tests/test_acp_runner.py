@@ -114,6 +114,23 @@ async def test_auto_negotiation_retries_v1_on_clean_rejected_connection():
 
 
 @pytest.mark.anyio
+async def test_runner_advertises_enabled_v1_facilities():
+    from untether.runners.acp.facilities import AcpClientFacilities, RootFilesystem
+
+    peer = FakePeer()
+    runner = AcpRunner(
+        engine="acp_test",
+        command="unused",
+        peer_factory=lambda: peer,
+        protocol="1",
+        facilities=AcpClientFacilities(filesystem=RootFilesystem(["."])),
+    )
+    events = [event async for event in runner.run("hello", None)]
+    assert events[-1].ok
+    assert peer.requests[0][1]["clientCapabilities"]["fs"]
+
+
+@pytest.mark.anyio
 async def test_runner_emits_three_event_contract_for_new_and_resume():
     peer = FakePeer()
     peer.close_capability = True

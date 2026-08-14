@@ -20,6 +20,9 @@ def test_v1_and_v2_initialization_shapes() -> None:
 def test_initialization_shape_matches_requested_protocol() -> None:
     assert "info" in V2Adapter().initialize_params()
     assert "clientInfo" in V1Adapter().initialize_params()
+    assert V1Adapter().initialize_params({"fs": {"readTextFile": True}})[
+        "clientCapabilities"
+    ]["fs"]["readTextFile"]
 
 
 def test_v2_batch_normalizes_responses() -> None:

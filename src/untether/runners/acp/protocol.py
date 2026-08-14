@@ -13,7 +13,7 @@ class ProtocolNegotiationError(RuntimeError):
 class ProtocolAdapter:
     version: int
 
-    def initialize_params(self) -> Json:
+    def initialize_params(self, capabilities: Json | None = None) -> Json:
         raise NotImplementedError
 
     def authenticate_method(self) -> str:
@@ -64,11 +64,11 @@ class ProtocolAdapter:
 class V1Adapter(ProtocolAdapter):
     version: int = 1
 
-    def initialize_params(self) -> Json:
+    def initialize_params(self, capabilities: Json | None = None) -> Json:
         return {
             "protocolVersion": 1,
             "clientInfo": {"name": "untether", "version": "0"},
-            "clientCapabilities": {},
+            "clientCapabilities": capabilities or {},
         }
 
 
@@ -76,11 +76,11 @@ class V1Adapter(ProtocolAdapter):
 class V2Adapter(ProtocolAdapter):
     version: int = 2
 
-    def initialize_params(self) -> Json:
+    def initialize_params(self, capabilities: Json | None = None) -> Json:
         return {
             "protocolVersion": 2,
             "info": {"name": "untether", "version": "0"},
-            "capabilities": {},
+            "capabilities": capabilities or {},
         }
 
     def config_key(self, name: str) -> str:
