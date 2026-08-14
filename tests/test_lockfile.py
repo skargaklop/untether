@@ -8,6 +8,37 @@ import pytest
 
 import untether.lockfile as lockfile
 
+
+def test_lockfile_imports_without_fcntl_on_windows() -> None:
+    script = textwrap.dedent(
+        """
+        import builtins
+        import sys
+        import types
+
+        sys.platform = "win32"
+        sys.modules["msvcrt"] = types.ModuleType("msvcrt")
+        original_import = builtins.__import__
+
+        def block_fcntl(name, *args, **kwargs):
+            if name == "fcntl":
+                raise ModuleNotFoundError("No module named 'fcntl'")
+            return original_import(name, *args, **kwargs)
+
+        builtins.__import__ = block_fcntl
+        import untether.lockfile
+        print("lockfile import ok")
+        """
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "lockfile import ok" in proc.stdout
+
+
 pytestmark_xfail_windows = pytest.mark.skipif(
     sys.platform == "win32",
     reason="msvcrt mandatory locking blocks reading stamp while lock is held",
