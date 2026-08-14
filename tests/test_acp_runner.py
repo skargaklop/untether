@@ -3,6 +3,7 @@ import asyncio
 import pytest
 
 from untether.model import ActionEvent, CompletedEvent, ResumeToken, StartedEvent
+from untether.runners.acp.interactions import InteractionBroker
 from untether.runners.acp.runner import AcpRunner
 from untether.runners.run_options import EngineRunOptions, apply_run_options
 
@@ -369,6 +370,62 @@ async def test_runner_consumes_updates_while_prompt_is_pending_and_drains_v1_ord
         events.index(next(event for event in events if isinstance(event, ActionEvent)))
         < len(events) - 1
     )
+
+
+@pytest.mark.anyio
+async def test_runner_routes_reverse_permission_to_broker_while_prompt_pending():
+    class PermissionPeer(FakePeer):
+        def __init__(self):
+            super().__init__()
+            self.handler_registered = asyncio.Event()
+            self.permission_seen = asyncio.Event()
+            self.cancelled = False
+
+        def register_handler(self, method, handler):
+            assert method == "session/request_permission"
+            self.handler = handler
+            self.handler_registered.set()
+
+        async def request(self, method, params, **kwargs):
+            if method == "session/prompt":
+                await self.handler_registered.wait()
+                interaction = asyncio.create_task(
+                    self.handler({"tool": "shell", "options": [{"id": "allow"}]})
+                )
+                while broker.pending_count == 0:
+                    await asyncio.sleep(0)
+                pending = next(iter(broker._pending.values()))
+                await broker.resolve("s1", pending.nonce, {"approved": True})
+                result = await interaction
+                assert result["approved"] is True
+                self.permission_seen.set()
+                return {"stopReason": "end_turn"}
+            return await super().request(method, params, **kwargs)
+
+    broker = InteractionBroker(timeout_s=1)
+    peer = PermissionPeer()
+    runner = AcpRunner(
+        engine="acp_test", command="unused", peer_factory=lambda: peer, broker=broker
+    )
+    events = [event async for event in runner.run("hello", None)]
+    permission = next(event for event in events if isinstance(event, ActionEvent))
+    assert permission.action.kind == "tool"
+    assert permission.action.detail["nonce"]
+    assert permission.action.detail["options"] == [{"id": "allow"}]
+    assert peer.permission_seen.is_set()
+    assert broker.pending_count == 0
+
+
+@pytest.mark.anyio
+async def test_runner_cancels_broker_interactions_on_teardown():
+    broker = InteractionBroker(timeout_s=1)
+    peer = FakePeer()
+    runner = AcpRunner(engine="acp_test", command="unused", peer_factory=lambda: peer, broker=broker)
+    pending = await broker.open("s1", "permission", {})
+    events = [event async for event in runner.run("hello", None)]
+    assert events[-1].ok
+    with pytest.raises(RuntimeError, match="cancelled"):
+        await pending.wait()
 
 
 @pytest.mark.anyio

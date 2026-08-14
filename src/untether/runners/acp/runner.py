@@ -14,6 +14,7 @@ from ...events import EventFactory
 from ...model import EngineId, ResumeToken
 from ...runner import ResumeTokenMixin
 from ..run_options import get_run_options
+from .interactions import InteractionBroker
 from .peer import AcpPeer
 from .protocol import Json, ProtocolAdapter, negotiate
 from .state import AcpSessionState
@@ -36,6 +37,7 @@ class AcpRunner(ResumeTokenMixin):
     close_timeout_s: float = 5.0
     config_option_map: dict[str, str] = field(default_factory=dict)
     peer_factory: Callable[[], Any] | None = None
+    broker: InteractionBroker = field(default_factory=InteractionBroker)
     resume_re: re.Pattern[str] = field(
         default=re.compile(
             r"(?im)^\s*`?[\w-]+\s+(?:resume\s+)?(?P<token>[\w.-]+)`?\s*$"
@@ -367,6 +369,24 @@ class AcpRunner(ResumeTokenMixin):
                 state.begin_prompt(state.answer)
             notify = getattr(peer, "notify", None)
             control = AcpTurnControl(notify, sid) if callable(notify) else None
+            reverse_actions: list[Any] = []
+
+            async def request_permission(params: Json) -> Json:
+                pending = await self.broker.open(sid, "permission", params)
+                reverse_actions.append(
+                    factory.action_started(
+                        action_id=pending.nonce,
+                        kind="tool",
+                        title="Permission requested",
+                        detail={"nonce": pending.nonce, "options": params.get("options", [])},
+                    )
+                )
+                result = await pending.wait()
+                return result if isinstance(result, dict) else {"approved": bool(result)}
+
+            register_handler = getattr(peer, "register_handler", None)
+            if callable(register_handler):
+                register_handler("session/request_permission", request_permission)
             meta = {"acp_protocol": adapter.version}
             if control is not None:
                 meta["control"] = control
@@ -375,7 +395,7 @@ class AcpRunner(ResumeTokenMixin):
             response, pending_actions = await self._prompt_with_updates(
                 peer, adapter, sid, prompt, state
             )
-            for action in pending_actions:
+            for action in reverse_actions + pending_actions:
                 yield action
             while True:
                 try:
@@ -418,4 +438,5 @@ class AcpRunner(ResumeTokenMixin):
                 yield factory.completed_error(error=str(exc))
         finally:
             with anyio.move_on_after(self.close_timeout_s):
-                await peer.close()
+                await self.broker.cancel_owner(sid if token is not None else "")
+            await peer.close()
