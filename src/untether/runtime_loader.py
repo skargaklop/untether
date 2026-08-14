@@ -119,6 +119,10 @@ def build_router(
             engine_cfg = {}
             had_user_config = True  # they tried to configure it, just badly
 
+        if backend.config:
+            engine_cfg = {**backend.config, **engine_cfg}
+            had_user_config = True
+
         try:
             runner = backend.build_runner(engine_cfg, config_path)
         except Exception as exc:

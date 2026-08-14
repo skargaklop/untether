@@ -42,6 +42,7 @@ def acp_backend(engine: str, config: EngineConfig) -> EngineBackend:
         id=engine,
         build_runner=build_acp_runner,
         cli_cmd=str(config.get("command", "acp-agent")),
+        config=merged,
     )
 
 

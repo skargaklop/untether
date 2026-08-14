@@ -23,3 +23,4 @@ class EngineBackend:
     build_runner: Callable[[EngineConfig, Path], Runner]
     cli_cmd: str | None = None
     install_cmd: str | None = None
+    config: EngineConfig | None = None
