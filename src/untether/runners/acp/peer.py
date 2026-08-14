@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import re
+from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -50,6 +52,9 @@ class AcpPeer:
     _reader_scope: anyio.CancelScope | None = field(
         default=None, init=False, repr=False
     )
+    _stderr_task: asyncio.Task[None] | None = field(
+        default=None, init=False, repr=False
+    )
     _reader_task: asyncio.Task[None] | None = field(
         default=None, init=False, repr=False
     )
@@ -59,6 +64,7 @@ class AcpPeer:
     closed: bool = field(default=False, init=False)
     _failure: BaseException | None = field(default=None, init=False, repr=False)
     _next_id: int = field(default=1, init=False, repr=False)
+    stderr_tail: deque[str] = field(default_factory=lambda: deque(maxlen=20), init=False)
 
     async def __aenter__(self) -> AcpPeer:
         await self.start()
@@ -91,6 +97,19 @@ class AcpPeer:
         send, receive = anyio.create_memory_object_stream[Json](self.queue_size)
         self._notify_send, self._notifications = send, receive
         self._reader_task = asyncio.create_task(self._read_loop())
+        self._stderr_task = asyncio.create_task(self._drain_stderr())
+
+    async def _drain_stderr(self) -> None:
+        assert self._proc is not None and self._proc.stderr is not None
+        buffered = BufferedByteReceiveStream(self._proc.stderr)
+        try:
+            while True:
+                line = await buffered.receive_until(b"\n", 1024 * 1024)
+                text = line.decode("utf-8", errors="replace")
+                text = re.sub(r"/(?:home|Users|tmp|var|private/var)/[^ ]+", "[path]", text)
+                self.stderr_tail.append(text)
+        except (anyio.EndOfStream, anyio.IncompleteRead, anyio.ClosedResourceError):
+            return
 
     def register_handler(self, method: str, handler: Handler) -> None:
         self._handlers[method] = handler
@@ -221,6 +240,9 @@ class AcpPeer:
             if self._reader_task is not None:
                 self._reader_task.cancel()
                 self._reader_task = None
+            if self._stderr_task is not None:
+                self._stderr_task.cancel()
+                self._stderr_task = None
             if self._ctx is not None:
                 with anyio.move_on_after(2):
                     await self._ctx.__aexit__(None, None, None)

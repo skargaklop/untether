@@ -19,7 +19,13 @@ class AcpSessionState:
     stop_reason: str | None = None
     actions: dict[str, Action] = field(default_factory=dict)
     _output: dict[str, str] = field(default_factory=dict)
+    _replayed_answer: str = ""
     _factory: EventFactory = field(default_factory=lambda: EventFactory("acp"))
+
+    def begin_prompt(self, replayed_answer: str = "") -> None:
+        """Reset the answer while filtering history replayed by a resume."""
+        self._replayed_answer = replayed_answer
+        self.answer = ""
 
     def apply(self, update: dict[str, Any]) -> list[ActionEvent]:
         kind = update.get("sessionUpdate") or update.get("type") or update.get("update")
@@ -36,7 +42,10 @@ class AcpSessionState:
         if kind in {"agent_message_chunk", "message", "text", "assistant_message"}:
             text = self._text(update.get("content", update.get("text", "")))
             if text and update.get("role", "assistant") == "assistant":
-                self.answer += text
+                if self._replayed_answer.startswith(text):
+                    self._replayed_answer = self._replayed_answer[len(text) :]
+                else:
+                    self.answer += text
             return []
         if kind in {"tool_call", "tool_call_update", "tool"}:
             ident = self._id(update, "toolCallId", "callId", "id")

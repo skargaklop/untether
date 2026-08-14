@@ -34,3 +34,27 @@ def test_controlled_negotiation_and_v1_fallback() -> None:
         negotiate("2", {"protocolVersion": 1})
     with pytest.raises(ProtocolNegotiationError):
         negotiate("auto", {"protocolVersion": 1}, allow_v1=False)
+
+
+def test_v1_resume_capability_prefers_resume_over_load() -> None:
+    adapter = V1Adapter()
+    result = {
+        "agentCapabilities": {
+            "loadSession": True,
+            "sessionCapabilities": {"resume": True},
+        }
+    }
+    assert adapter.resume_method(result) == "session/resume"
+
+
+def test_v1_resume_capability_falls_back_to_load() -> None:
+    adapter = V1Adapter()
+    assert adapter.resume_method({"agentCapabilities": {"loadSession": True}}) == (
+        "session/load"
+    )
+
+
+def test_v1_resume_capability_requires_load_or_resume() -> None:
+    adapter = V1Adapter()
+    with pytest.raises(ProtocolNegotiationError, match="load/resume"):
+        adapter.resume_method({"agentCapabilities": {}})

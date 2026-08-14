@@ -29,6 +29,28 @@ class ProtocolAdapter:
         value = session.get("configOptions", session.get("config_options", []))
         return value if isinstance(value, list) else []
 
+    def supports_session_close(self, init: Json) -> bool:
+        if self.version != 1:
+            return True
+        capabilities = init.get("agentCapabilities", {})
+        if not isinstance(capabilities, dict):
+            return False
+        sessions = capabilities.get("sessionCapabilities", {})
+        return isinstance(sessions, dict) and sessions.get("close") is True
+
+    def resume_method(self, init: Json) -> str:
+        if self.version != 1:
+            return "session/resume"
+        capabilities = init.get("agentCapabilities", {})
+        if not isinstance(capabilities, dict):
+            capabilities = {}
+        sessions = capabilities.get("sessionCapabilities", {})
+        if isinstance(sessions, dict) and sessions.get("resume") is True:
+            return "session/resume"
+        if capabilities.get("loadSession") is True:
+            return "session/load"
+        raise ProtocolNegotiationError("ACP v1 has no load/resume capability")
+
     def responses(self, message: list[Json] | Json) -> dict[Any, Json]:
         items = message if isinstance(message, list) else [message]
         return {

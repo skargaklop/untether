@@ -77,6 +77,23 @@ async def test_peer_eof_and_malformed_input_are_protocol_errors() -> None:
 
 
 @pytest.mark.anyio
+async def test_chatty_stderr_is_drained_bounded_and_redacted_without_blocking() -> None:
+    code = """
+import json, sys
+for i in range(1000):
+    print('/home/secret/api-key-' + str(i), file=sys.stderr, flush=True)
+request = json.loads(sys.stdin.readline())
+print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{}}), flush=True)
+"""
+    peer = AcpPeer(sys.executable, fixture(code), request_timeout_s=1)
+    await peer.start()
+    assert await peer.request("hello", {}) == {}
+    assert len(peer.stderr_tail) <= 20
+    assert all("/home/secret" not in line for line in peer.stderr_tail)
+    await peer.close()
+
+
+@pytest.mark.anyio
 async def test_peer_timeout_tears_down_process() -> None:
     code = "import sys; sys.stdin.readline(); import time; time.sleep(30)"
     peer = AcpPeer(sys.executable, fixture(code), request_timeout_s=0.01)

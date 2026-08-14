@@ -65,6 +65,15 @@ def test_reducer_handles_v1_names_and_unknown_variants_without_crashing() -> Non
     assert state.answer == "one two"
 
 
+def test_replayed_assistant_updates_are_not_appended_to_current_answer() -> None:
+    state = AcpSessionState()
+    state.apply({"sessionUpdate": "agent_message_chunk", "content": "old"})
+    state.begin_prompt(state.answer)
+    state.apply({"sessionUpdate": "agent_message_chunk", "content": "old"})
+    state.apply({"sessionUpdate": "agent_message_chunk", "content": "new"})
+    assert state.answer == "new"
+
+
 def test_terminal_base64_chunks_are_decoded_and_bounded() -> None:
     state = AcpSessionState(max_output=4)
     state.apply({"sessionUpdate": "terminal_output", "terminalId": "x", "data": "YWJj"})

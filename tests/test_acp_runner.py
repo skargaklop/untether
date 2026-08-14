@@ -8,23 +8,43 @@ from untether.runners.run_options import EngineRunOptions, apply_run_options
 
 
 class FakePeer:
-    def __init__(self, *, version=1, session_id="s1", fail=False):
+    def __init__(
+        self,
+        *,
+        version=1,
+        session_id="s1",
+        fail=False,
+        close_capability=True,
+        capabilities=None,
+    ):
         self.version = version
         self.session_id = session_id
         self.fail = fail
+        self.capabilities = capabilities
+        self.close_capability = close_capability
         self.closed = False
         self.requests = []
 
     async def start(self):
         return None
 
-    async def request(self, method, params):
+    async def request(self, method, params, **kwargs):
         self.requests.append((method, params))
         if self.fail:
             raise RuntimeError("peer failed")
         if method == "initialize":
-            return {"protocolVersion": self.version}
-        if method in {"session/new", "session/resume"}:
+            capabilities = self.capabilities
+            if capabilities is None:
+                capabilities = (
+                    {"sessionCapabilities": {"close": True, "resume": True}}
+                    if self.close_capability
+                    else {}
+                )
+            return {
+                "protocolVersion": self.version,
+                "agentCapabilities": capabilities,
+            }
+        if method in {"session/new", "session/load", "session/resume"}:
             return {
                 "sessionId": self.session_id,
                 "configOptions": [
@@ -59,6 +79,7 @@ class FakePeer:
 @pytest.mark.anyio
 async def test_runner_emits_three_event_contract_for_new_and_resume():
     peer = FakePeer()
+    peer.close_capability = True
     runner = AcpRunner(engine="acp_test", command="unused", peer_factory=lambda: peer)
     events = [event async for event in runner.run("hello", None)]
     assert isinstance(events[0], StartedEvent)
@@ -70,6 +91,79 @@ async def test_runner_emits_three_event_contract_for_new_and_resume():
         "session/prompt",
         "session/close",
     ]
+
+
+@pytest.mark.anyio
+async def test_v1_without_close_capability_skips_session_close():
+    peer = FakePeer(capabilities={})
+    runner = AcpRunner(engine="acp_test", command="unused", peer_factory=lambda: peer)
+    events = [event async for event in runner.run("hello", None)]
+    assert events[-1].ok
+    assert "session/close" not in [method for method, _ in peer.requests]
+
+
+@pytest.mark.anyio
+async def test_close_request_uses_close_timeout_and_preserves_success_on_failure():
+    class CloseFailPeer(FakePeer):
+        async def request(self, method, params, **kwargs):
+            if method == "session/close":
+                assert kwargs == {"timeout_s": 0.25}
+                raise RuntimeError("close failed")
+            return await super().request(method, params)
+
+    peer = CloseFailPeer()
+    runner = AcpRunner(
+        engine="acp_test", command="unused", peer_factory=lambda: peer, close_timeout_s=0.25
+    )
+    events = [event async for event in runner.run("hello", None)]
+    assert events[-1].ok
+    assert events[-1].error is None
+
+
+@pytest.mark.anyio
+async def test_v1_resume_uses_session_resume_when_capability_is_advertised():
+    peer = FakePeer(
+        capabilities={
+            "sessionCapabilities": {"resume": True, "close": True},
+        }
+    )
+    runner = AcpRunner(engine="acp_test", command="unused", peer_factory=lambda: peer)
+    events = [
+        event
+        async for event in runner.run("hello", ResumeToken("acp_test", "old"))
+    ]
+    assert events[-1].ok
+    assert [method for method, _ in peer.requests] == [
+        "initialize",
+        "session/resume",
+        "session/prompt",
+        "session/close",
+    ]
+
+
+@pytest.mark.anyio
+async def test_v1_resume_falls_back_to_session_load():
+    peer = FakePeer(capabilities={"loadSession": True})
+    runner = AcpRunner(engine="acp_test", command="unused", peer_factory=lambda: peer)
+    events = [
+        event
+        async for event in runner.run("hello", ResumeToken("acp_test", "old"))
+    ]
+    assert events[-1].ok
+    assert [method for method, _ in peer.requests][1] == "session/load"
+
+
+@pytest.mark.anyio
+async def test_v1_resume_fails_before_prompt_without_resume_capability():
+    peer = FakePeer(capabilities={})
+    runner = AcpRunner(engine="acp_test", command="unused", peer_factory=lambda: peer)
+    events = [
+        event
+        async for event in runner.run("hello", ResumeToken("acp_test", "old"))
+    ]
+    assert not events[-1].ok
+    assert "load/resume" in (events[-1].error or "")
+    assert "session/prompt" not in [method for method, _ in peer.requests]
 
 
 @pytest.mark.anyio
@@ -218,12 +312,18 @@ class AuthPeer(FakePeer):
     async def request(self, method, params):
         if method == "initialize":
             self.requests.append((method, params))
-            return {"protocolVersion": self.version, "authMethods": self.auth_methods}
+            return {
+                "protocolVersion": self.version,
+                "authMethods": self.auth_methods,
+                "agentCapabilities": {
+                    "sessionCapabilities": {"resume": True, "close": True}
+                },
+            }
         if method in {"authenticate", "auth/login"}:
             self.requests.append((method, params))
             self.authenticated = True
             return {}
-        if method in {"session/new", "session/resume"}:
+        if method in {"session/new", "session/load", "session/resume"}:
             self.requests.append((method, params))
             if self.auth_required_always or (
                 self.auth_required_once and not self.authenticated

@@ -335,7 +335,9 @@ class AcpRunner(ResumeTokenMixin):
                 await peer.request(
                     adapter.authenticate_method(), {"methodId": selected_auth}
                 )
-            method = "session/resume" if resume is not None else "session/new"
+            method = (
+                adapter.resume_method(init) if resume is not None else "session/new"
+            )
             params = (
                 {"sessionId": resume.value}
                 if resume is not None
@@ -361,6 +363,8 @@ class AcpRunner(ResumeTokenMixin):
             await self._apply_run_options(
                 peer, adapter, sid, created, resume is not None
             )
+            if resume is not None:
+                state.begin_prompt(state.answer)
             notify = getattr(peer, "notify", None)
             control = AcpTurnControl(notify, sid) if callable(notify) else None
             meta = {"acp_protocol": adapter.version}
@@ -390,9 +394,11 @@ class AcpRunner(ResumeTokenMixin):
             answer = state.answer
             reason = str(response.get("stopReason", ""))
             ok = reason not in {"error", "failed"}
-            if ok:
+            if ok and adapter.supports_session_close(init):
                 with suppress(Exception):
-                    await peer.request("session/close", {"sessionId": sid})
+                    await peer.request(
+                        "session/close", {"sessionId": sid}, timeout_s=self.close_timeout_s
+                    )
             yield factory.completed(
                 ok=ok,
                 answer=answer,
