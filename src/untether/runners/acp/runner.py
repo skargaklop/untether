@@ -151,7 +151,76 @@ class AcpRunner(ResumeTokenMixin):
                                             params if isinstance(params, dict) else {}
                                         )
                                     )
-                        return task.result(), actions
+                        response = task.result()
+                        if adapter.version != 2 or response.get("stopReason"):
+                            return response, actions
+                        # ACP v2 acknowledges prompt acceptance separately; only a
+                        # post-acceptance running -> idle transition completes it.
+                        saw_running = False
+                        for notification in list(notifications):
+                            if (
+                                notification.done()
+                                and not notification.cancelled()
+                                and notification.exception() is None
+                            ):
+                                item = notification.result()
+                                notifications.discard(notification)
+                                if item.get("method") == "session/update":
+                                    params = item.get("params", {})
+                                    if isinstance(params, dict):
+                                        actions.extend(state.apply(params))
+                        if state.foreground_state == "running":
+                            saw_running = True
+                        if not notifications:
+                            notifications.add(
+                                asyncio.create_task(peer.next_notification())
+                            )
+                        if (
+                            saw_running
+                            and state.foreground_state == "idle"
+                            and state.stop_reason is not None
+                        ):
+                            return response, actions
+                        while True:
+                            remaining = max(
+                                0.0,
+                                deadline - asyncio.get_running_loop().time(),
+                            )
+                            if not remaining:
+                                raise TimeoutError(
+                                    f"ACP turn timeout after {self.turn_timeout_s}s"
+                                )
+                            done, _ = await asyncio.wait(
+                                notifications,
+                                timeout=remaining,
+                                return_when=asyncio.FIRST_COMPLETED,
+                            )
+                            if not done:
+                                raise TimeoutError(
+                                    f"ACP turn timeout after {self.turn_timeout_s}s"
+                                )
+                            for notification in done:
+                                notifications.discard(notification)
+                                if notification.exception() is not None:
+                                    continue
+                                item = notification.result()
+                                notifications.add(
+                                    asyncio.create_task(peer.next_notification())
+                                )
+                                if item.get("method") != "session/update":
+                                    continue
+                                params = item.get("params", {})
+                                if not isinstance(params, dict):
+                                    continue
+                                actions.extend(state.apply(params))
+                                if state.foreground_state == "running":
+                                    saw_running = True
+                                elif (
+                                    saw_running
+                                    and state.foreground_state == "idle"
+                                    and state.stop_reason is not None
+                                ):
+                                    return response, actions
                     notifications.discard(task)
                     if task.exception() is not None:
                         if request.done():

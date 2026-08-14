@@ -359,3 +359,114 @@ async def test_runner_failure_before_session_is_one_failed_completion():
     assert isinstance(events[0], CompletedEvent)
     assert not events[0].ok
     assert peer.closed
+
+
+@pytest.mark.anyio
+async def test_v2_prompt_completes_only_after_post_prompt_running_and_idle():
+    class V2Peer(FakePeer):
+        def __init__(self):
+            super().__init__(version=2)
+            self._updates = asyncio.Queue()
+            self.prompt_called = False
+
+        async def request(self, method, params, **kwargs):
+            if method == "session/prompt":
+                self.prompt_called = True
+
+                async def publish_updates():
+                    await asyncio.sleep(0.01)
+                    await self._updates.put(
+                        {
+                            "method": "session/update",
+                            "params": {
+                                "sessionUpdate": "state_update",
+                                "state": "running",
+                            },
+                        }
+                    )
+                    await self._updates.put(
+                        {
+                            "method": "session/update",
+                            "params": {
+                                "sessionUpdate": "agent_message_chunk",
+                                "content": "answer",
+                            },
+                        }
+                    )
+                    await self._updates.put(
+                        {
+                            "method": "session/update",
+                            "params": {
+                                "sessionUpdate": "state_update",
+                                "state": "idle",
+                                "stopReason": "completed",
+                            },
+                        }
+                    )
+
+                self._publisher = asyncio.create_task(publish_updates())
+                return {}
+            return await super().request(method, params, **kwargs)
+
+        async def next_notification(self):
+            return await self._updates.get()
+
+    peer = V2Peer()
+    runner = AcpRunner(engine="acp_v2", command="unused", peer_factory=lambda: peer)
+    events = [event async for event in runner.run("hello", None)]
+
+    assert events[-1].ok
+    assert events[-1].answer == "answer"
+    assert peer.prompt_called
+
+
+@pytest.mark.anyio
+async def test_v2_stale_idle_before_prompt_does_not_complete_turn():
+    class V2Peer(FakePeer):
+        def __init__(self):
+            super().__init__(version=2)
+            self._updates = asyncio.Queue()
+            self._updates.put_nowait(
+                {
+                    "method": "session/update",
+                    "params": {
+                        "sessionUpdate": "state_update",
+                        "state": "idle",
+                        "stopReason": "completed",
+                    },
+                }
+            )
+
+        async def request(self, method, params, **kwargs):
+            if method == "session/prompt":
+                await asyncio.sleep(0.02)
+                await self._updates.put(
+                    {
+                        "method": "session/update",
+                        "params": {"sessionUpdate": "state_update", "state": "running"},
+                    }
+                )
+                await self._updates.put(
+                    {
+                        "method": "session/update",
+                        "params": {
+                            "sessionUpdate": "state_update",
+                            "state": "idle",
+                            "stopReason": "completed",
+                        },
+                    }
+                )
+                return {}
+            return await super().request(method, params, **kwargs)
+
+        async def next_notification(self):
+            return await self._updates.get()
+
+    peer = V2Peer()
+    runner = AcpRunner(
+        engine="acp_v2", command="unused", peer_factory=lambda: peer, turn_timeout_s=1
+    )
+    events = [event async for event in runner.run("hello", None)]
+
+    assert events[-1].ok
+    assert events[-1].answer == ""

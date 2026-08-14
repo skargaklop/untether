@@ -15,6 +15,8 @@ class AcpSessionState:
     max_output: int = 64_000
     answer: str = ""
     usage: dict[str, Any] = field(default_factory=dict)
+    foreground_state: str | None = None
+    stop_reason: str | None = None
     actions: dict[str, Action] = field(default_factory=dict)
     _output: dict[str, str] = field(default_factory=dict)
     _factory: EventFactory = field(default_factory=lambda: EventFactory("acp"))
@@ -22,6 +24,14 @@ class AcpSessionState:
     def apply(self, update: dict[str, Any]) -> list[ActionEvent]:
         kind = update.get("sessionUpdate") or update.get("type") or update.get("update")
         if not isinstance(kind, str):
+            return []
+        if kind in {"state_update", "state", "session_state"}:
+            state = update.get("state", update.get("currentState"))
+            if isinstance(state, str):
+                self.foreground_state = state
+            reason = update.get("stopReason", update.get("stop_reason"))
+            if reason is not None:
+                self.stop_reason = str(reason)
             return []
         if kind in {"agent_message_chunk", "message", "text", "assistant_message"}:
             text = self._text(update.get("content", update.get("text", "")))
