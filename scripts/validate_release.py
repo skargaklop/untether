@@ -138,7 +138,7 @@ def main() -> int:
             failed += 1
 
         # 4. Validate section content
-        warnings, errors = validate_section(lines, section_line)
+        _warnings, errors = validate_section(lines, section_line)
         if errors:
             print(f"FAIL: {len(errors)} issue(s) in changelog section:")
             for err in errors:
