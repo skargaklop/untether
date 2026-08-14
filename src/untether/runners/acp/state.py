@@ -161,6 +161,8 @@ class AcpSessionState:
             return
         for ident in list(self.actions)[: -self.max_actions]:
             del self.actions[ident]
+            if ident.startswith("terminal:"):
+                self._output.pop(ident.removeprefix("terminal:"), None)
 
     def _event(
         self,

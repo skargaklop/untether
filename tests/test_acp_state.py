@@ -157,3 +157,23 @@ def test_reducer_bounds_unique_actions_and_unknown_updates() -> None:
         "unknown-18",
         "unknown-19",
     ]
+
+
+def test_reducer_bounds_unique_terminal_projections() -> None:
+    state = AcpSessionState(max_actions=3)
+    for index in range(20):
+        state.apply(
+            {
+                "sessionUpdate": "terminal_output",
+                "terminalId": f"terminal-{index}",
+                "data": "output",
+            }
+        )
+
+    assert len(state.actions) == 3
+    assert len(state._output) == 3
+    assert set(state.actions) == {
+        "terminal:terminal-17",
+        "terminal:terminal-18",
+        "terminal:terminal-19",
+    }
