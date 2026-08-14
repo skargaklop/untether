@@ -53,10 +53,14 @@ class AcpSessionState:
                 ident, {"content": "", "role": "assistant"}
             )
             message["role"] = update.get("role", message.get("role", "assistant"))
-            if update.get("replace") or update.get("contentType") == "replace":
+            previous = str(message.get("content", ""))
+            replacing = update.get("replace") or update.get("contentType") == "replace"
+            if replacing:
                 message["content"] = text
+                if message["role"] == "assistant" and previous:
+                    self.answer = self.answer.removesuffix(previous)
             else:
-                message["content"] = str(message.get("content", "")) + text
+                message["content"] = previous + text
             if text and message["role"] == "assistant":
                 if self._replayed_answer.startswith(text):
                     self._replayed_answer = self._replayed_answer[len(text) :]
