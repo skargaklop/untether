@@ -1978,7 +1978,14 @@ async def _page_about(ctx: CommandContext, action: str | None = None) -> None:
         f"Version: <b>{__version__}</b>",
     ]
 
-    versions_line = _build_versions_line(tuple(ctx.runtime.engine_ids))
+    versions_line = _build_versions_line(
+        tuple(ctx.runtime.engine_ids),
+        dynamic_engines=frozenset(
+            engine_id
+            for engine_id in ctx.runtime.engine_ids
+            if engine_id in getattr(ctx.runtime, "dynamic_engine_ids", ())
+        ),
+    )
     if versions_line:
         lines.append(f"<code>{versions_line}</code>")
 
