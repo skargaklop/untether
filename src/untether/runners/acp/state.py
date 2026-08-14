@@ -27,6 +27,7 @@ class AcpSessionState:
     unknown_updates: list[dict[str, Any]] = field(default_factory=list)
     actions: dict[str, Action] = field(default_factory=dict)
     _output: dict[str, str] = field(default_factory=dict)
+    _answer_messages: dict[str, str] = field(default_factory=dict)
     _replayed_answer: str = ""
     _factory: EventFactory = field(default_factory=lambda: EventFactory("acp"))
 
@@ -34,6 +35,7 @@ class AcpSessionState:
         """Reset the answer while filtering history replayed by a resume."""
         self._replayed_answer = replayed_answer
         self.answer = ""
+        self._answer_messages.clear()
         self.foreground_state = None
         self.stop_reason = None
 
@@ -62,15 +64,21 @@ class AcpSessionState:
             replacing = update.get("replace") or update.get("contentType") == "replace"
             if replacing:
                 message["content"] = text[-self.max_message_content :]
-                if message["role"] == "assistant" and previous:
-                    self.answer = self.answer.removesuffix(previous)
             else:
                 message["content"] = (previous + text)[-self.max_message_content :]
-            if text and message["role"] == "assistant":
-                if self._replayed_answer.startswith(text):
-                    self._replayed_answer = self._replayed_answer[len(text) :]
-                else:
-                    self.answer = (self.answer + text)[-self.max_answer :]
+            if message["role"] != "assistant":
+                self._answer_messages.pop(ident, None)
+            elif text and self._replayed_answer.startswith(text):
+                self._replayed_answer = self._replayed_answer[len(text) :]
+            elif replacing:
+                self._answer_messages[ident] = text
+            elif text:
+                self._answer_messages[ident] = (
+                    self._answer_messages.get(ident, "") + text
+                )
+            else:
+                self._answer_messages.pop(ident, None)
+            self.answer = "".join(self._answer_messages.values())[-self.max_answer :]
             self._trim_messages()
             return []
         if kind in {"metadata", "session_metadata"}:

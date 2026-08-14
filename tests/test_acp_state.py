@@ -138,6 +138,22 @@ def test_reducer_bounds_answer_and_message_content() -> None:
     assert all(len(message["content"]) <= 4 for message in state.messages.values())
 
 
+def test_replacing_truncated_assistant_message_replaces_answer_snapshot() -> None:
+    state = AcpSessionState(max_answer=5)
+    state.apply({"sessionUpdate": "message", "messageId": "m1", "content": "abcdef"})
+    state.apply(
+        {
+            "sessionUpdate": "message",
+            "messageId": "m1",
+            "content": "new",
+            "replace": True,
+        }
+    )
+
+    assert state.answer == "new"
+    assert state.messages["m1"]["content"] == "new"
+
+
 def test_reducer_bounds_unique_actions_and_unknown_updates() -> None:
     state = AcpSessionState(max_actions=3, max_unknown_updates=2)
     for index in range(20):
