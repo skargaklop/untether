@@ -4,6 +4,13 @@
 
 ### changes
 
+## v0.35.6 (2026-08-14)
+
+### fixes
+
+- **windows:** publish the platform-safe lockfile implementation and verify the built wheel in a clean Windows `uv` tool installation.
+
+
 - **runners:** display the active model state for every engine. Agy, Grok, and OMP now report `auto` in the footer when no model is explicitly configured, and all three honor `/model` overrides in their metadata. Agy no longer leaks a synthetic UUID as a resume token when no upstream conversation id was scraped.
 
 ### fixes
