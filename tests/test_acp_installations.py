@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from untether.acp_installations import (
@@ -61,9 +62,7 @@ def _write_package(
     package_dir = root / "node_modules" / Path(package)
     package_dir.mkdir(parents=True)
     (package_dir / "package.json").write_text(
-        __import__("json").dumps(
-            {"name": package, "version": version, "bin": bin_value}
-        ),
+        json.dumps({"name": package, "version": version, "bin": bin_value}),
         encoding="utf-8",
     )
 
@@ -154,3 +153,101 @@ def test_discovery_omits_invalid_package_metadata_and_unbacked_launcher(
 
 def test_discovery_returns_no_launchers_without_metadata_roots(tmp_path: Path) -> None:
     assert discover_installed_launchers(env={}, home=tmp_path) == ()
+
+
+def _write_python_distribution(
+    environment: Path,
+    package: str,
+    *,
+    version: str,
+    script: str,
+) -> None:
+    dist_info = environment / "Lib" / "site-packages" / f"{package}-{version}.dist-info"
+    dist_info.mkdir(parents=True)
+    (dist_info / "METADATA").write_text(
+        f"Name: {package}\nVersion: {version}\n", encoding="utf-8"
+    )
+    (dist_info / "entry_points.txt").write_text(
+        f"[console_scripts]\n{script} = {package}.main:run\n", encoding="utf-8"
+    )
+
+
+def test_discovery_reads_uv_receipt_distribution_and_launcher(tmp_path: Path) -> None:
+    tool_root = tmp_path / "uv-tools"
+    tool = tool_root / "minion-code"
+    environment = tool / ".venv"
+    tool.mkdir(parents=True)
+    (tool / "uv-receipt.toml").write_text('name = "minion-code"\n', encoding="utf-8")
+    _write_python_distribution(
+        environment, "Minion.Code", version="0.1.44", script="minion-code"
+    )
+    (environment / "Scripts").mkdir()
+    (environment / "Scripts" / "minion-code.cmd").write_text("", encoding="utf-8")
+
+    assert discover_installed_launchers(
+        env={"UV_TOOL_DIR": str(tool_root)}, home=tmp_path
+    ) == (
+        InstalledLauncher(
+            ecosystem="uv",
+            package="minion-code",
+            version="0.1.44",
+            command=str((environment / "Scripts" / "minion-code.cmd").resolve()),
+            metadata_path=str((tool / "uv-receipt.toml").resolve()),
+        ),
+    )
+
+
+def test_discovery_reads_pipx_receipt_distribution_and_launcher(tmp_path: Path) -> None:
+    pipx_home = tmp_path / "pipx"
+    pipx_bin = tmp_path / "pipx-bin"
+    venv = pipx_home / "venvs" / "agent-tools"
+    venv.mkdir(parents=True)
+    (venv / "pipx_metadata.json").write_text(
+        json.dumps({"main_package": {"package_or_url": "agent-tools"}}),
+        encoding="utf-8",
+    )
+    _write_python_distribution(
+        venv, "agent_tools", version="2.0.0", script="agent-tools"
+    )
+    pipx_bin.mkdir()
+    (pipx_bin / "agent-tools.cmd").write_text("", encoding="utf-8")
+
+    assert discover_installed_launchers(
+        env={"PIPX_HOME": str(pipx_home), "PIPX_BIN_DIR": str(pipx_bin)},
+        home=tmp_path,
+    ) == (
+        InstalledLauncher(
+            ecosystem="pipx",
+            package="agent-tools",
+            version="2.0.0",
+            command=str((pipx_bin / "agent-tools.cmd").resolve()),
+            metadata_path=str((venv / "pipx_metadata.json").resolve()),
+        ),
+    )
+
+
+def test_discovery_omits_python_metadata_without_single_executable(
+    tmp_path: Path,
+) -> None:
+    tool_root = tmp_path / "uv-tools"
+    tool = tool_root / "ambiguous"
+    environment = tool / ".venv"
+    tool.mkdir(parents=True)
+    (tool / "uv-receipt.toml").write_text('name = "ambiguous"\n', encoding="utf-8")
+    _write_python_distribution(
+        environment, "ambiguous", version="1.0.0", script="first"
+    )
+    entry_points = next(
+        (environment / "Lib" / "site-packages").glob("*.dist-info/entry_points.txt")
+    )
+    entry_points.write_text(
+        "[console_scripts]\nfirst = ambiguous.main:run\nsecond = ambiguous.main:run\n",
+        encoding="utf-8",
+    )
+    (environment / "Scripts").mkdir()
+    (environment / "Scripts" / "first.cmd").write_text("", encoding="utf-8")
+
+    assert (
+        discover_installed_launchers(env={"UV_TOOL_DIR": str(tool_root)}, home=tmp_path)
+        == ()
+    )

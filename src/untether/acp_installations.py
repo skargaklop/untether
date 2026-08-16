@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import configparser
 import json
 import re
+import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -55,16 +57,33 @@ def discover_installed_launchers(
     *, env: Mapping[str, str], home: Path
 ) -> tuple[InstalledLauncher, ...]:
     """Return launchers proven by local package-manager metadata only."""
-    roots: list[tuple[Literal["npm", "bun"], Path]] = []
+    npm_bun_roots: list[tuple[Literal["npm", "bun"], Path]] = []
     app_data = env.get("APPDATA")
     if app_data:
-        roots.append(("npm", Path(app_data) / "npm"))
+        npm_bun_roots.append(("npm", Path(app_data) / "npm"))
     bun_install = Path(env["BUN_INSTALL"]) if env.get("BUN_INSTALL") else home / ".bun"
-    roots.append(("bun", bun_install / "install" / "global"))
-    return tuple(
-        launcher
-        for ecosystem, root in roots
-        for launcher in _package_launchers(root, ecosystem=ecosystem)
+    npm_bun_roots.append(("bun", bun_install / "install" / "global"))
+    uv_root = (
+        Path(env["UV_TOOL_DIR"])
+        if env.get("UV_TOOL_DIR")
+        else home / ".local" / "share" / "uv" / "tools"
+    )
+    pipx_home = (
+        Path(env["PIPX_HOME"]) if env.get("PIPX_HOME") else home / ".local" / "pipx"
+    )
+    pipx_bin = (
+        Path(env["PIPX_BIN_DIR"])
+        if env.get("PIPX_BIN_DIR")
+        else home / ".local" / "bin"
+    )
+    return (
+        tuple(
+            launcher
+            for ecosystem, root in npm_bun_roots
+            for launcher in _package_launchers(root, ecosystem=ecosystem)
+        )
+        + _uv_launchers(uv_root)
+        + _pipx_launchers(pipx_home, pipx_bin)
     )
 
 
@@ -134,6 +153,135 @@ def _package_executable(root: Path, name: str) -> Path | None:
         if path.is_file():
             return path.resolve()
     return None
+
+
+def _uv_launchers(root: Path) -> tuple[InstalledLauncher, ...]:
+    return tuple(
+        launcher
+        for receipt in root.glob("*/uv-receipt.toml")
+        if (
+            launcher := _python_launcher(
+                receipt,
+                environment=receipt.parent / ".venv",
+                bin_dir=receipt.parent / ".venv" / "Scripts",
+                ecosystem="uv",
+                package=_receipt_package(receipt),
+            )
+        )
+        is not None
+    )
+
+
+def _pipx_launchers(root: Path, bin_dir: Path) -> tuple[InstalledLauncher, ...]:
+    return tuple(
+        launcher
+        for receipt in (root / "venvs").glob("*/pipx_metadata.json")
+        if (
+            launcher := _python_launcher(
+                receipt,
+                environment=receipt.parent,
+                bin_dir=bin_dir,
+                ecosystem="pipx",
+                package=_pipx_package(receipt),
+            )
+        )
+        is not None
+    )
+
+
+def _receipt_package(receipt: Path) -> str | None:
+    try:
+        value = tomllib.loads(receipt.read_text(encoding="utf-8")).get("name")
+    except (OSError, ValueError, tomllib.TOMLDecodeError):
+        return None
+    return _normalised_python_package(value)
+
+
+def _pipx_package(receipt: Path) -> str | None:
+    try:
+        value = json.loads(receipt.read_text(encoding="utf-8"))["main_package"][
+            "package_or_url"
+        ]
+    except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError):
+        return None
+    return _normalised_python_package(value)
+
+
+def _normalised_python_package(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    parsed = parse_registry_package(value, ecosystem="python")
+    return parsed[0] if parsed and parsed[1] is None else None
+
+
+def _python_launcher(
+    receipt: Path,
+    *,
+    environment: Path,
+    bin_dir: Path,
+    ecosystem: Literal["uv", "pipx"],
+    package: str | None,
+) -> InstalledLauncher | None:
+    if package is None:
+        return None
+    candidates = tuple(
+        _distribution_launcher(
+            dist_info,
+            bin_dir=bin_dir,
+            ecosystem=ecosystem,
+            package=package,
+            receipt=receipt,
+        )
+        for dist_info in (environment / "Lib" / "site-packages").glob("*.dist-info")
+    )
+    found = tuple(candidate for candidate in candidates if candidate is not None)
+    return found[0] if len(found) == 1 else None
+
+
+def _distribution_launcher(
+    dist_info: Path,
+    *,
+    bin_dir: Path,
+    ecosystem: Literal["uv", "pipx"],
+    package: str,
+    receipt: Path,
+) -> InstalledLauncher | None:
+    try:
+        fields = _metadata_fields(dist_info / "METADATA")
+        scripts = _console_scripts(dist_info / "entry_points.txt")
+    except OSError:
+        return None
+    metadata_package = _normalised_python_package(fields.get("Name"))
+    version = fields.get("Version")
+    if metadata_package != package or not isinstance(version, str) or len(scripts) != 1:
+        return None
+    executable = _package_executable(bin_dir, scripts[0])
+    if executable is None:
+        return None
+    return InstalledLauncher(
+        ecosystem, package, version, str(executable), str(receipt.resolve())
+    )
+
+
+def _metadata_fields(path: Path) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line:
+            break
+        key, separator, value = line.partition(":")
+        if separator and key in {"Name", "Version"}:
+            fields[key] = value.strip()
+    return fields
+
+
+def _console_scripts(path: Path) -> tuple[str, ...]:
+    parser = configparser.ConfigParser()
+    parser.read(path, encoding="utf-8")
+    return (
+        tuple(parser["console_scripts"])
+        if parser.has_section("console_scripts")
+        else ()
+    )
 
 
 def match_distribution(
