@@ -126,6 +126,25 @@ def test_prepare_telegram_multi_single_message_has_footer() -> None:
     assert "dir: test" in text
 
 
+def test_prepare_telegram_multi_preserves_complete_resume_footer() -> None:
+    """The user-copyable resume command survives Telegram rendering intact."""
+    from untether.telegram.render import MarkdownParts, prepare_telegram_multi
+
+    session_id = "omp-session-complete-copyable-suffix"
+    footer = f"\N{LEFTWARDS ARROW WITH HOOK}\ufe0f `omp resume {session_id}`"
+    payloads = prepare_telegram_multi(
+        MarkdownParts(header="done", body="short answer", footer=footer)
+    )
+    text, entities = payloads[0]
+    assert (
+        text
+        == f"done\n\nshort answer\n\n\N{LEFTWARDS ARROW WITH HOOK}\ufe0f omp resume {session_id}"
+    )
+    assert entities == [
+        {"type": "code", "offset": 23, "length": len(f"omp resume {session_id}")}
+    ]
+
+
 def test_split_markdown_body_closes_and_reopens_fence() -> None:
     body = "```py\n" + ("line\n" * 10) + "```\n\npost"
 

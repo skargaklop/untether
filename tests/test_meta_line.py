@@ -294,7 +294,7 @@ class TestFooterWithMetaLine:
         )
         tracker.note_event(evt)
         state = tracker.snapshot(
-            resume_formatter=lambda t: f"`codex resume {t.value}`",
+            resume_formatter=lambda token: f"`codex resume {token.value}`",
             context_line="dir: proj @main",
         )
         formatter = MarkdownFormatter()
@@ -305,8 +305,32 @@ class TestFooterWithMetaLine:
         lines = parts.footer.split(HARD_BREAK)
         assert len(lines) == 3
         assert lines[0] == "\N{LABEL} dir: proj @main"
-        assert lines[1] == ""  # blank line for visual separation
+        assert lines[1] == ""
         assert lines[2] == "\u21a9\ufe0f `codex resume t-1`"
+
+    def test_footer_preserves_complete_copyable_resume_identifier(self) -> None:
+        session_id = "t-1-complete-copyable-resume-suffix"
+        tracker = ProgressTracker(engine="codex")
+        tracker.note_event(
+            StartedEvent(
+                engine="codex",
+                resume=ResumeToken(engine="codex", value=session_id),
+            )
+        )
+        state = tracker.snapshot(
+            resume_formatter=lambda token: f"`codex resume {token.value}`",
+            context_line="dir: proj @main",
+        )
+        parts = MarkdownFormatter().render_final_parts(
+            state, elapsed_s=5.0, status="done", answer="ok"
+        )
+
+        assert parts.footer is not None
+        assert parts.footer.split(HARD_BREAK) == [
+            "\N{LABEL} dir: proj @main",
+            "",
+            f"\u21a9\ufe0f `codex resume {session_id}`",
+        ]
 
 
 class TestCrossEngineFooter:

@@ -27,35 +27,36 @@ class TestRetagResume:
         token = ResumeToken(engine="omp", value="sess-123")
         assert _retag_resume(token) == token
 
-    def test_from_pi(self) -> None:
-        token = ResumeToken(engine="pi", value="sess-456")
+    def test_from_pi_preserves_complete_identifier(self) -> None:
+        session_id = "sess-456-omp-retag-distinct-suffix"
+        token = ResumeToken(engine="pi", value=session_id)
         retagged = _retag_resume(token)
-        assert retagged is not None
-        assert retagged.engine == "omp"
-        assert retagged.value == "sess-456"
+        assert retagged == ResumeToken(engine="omp", value=session_id)
 
 
 class TestRetagEvent:
-    def test_started_event(self) -> None:
+    def test_started_event_preserves_complete_identifier(self) -> None:
+        session_id = "sess-omp-started-distinct-suffix"
         factory = EventFactory("pi")
-        token = ResumeToken(engine="pi", value="sess")
-        event = factory.started(token, title="pi")
+        event = factory.started(ResumeToken(engine="pi", value=session_id), title="pi")
         retagged = _retag_event(event)
         assert isinstance(retagged, StartedEvent)
         assert retagged.engine == "omp"
         assert retagged.title == "omp"
-        assert retagged.resume is not None
-        assert retagged.resume.engine == "omp"
+        assert retagged.resume == ResumeToken(engine="omp", value=session_id)
 
-    def test_completed_event(self) -> None:
+    def test_completed_event_preserves_complete_identifier(self) -> None:
+        session_id = "sess-omp-completed-distinct-suffix"
         factory = EventFactory("pi")
-        token = ResumeToken(engine="pi", value="sess")
-        event = factory.completed(ok=True, answer="ok", resume=token)
+        event = factory.completed(
+            ok=True,
+            answer="ok",
+            resume=ResumeToken(engine="pi", value=session_id),
+        )
         retagged = _retag_event(event)
         assert isinstance(retagged, CompletedEvent)
         assert retagged.engine == "omp"
-        assert retagged.resume is not None
-        assert retagged.resume.engine == "omp"
+        assert retagged.resume == ResumeToken(engine="omp", value=session_id)
 
     def test_action_event(self) -> None:
         factory = EventFactory("pi")
@@ -321,6 +322,26 @@ def test_omp_runner_failure_and_unterminated_stream_preserve_state() -> None:
         assert events[-1].engine == "omp"
         assert events[-1].answer == "partial"
         assert expected in (events[-1].error or "")
+
+
+def test_omp_session_header_promotes_complete_identifier_after_retagging() -> None:
+    session_id = "omp-header-complete-promotion-suffix"
+    runner = OmpRunner(extra_args=[], model=None, provider=None)
+    state = runner.new_state("hi", None)
+
+    events = runner.translate(
+        pi_schema.SessionHeader(id=session_id, version=1),
+        state=state,
+        resume=None,
+        found_session=None,
+    )
+    started = events[0]
+    assert isinstance(started, StartedEvent)
+    assert started.engine == "omp"
+    assert started.title == "omp"
+    assert started.resume == ResumeToken(engine="omp", value=session_id)
+    assert started.meta is not None
+    assert started.meta["model"] == "auto"
 
 
 def test_omp_started_meta_prefers_run_option_model() -> None:

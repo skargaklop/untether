@@ -36,3 +36,7 @@ Inline `python -c` peer fixtures were brittle under Windows quoting; the file-ba
 ## Session identifier closure experience
 
 The identifier implementation worker stalled without yielding and made no changes; the requested code-review agent could not start because its runtime had no selected model. Inline execution used the approved source-only worktree and an explicit temporary `[:8]` restoration to prove the strengthened runner-label test was genuinely RED before restoring the full-ID implementation. Telegram rendering deliberately strips Markdown backticks into code entities, so the copyable-footer regression must assert rendered text plus entity span, not the pre-render Markdown source.
+
+## Session, compact, and prompt-batch closure experience
+
+Three scoped implementation workers did not execute: two exited without tool calls or a yield, and the Codex-rescue route lacked its required Bash capability. The controller retained the approved isolated-worktree TDD plan, reviewed the resulting test-only diff inline, and used the source checkout's `uv run` gates instead of stale installed code. The strengthened regressions exposed no current production truncation or dispatcher defect, so the minimal outcome is durable contract coverage rather than speculative production rewrites. The graph query route could not be used because this worktree has no `graphify-out/graph.json`; its sidecar warning was non-blocking.
