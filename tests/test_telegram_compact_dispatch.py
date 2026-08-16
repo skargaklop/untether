@@ -1,11 +1,20 @@
 """Observable compact/handoff confirmation contracts."""
 
+from __future__ import annotations
+
 import time
+from collections.abc import AsyncIterator
+from dataclasses import replace
 from typing import Any, cast
 
+import anyio
 import pytest
 
-from untether.model import ResumeToken
+from untether.compact import CompactSupport
+from untether.events import EventFactory
+from untether.model import ResumeToken, UntetherEvent
+from untether.runners.mock import Return, ScriptRunner
+from untether.telegram.bridge import TelegramBridgeConfig, run_main_loop
 from untether.telegram.commands.compact import (
     CompactConfirmRecord,
     _card,
@@ -16,7 +25,113 @@ from untether.telegram.commands.compact import (
     prune_pending_confirms,
     register_pending_confirm,
 )
+from untether.telegram.types import TelegramIncomingMessage
 from untether.transport import MessageRef
+
+from .telegram_fakes import FakeTransport, make_cfg
+
+
+class _CompactRunner(ScriptRunner):
+    """Scripted runner whose compact invocation is independently observable."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.compact_calls: list[tuple[ResumeToken, str | None]] = []
+
+    def compact_support(self) -> CompactSupport:
+        return CompactSupport(
+            mode="slash_prompt",
+            accepts_instructions=True,
+            true_compaction=True,
+        )
+
+    async def compact(
+        self, resume: ResumeToken, instructions: str | None = None
+    ) -> AsyncIterator[UntetherEvent]:
+        self.compact_calls.append((resume, instructions))
+        yield EventFactory(self.engine).completed_ok(answer="", resume=resume)
+
+
+def _compact_message(
+    text: str,
+    *,
+    message_id: int,
+    reply_to_text: str | None = None,
+    reply_to_message_id: int | None = None,
+) -> TelegramIncomingMessage:
+    return TelegramIncomingMessage(
+        transport="telegram",
+        chat_id=123,
+        message_id=message_id,
+        text=text,
+        reply_to_message_id=reply_to_message_id,
+        reply_to_text=reply_to_text,
+        sender_id=123,
+    )
+
+
+def _compact_poller(
+    messages: list[TelegramIncomingMessage],
+) -> Any:
+    async def poller(
+        _cfg: TelegramBridgeConfig,
+    ) -> AsyncIterator[TelegramIncomingMessage]:
+        for message in messages:
+            yield message
+            await anyio.sleep(0.01)
+        await anyio.sleep(0.1)
+
+    return poller
+
+
+@pytest.mark.anyio
+async def test_compact_reply_footer_bypasses_debounce_and_uses_footer_session() -> None:
+    runner = _CompactRunner([Return(answer="unused")], engine="codex")
+    cfg = replace(
+        make_cfg(FakeTransport(), runner),
+        allowed_user_ids=(123,),
+        prompt_batch_debounce_s=10.0,
+    )
+    session_id = "footer-session-complete-distinct-suffix"
+
+    await run_main_loop(
+        cfg,
+        _compact_poller(
+            [
+                _compact_message("pending prose", message_id=1),
+                _compact_message(
+                    "/compact focus on tests",
+                    message_id=2,
+                    reply_to_message_id=99,
+                    reply_to_text=f"done\n`codex resume {session_id}`",
+                ),
+            ]
+        ),
+    )
+
+    assert runner.calls == []
+    assert runner.compact_calls == [
+        (ResumeToken(engine="codex", value=session_id), "focus on tests")
+    ]
+
+
+@pytest.mark.anyio
+async def test_compact_without_session_returns_guidance_without_operation_card() -> (
+    None
+):
+    transport = FakeTransport()
+    runner = _CompactRunner([Return(answer="unused")], engine="codex")
+    cfg = replace(make_cfg(transport, runner), allowed_user_ids=(123,))
+
+    await run_main_loop(
+        cfg, _compact_poller([_compact_message("/compact", message_id=1)])
+    )
+
+    assert runner.compact_calls == []
+    assert any(
+        "no active session to compact" in call["message"].text.lower()
+        for call in transport.send_calls
+    )
 
 
 def _record(

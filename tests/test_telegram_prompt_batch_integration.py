@@ -27,9 +27,10 @@ def _msg(
     message_id: int,
     text: str,
     *,
-    sender_id: int = 123,
+    sender_id: int | None = 123,
     chat_id: int = 123,
     reply_to: int | None = None,
+    reply_to_text: str | None = None,
 ) -> TelegramIncomingMessage:
     return TelegramIncomingMessage(
         transport="telegram",
@@ -37,7 +38,7 @@ def _msg(
         message_id=message_id,
         text=text,
         reply_to_message_id=reply_to,
-        reply_to_text=None,
+        reply_to_text=reply_to_text,
         sender_id=sender_id,
     )
 
@@ -250,3 +251,71 @@ async def test_different_senders_not_batched() -> None:
 
     # Two separate runs — different senders don't share a batch
     assert len(runner.calls) == 2
+
+
+@pytest.mark.anyio
+async def test_different_reply_targets_do_not_share_a_batch() -> None:
+    """Reply-scoped prompts retain distinct resume targets."""
+    runner = ScriptRunner(
+        [Return(answer="ok"), Return(answer="ok")], engine=CODEX_ENGINE
+    )
+    cfg = replace(
+        make_cfg(FakeTransport(), runner),
+        allowed_user_ids=(123,),
+        prompt_batch_debounce_s=0.05,
+    )
+
+    await run_main_loop(
+        cfg,
+        _poller_factory(
+            [
+                _msg(1, "first", reply_to=10),
+                _msg(2, "second", reply_to=20),
+            ]
+        ),
+    )
+
+    assert [
+        call[0].endswith(text)
+        for call, text in zip(runner.calls, ["first", "second"], strict=True)
+    ] == [True, True]
+
+
+@pytest.mark.anyio
+async def test_missing_sender_is_not_batched() -> None:
+    """Messages without a sender cannot safely share a user batch."""
+    runner = ScriptRunner(
+        [Return(answer="ok"), Return(answer="ok")], engine=CODEX_ENGINE
+    )
+    cfg = replace(
+        make_cfg(FakeTransport(), runner),
+        allowed_user_ids=(123,),
+        prompt_batch_debounce_s=0.05,
+    )
+
+    await run_main_loop(
+        cfg,
+        _poller_factory(
+            [_msg(1, "first", sender_id=None), _msg(2, "second", sender_id=None)]
+        ),
+    )
+
+    assert runner.calls == []
+
+
+@pytest.mark.anyio
+async def test_handoff_command_cancels_a_pending_prompt_batch() -> None:
+    """Handoff is a control operation and never allows earlier prose to run."""
+    runner = ScriptRunner([Return(answer="ok")], engine=CODEX_ENGINE)
+    cfg = replace(
+        make_cfg(FakeTransport(), runner),
+        allowed_user_ids=(123,),
+        prompt_batch_debounce_s=0.05,
+    )
+
+    await run_main_loop(
+        cfg,
+        _poller_factory([_msg(1, "queued prose"), _msg(2, "/handoff")]),
+    )
+
+    assert runner.calls == []

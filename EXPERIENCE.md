@@ -31,4 +31,9 @@ The interaction slice is deliberately bounded: reverse requests use opaque nonce
 
 ## ACP adapter gap-fix experience
 
+
 Inline `python -c` peer fixtures were brittle under Windows quoting; the file-based `tests/fixtures/acp_agent.py` subprocess fixture removed that failure class. `select_backends` had masked the untested production registry path — behavior-asserting tests now target `build_runtime_spec` directly. The `dynamic_engine_ids` guard in `/config` showed how getattr-defaulted guards silently rot; the field is now asserted in a transport-runtime test. Compaction did not need the old client's transport at all: resuming via the new peer, waiting for `available_commands_update`, and gating on an advertised `compact` command reproduces the legacy contract in ~100 lines, and `runners/_acp.py` is deleted.
+
+## Session, compact, and prompt-batch closure experience
+
+Three scoped implementation workers did not execute: two exited without tool calls or a yield, and the Codex-rescue route lacked its required Bash capability. The controller retained the approved isolated-worktree TDD plan, reviewed the resulting test-only diff inline, and used the source checkout's `uv run` gates instead of stale installed code. The strengthened regressions exposed no current production truncation or dispatcher defect, so the minimal outcome is durable contract coverage rather than speculative production rewrites. The graph query route could not be used because this worktree has no `graphify-out/graph.json`; its sidecar warning was non-blocking.

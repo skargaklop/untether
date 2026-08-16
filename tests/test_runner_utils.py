@@ -628,18 +628,17 @@ def test_rc_label_negative_unknown() -> None:
 
 
 def test_session_label_with_found_session() -> None:
-    token = ResumeToken(engine="test", value="abcdef1234567890")
-    label = _session_label(token, None)
-    assert label is not None
-    assert "abcdef12" in label
-    assert "new" in label
+    session_id = "abcdef12-3456-7890-found-suffix"
+    token = ResumeToken(engine="test", value=session_id)
+
+    assert _session_label(token, None) == f"{session_id} · new"
 
 
 def test_session_label_resumed() -> None:
-    token = ResumeToken(engine="test", value="abcdef1234567890")
-    label = _session_label(token, token)
-    assert label is not None
-    assert "resumed" in label
+    session_id = "abcdef12-3456-7890-resumed-suffix"
+    token = ResumeToken(engine="test", value=session_id)
+
+    assert _session_label(token, token) == f"{session_id} · resumed"
 
 
 def test_session_label_none() -> None:
@@ -664,11 +663,12 @@ def test_stderr_excerpt_truncates() -> None:
     assert result.endswith("…")
 
 
-def test_process_error_events_enriched_message() -> None:
-    """process_error_events includes rc label, session, and stderr."""
+def test_process_error_events_preserve_complete_session_label() -> None:
+    """Process failures retain the copyable complete session identifier."""
     runner = _DummyJsonlRunner()
     state = JsonlRunState()
-    token = ResumeToken(engine=runner.engine, value="abc12345deadbeef")
+    session_id = "abc12345deadbeef-error-session-suffix"
+    token = ResumeToken(engine=runner.engine, value=session_id)
     events = runner.process_error_events(
         -15,
         resume=token,
@@ -679,16 +679,17 @@ def test_process_error_events_enriched_message() -> None:
     completed = events[-1]
     assert isinstance(completed, CompletedEvent)
     assert completed.error is not None
+    assert f"session: {session_id} · resumed" in completed.error
     assert "SIGTERM" in completed.error
-    assert "abc12345" in completed.error
     assert "some error output" in completed.error
 
 
-def test_stream_end_events_enriched_message() -> None:
-    """stream_end_events includes session info."""
+def test_stream_end_events_preserve_complete_session_label() -> None:
+    """EOF failures retain the copyable complete session identifier."""
     runner = _DummyJsonlRunner()
     state = JsonlRunState()
-    token = ResumeToken(engine=runner.engine, value="abc12345deadbeef")
+    session_id = "abc12345deadbeef-eof-session-suffix"
+    token = ResumeToken(engine=runner.engine, value=session_id)
     events = runner.stream_end_events(
         resume=token,
         found_session=token,
@@ -697,8 +698,7 @@ def test_stream_end_events_enriched_message() -> None:
     completed = events[-1]
     assert isinstance(completed, CompletedEvent)
     assert completed.error is not None
-    assert "abc12345" in completed.error
-    assert "resumed" in completed.error
+    assert f"session: {session_id} · resumed" in completed.error
 
 
 @pytest.mark.anyio

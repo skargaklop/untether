@@ -143,13 +143,14 @@ def test_translate_error_fixture() -> None:
 
 
 def test_session_id_promotion_from_stdout() -> None:
+    session_id = "ccd569e0-4e1b-4c7d-a981-fresh-session-suffix"
     state = PiStreamState(
         resume=ResumeToken(engine=ENGINE, value="session.jsonl"),
         allow_id_promotion=True,
     )
     events = translate_pi_event(
         pi_schema.SessionHeader(
-            id="ccd569e0-4e1b-4c7d-a981-637ed4107310",
+            id=session_id,
             version=3,
             timestamp="2026-01-13T00:33:34.702Z",
             cwd="/tmp",
@@ -159,7 +160,7 @@ def test_session_id_promotion_from_stdout() -> None:
         state=state,
     )
     started = next(evt for evt in events if isinstance(evt, StartedEvent))
-    assert started.resume.value == "ccd569e0-4e1b-4c7d-a981-637ed4107310"
+    assert started.resume == ResumeToken(engine=ENGINE, value=session_id)
 
 
 def test_extract_resume_keeps_session_path(tmp_path: Path) -> None:
@@ -305,13 +306,14 @@ def test_normal_resume_does_not_allow_id_promotion() -> None:
 
 
 def test_continue_session_id_promoted_from_header() -> None:
-    """During /continue, SessionHeader promotes the session ID into resume token."""
+    """During /continue, SessionHeader promotes the complete session ID."""
+    session_id = "ccd569e0-4e1b-4c7d-a981-continue-session-suffix"
     continue_token = ResumeToken(engine=ENGINE, value="", is_continue=True)
     state = PiStreamState(resume=continue_token, allow_id_promotion=True)
 
     events = translate_pi_event(
         pi_schema.SessionHeader(
-            id="ccd569e0-4e1b-4c7d-a981-637ed4107310",
+            id=session_id,
             version=3,
             timestamp="2026-01-13T00:33:34.702Z",
             cwd="/tmp",
@@ -321,8 +323,7 @@ def test_continue_session_id_promoted_from_header() -> None:
         state=state,
     )
     started = next(e for e in events if isinstance(e, StartedEvent))
-    assert started.resume.value == "ccd569e0-4e1b-4c7d-a981-637ed4107310"
-    assert started.resume.value != ""
+    assert started.resume == ResumeToken(engine=ENGINE, value=session_id)
 
 
 # ---------------------------------------------------------------------------
