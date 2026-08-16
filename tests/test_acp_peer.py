@@ -218,17 +218,23 @@ assert reply['error']['code'] == -32800
 print(json.dumps({'jsonrpc':'2.0','id':req['id'],'result':{}}), flush=True)
 """
     async with AcpPeer(sys.executable, fixture(code)) as peer:
+        started = asyncio.Event()
 
         async def handler(_params):
+            started.set()
             await anyio.sleep(30)
 
         peer.register_handler("client/slow", handler)
         request_task = asyncio.create_task(peer.request("hello", {}))
-        while not peer._reverse_tasks:  # internal: wait until the reverse task exists
-            await anyio.sleep(0.01)
+        # Wait until the handler is actually running inside its body: a
+        # cancel delivered before the coroutine's first step would skip
+        # _handle_reverse's shielded -32800 response entirely.
+        with anyio.fail_after(5):
+            await started.wait()
         reverse_task = next(iter(peer._reverse_tasks))
         reverse_task.cancel()
-        assert await request_task == {}
+        with anyio.fail_after(10):
+            assert await request_task == {}
 
 
 @pytest.mark.anyio

@@ -16,17 +16,29 @@ def test_lockfile_imports_without_fcntl_on_windows() -> None:
         import sys
         import types
 
-        # Pre-import everything the module graph pulls in before lying about
-        # the platform: stdlib modules (shutil, zipfile, ...) dispatch on
-        # sys.platform at import time and would try Windows-only builtins
-        # (e.g. _winapi) on POSIX once the platform is patched.
-        import hashlib  # noqa: F401
-        import json  # noqa: F401
-        import logging  # noqa: F401
-        import zipfile  # noqa: F401
+
+        class _WinStub(types.ModuleType):
+            # Stand-in for Windows-only builtins on POSIX hosts. Stdlib
+            # modules imported after the platform lie (subprocess does
+            # ``from _winapi import CREATE_NEW_CONSOLE, ...`` at import
+            # time) read arbitrary attributes; the values are never used
+            # at import time, so a constant 0 satisfies them all.
+            def __getattr__(self, name):
+                return 0
+
+
+        # Load the genuine builtins where they exist (real Windows); fall
+        # back to stubs on POSIX BEFORE lying about the platform, so every
+        # later platform-dispatched stdlib import hits the sys.modules
+        # cache instead of the missing real module.
+        for _name in ("_winapi", "msvcrt", "winreg", "nt"):
+            if _name not in sys.modules:
+                try:
+                    __import__(_name)
+                except ImportError:
+                    sys.modules[_name] = _WinStub(_name)
 
         sys.platform = "win32"
-        sys.modules["msvcrt"] = types.ModuleType("msvcrt")
         original_import = builtins.__import__
 
         def block_fcntl(name, *args, **kwargs):
