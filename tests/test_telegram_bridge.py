@@ -172,6 +172,34 @@ def test_build_bot_commands_includes_cancel_and_engine() -> None:
     assert any(cmd["command"] == "codex" for cmd in commands)
 
 
+def test_build_bot_commands_includes_dynamic_registry_engine() -> None:
+    runner = ScriptRunner(
+        [Return(answer="ok")], engine=CODEX_ENGINE, resume_value="sid"
+    )
+    cline_runner = ScriptRunner(
+        [Return(answer="ok")], engine="cline", resume_value="sid"
+    )
+    runtime = TransportRuntime(
+        router=AutoRouter(
+            entries=[
+                RunnerEntry(engine=CODEX_ENGINE, runner=runner),
+                RunnerEntry(engine="cline", runner=cline_runner),
+            ],
+            default_engine=CODEX_ENGINE,
+        ),
+        projects=_empty_projects(),
+    )
+    runtime.update(
+        router=runtime._router,
+        projects=runtime._projects,
+        dynamic_engine_ids=frozenset({"cline"}),
+    )
+
+    commands = build_bot_commands(runtime)
+
+    assert {"command": "cline", "description": "use engine: cline"} in commands
+
+
 def test_build_bot_commands_includes_projects() -> None:
     runner = ScriptRunner(
         [Return(answer="ok")], engine=CODEX_ENGINE, resume_value="sid"

@@ -2,12 +2,15 @@ from pathlib import Path
 
 import pytest
 
+import untether.acp_registry as acp_registry
 import untether.runtime_loader as runtime_loader
 from untether.acp_registry import (
+    REGISTRY_DOC_VERSION,
     InstallationRecord,
     RegistryAgent,
     RegistryDistribution,
     current_platform_target,
+    parse_registry_agents,
 )
 from untether.config import ConfigError
 from untether.settings import UntetherSettings
@@ -304,6 +307,48 @@ def test_registry_engine_installed_and_dynamic_engine_ids(
     assert "demo_agent" in runtime.engine_ids
     assert "codex" in runtime.engine_ids
     assert runtime.dynamic_engine_ids == frozenset({"demo_agent"})
+
+
+def test_official_cline_npx_registry_entry_joins_dynamic_engines(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    agent = parse_registry_agents(
+        {
+            "version": REGISTRY_DOC_VERSION,
+            "agents": [
+                {
+                    "id": "cline",
+                    "version": "3.0.55",
+                    "distribution": {
+                        "npx": {"package": "cline@3.0.55", "args": ["--acp"]}
+                    },
+                }
+            ],
+        }
+    )[0]
+    monkeypatch.setattr(
+        runtime_loader, "list_backend_ids", lambda allowlist=None: ["codex"]
+    )
+    monkeypatch.setattr(
+        runtime_loader, "load_registry_agents", lambda *args, **kwargs: [agent]
+    )
+    monkeypatch.setattr(runtime_loader, "load_installation_cache", lambda _path: {})
+    monkeypatch.setattr(
+        runtime_loader, "write_installation_cache", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        acp_registry.shutil,
+        "which",
+        lambda command: {
+            "codex": "C:/Tools/codex.cmd",
+            "cline": "C:/Tools/cline.cmd",
+        }.get(command),
+    )
+
+    runtime = _registry_runtime(monkeypatch, tmp_path, _base_registry_settings())
+
+    assert runtime.dynamic_engine_ids == frozenset({"cline"})
+    assert "cline" in runtime.engine_ids
 
 
 def test_registry_engine_project_alias_collision_skipped(

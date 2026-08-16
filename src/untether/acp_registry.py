@@ -36,6 +36,10 @@ REGISTRY_DOC_VERSION = "1.0.0"
 # segments — no leading/trailing/double hyphens.
 _REGISTRY_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
+_UNSCOPED_PACKAGE_RE = re.compile(
+    r"^[a-z0-9][a-z0-9._-]*(?:(?:@|==)[0-9][a-z0-9._+-]*)?$"
+)
+
 
 class _RegistryDistributionModel(BaseModel):
     """Strict-but-open view of a single registry distribution entry."""
@@ -57,6 +61,7 @@ class _RegistryAgentModel(BaseModel):
     id: NonEmptyStr
     version: str = ""
     distributions: list[_RegistryDistributionModel] = Field(default_factory=list)
+    distribution: dict[str, Any] | None = None
 
     @field_validator("id")
     @classmethod
@@ -73,6 +78,7 @@ class RegistryDistribution:
     cmd: str
     args: tuple[str, ...] = ()
     env: dict[str, str] | None = None
+    package: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,7 +112,14 @@ def choose_binary_distribution(
     for distribution in agent.distributions:
         if distribution.target == target and distribution.type == "binary":
             return distribution
-    return None
+    return next(
+        (
+            distribution
+            for distribution in agent.distributions
+            if distribution.type in {"npx", "uvx"}
+        ),
+        None,
+    )
 
 
 def _now() -> float:
@@ -178,7 +191,7 @@ def discover_installation(
 ) -> InstallationRecord:
     target = target or current_platform_target()
     distribution = choose_binary_distribution(agent, target=target)
-    cmd = distribution.cmd if distribution else ""
+    cmd = _distribution_command(distribution) if distribution else ""
     if cache and cache.get("installed") and cache.get("executable"):
         executable = str(Path(cache["executable"]).resolve())
         if Path(executable).is_file():
@@ -220,6 +233,103 @@ def resolve_explicit_command(command: str, *, base_dir: Path) -> str:
     return str(resolved)
 
 
+def _valid_args(value: Any) -> tuple[str, ...] | None:
+    if not isinstance(value, list) or not all(
+        isinstance(arg, str) and arg for arg in value
+    ):
+        return None
+    return tuple(value)
+
+
+def _valid_env(value: Any) -> dict[str, str] | None:
+    if value is None:
+        return {}
+    if not isinstance(value, dict) or not all(
+        isinstance(key, str) and key and isinstance(item, str) and item
+        for key, item in value.items()
+    ):
+        return None
+    return value
+
+
+def _npm_bin(package: str) -> str | None:
+    npx = shutil.which("npx")
+    if not npx:
+        return None
+    package_name = package.rsplit("@", 1)[0]
+    package_json = (
+        Path(npx).resolve().parent / "node_modules" / package_name / "package.json"
+    )
+    try:
+        bin_value = json.loads(package_json.read_text(encoding="utf-8")).get("bin")
+    except (OSError, ValueError, TypeError):
+        return None
+    if isinstance(bin_value, str):
+        return package_name.rsplit("/", 1)[-1]
+    if isinstance(bin_value, dict) and len(bin_value) == 1:
+        name, value = next(iter(bin_value.items()))
+        if isinstance(name, str) and name and isinstance(value, str) and value:
+            return name
+    return None
+
+
+def _distribution_command(distribution: RegistryDistribution) -> str:
+    if distribution.type == "npx" and distribution.package:
+        return _npm_bin(distribution.package) or distribution.cmd
+    return distribution.cmd
+
+
+def _official_distributions(
+    model: _RegistryAgentModel,
+) -> tuple[RegistryDistribution, ...]:
+    distributions = [
+        RegistryDistribution(
+            target=dist.target,
+            type=dist.type,
+            cmd=dist.cmd,
+            args=tuple(dist.args),
+            env=dist.env,
+        )
+        for dist in model.distributions
+    ]
+    distribution = model.distribution or {}
+    binary = distribution.get("binary")
+    if isinstance(binary, dict):
+        for target, value in binary.items():
+            if not isinstance(target, str) or not isinstance(value, dict):
+                continue
+            cmd = value.get("cmd")
+            args = _valid_args(value.get("args", []))
+            env = _valid_env(value.get("env"))
+            if isinstance(cmd, str) and cmd and args is not None and env is not None:
+                distributions.append(
+                    RegistryDistribution(target, "binary", cmd, args, env)
+                )
+    for distribution_type in ("npx", "uvx"):
+        package_distribution = distribution.get(distribution_type)
+        if not isinstance(package_distribution, dict):
+            continue
+        package = package_distribution.get("package")
+        args = _valid_args(package_distribution.get("args", []))
+        env = _valid_env(package_distribution.get("env"))
+        if not isinstance(package, str) or args is None or env is None:
+            continue
+        if (
+            distribution_type == "npx"
+            and package.startswith("@")
+            and package.count("/") == 1
+        ):
+            cmd = ""
+        elif _UNSCOPED_PACKAGE_RE.fullmatch(package):
+            cmd = re.split(r"@|==", package, maxsplit=1)[0]
+        else:
+            continue
+        distributions.append(
+            RegistryDistribution("", distribution_type, cmd, args, env, package)
+        )
+    return tuple(distributions)
+
+
 def parse_registry_agents(value: Any) -> list[RegistryAgent]:
     """Strictly parse the consumed portion of an official registry document.
 
@@ -245,16 +355,7 @@ def parse_registry_agents(value: Any) -> list[RegistryAgent]:
             raise ValueError(
                 f"invalid ACP registry agent at index {index}: {exc}"
             ) from exc
-        distributions = tuple(
-            RegistryDistribution(
-                target=dist.target,
-                type=dist.type,
-                cmd=dist.cmd,
-                args=tuple(dist.args),
-                env=dist.env,
-            )
-            for dist in model.distributions
-        )
+        distributions = _official_distributions(model)
         agents.append(
             RegistryAgent(
                 id=model.id, version=model.version, distributions=distributions

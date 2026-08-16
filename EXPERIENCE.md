@@ -40,3 +40,18 @@ The identifier implementation worker stalled without yielding and made no change
 ## Session, compact, and prompt-batch closure experience
 
 Three scoped implementation workers did not execute: two exited without tool calls or a yield, and the Codex-rescue route lacked its required Bash capability. The controller retained the approved isolated-worktree TDD plan, reviewed the resulting test-only diff inline, and used the source checkout's `uv run` gates instead of stale installed code. The strengthened regressions exposed no current production truncation or dispatcher defect, so the minimal outcome is durable contract coverage rather than speculative production rewrites. The graph query route could not be used because this worktree has no `graphify-out/graph.json`; its sidecar warning was non-blocking.
+
+## ACP registry discovery closure experience
+
+The official registry moved from the legacy `distributions` list to a singular
+`distribution` object, so installed `npx` agents such as Cline were silently
+discarded before runtime construction. Package names are not always launcher
+names; scoped npm packages and wrapper packages require the installed package's
+local `bin` metadata. The fix keeps discovery passive: `PATH` resolution and
+local metadata reads only, with no package-manager invocation, installation,
+probe, or shell command. A runtime regression proves that the official Cline
+shape reaches `dynamic_engine_ids`; the Telegram menu test proves the ordinary
+engine-command path publishes it. Official `uvx` entries use the local launcher
+named by their unscoped package because the registry supplies no independent
+entrypoint metadata. The full suite retained pre-existing Windows transport and
+AsyncMock warnings; no new warning was introduced by this slice.

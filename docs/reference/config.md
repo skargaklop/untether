@@ -434,18 +434,19 @@ not remove static or explicitly configured engines.
 | Key | Type | Default | Notes |
 |-----|------|---------|-------|
 | `allow_v1` | bool | `true` | Allows `protocol = "auto"` to fall back to a clean ACP v1 initialization when the first connection rejects or closes before selecting a version. |
-| `registry.enabled` | bool | `true` | Enables official-registry refresh and automatic binary-agent discovery. Explicit engines remain available when this is `false`. |
+| `registry.enabled` | bool | `true` | Enables official-registry refresh and automatic discovery of locally installed binary, `npx`, and `uvx` agents. Explicit engines remain available when this is `false`. |
 | `registry.cache_ttl_days` | int | `3` | Shared TTL for the registry document and installation-state caches. Must be positive. |
 | `engines.<id>.command` | string | (required) | Explicit ACP command. The production configuration requires an absolute path to an existing executable; it is never resolved through `PATH` at run time. |
 | `engines.<id>.args` | string[] | `[]` | Arguments passed as argv entries; no shell command is constructed. |
 | `engines.<id>.protocol` | `"auto"`\|`"1"`\|`"2"` | `"auto"` | Selects ACP negotiation. v1 is stable; v2 is draft. |
 | `engines.<id>.env` | table | `{}` | Static environment overlay. Values are not logged. |
 
-Registry discovery only considers a current-platform binary distribution and a
-locally resolvable executable. It does not download, install, execute, or probe
-registry entries at startup. `npx` and `uvx` are not auto-bound; using an
-absolute launcher with package arguments is an explicit user opt-in. Registry
-IDs are normalized from hyphens to underscores (for example, `amp-acp` becomes
+Registry discovery considers a current-platform `binary` distribution plus `npx`
+and `uvx` package distributions with a locally resolvable launcher. For an npm
+package, Untether reads only the package's local `bin` metadata when needed to
+identify its launcher; scoped packages are therefore supported. It does not
+download, install, execute, or probe registry entries at startup. Registry IDs
+are normalized from hyphens to underscores (for example, `amp-acp` becomes
 `amp_acp`) and must be valid, collision-free engine IDs. Explicit configuration
 wins over a registry entry with the same normalized ID.
 

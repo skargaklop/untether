@@ -130,6 +130,181 @@ def test_discovery_uses_absolute_executable_and_cache(
     assert build_install_state(record)["installed"] is True
 
 
+def test_official_npx_distribution_discovers_installed_cline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable = tmp_path / "cline.cmd"
+    executable.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "untether.acp_registry.shutil.which",
+        lambda name: str(executable) if name == "cline" else None,
+    )
+    agent = parse_registry_agents(
+        {
+            "version": REGISTRY_DOC_VERSION,
+            "agents": [
+                {
+                    "id": "cline",
+                    "version": "3.0.55",
+                    "distribution": {
+                        "npx": {"package": "cline@3.0.55", "args": ["--acp"]}
+                    },
+                }
+            ],
+        }
+    )[0]
+
+    distribution = choose_binary_distribution(agent, target="windows-x86_64")
+
+    assert distribution is not None
+    assert distribution.cmd == "cline"
+    assert distribution.args == ("--acp",)
+    record = discover_installation(agent, target="windows-x86_64", cache=None)
+    assert record.installed is True
+    assert record.executable == str(executable.resolve())
+
+
+def test_official_binary_distribution_prefers_current_platform() -> None:
+    agent = parse_registry_agents(
+        {
+            "version": REGISTRY_DOC_VERSION,
+            "agents": [
+                {
+                    "id": "demo-agent",
+                    "distribution": {
+                        "binary": {
+                            "linux-x86_64": {"cmd": "demo-linux"},
+                            "windows-x86_64": {
+                                "cmd": "demo.exe",
+                                "args": ["--acp"],
+                                "env": {"NO_COLOR": "1"},
+                            },
+                        }
+                    },
+                }
+            ],
+        }
+    )[0]
+
+    assert choose_binary_distribution(agent, target="windows-x86_64") == (
+        RegistryDistribution(
+            "windows-x86_64", "binary", "demo.exe", ("--acp",), {"NO_COLOR": "1"}
+        )
+    )
+
+
+def test_official_scoped_npx_distribution_uses_local_package_bin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    npm_root = tmp_path / "npm"
+    package_dir = npm_root / "node_modules" / "@scope" / "agent"
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text(
+        json.dumps({"bin": {"agent": "bin/agent.js"}}), encoding="utf-8"
+    )
+    npx = npm_root / "npx.cmd"
+    npx.write_text("", encoding="utf-8")
+    executable = tmp_path / "agent.cmd"
+    executable.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "untether.acp_registry.shutil.which",
+        lambda name: {
+            "npx": str(npx),
+            "agent": str(executable),
+        }.get(name),
+    )
+    agent = parse_registry_agents(
+        {
+            "version": REGISTRY_DOC_VERSION,
+            "agents": [
+                {
+                    "id": "scoped-agent",
+                    "distribution": {
+                        "npx": {"package": "@scope/agent@1.0.0", "args": ["--acp"]}
+                    },
+                }
+            ],
+        }
+    )[0]
+
+    record = discover_installation(agent, target="windows-x86_64", cache=None)
+
+    assert record.cmd == "agent"
+    assert record.installed is True
+    assert record.executable == str(executable.resolve())
+
+
+def test_official_unscoped_npx_distribution_uses_local_package_bin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    npm_root = tmp_path / "npm"
+    package_dir = npm_root / "node_modules" / "agent-wrapper"
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text(
+        json.dumps({"bin": {"agent": "bin/agent.js"}}), encoding="utf-8"
+    )
+    npx = npm_root / "npx.cmd"
+    npx.write_text("", encoding="utf-8")
+    executable = tmp_path / "agent.cmd"
+    executable.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "untether.acp_registry.shutil.which",
+        lambda name: {
+            "npx": str(npx),
+            "agent": str(executable),
+        }.get(name),
+    )
+    agent = parse_registry_agents(
+        {
+            "version": REGISTRY_DOC_VERSION,
+            "agents": [
+                {
+                    "id": "wrapped-agent",
+                    "distribution": {
+                        "npx": {"package": "agent-wrapper@1.0.0", "args": ["--acp"]}
+                    },
+                }
+            ],
+        }
+    )[0]
+
+    record = discover_installation(agent, target="windows-x86_64", cache=None)
+
+    assert record.cmd == "agent"
+    assert record.installed is True
+    assert record.executable == str(executable.resolve())
+
+
+def test_official_uvx_distribution_discovers_local_launcher(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable = tmp_path / "minion-code.cmd"
+    executable.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "untether.acp_registry.shutil.which",
+        lambda name: str(executable) if name == "minion-code" else None,
+    )
+    agent = parse_registry_agents(
+        {
+            "version": REGISTRY_DOC_VERSION,
+            "agents": [
+                {
+                    "id": "minion-code",
+                    "distribution": {
+                        "uvx": {"package": "minion-code@0.1.44", "args": ["acp"]}
+                    },
+                }
+            ],
+        }
+    )[0]
+
+    record = discover_installation(agent, target="windows-x86_64", cache=None)
+
+    assert record.cmd == "minion-code"
+    assert record.installed is True
+    assert record.executable == str(executable.resolve())
+
+
 def test_explicit_command_must_be_absolute() -> None:
     with pytest.raises(ValueError, match="absolute"):
         resolve_explicit_command("demo", base_dir=Path.cwd())
