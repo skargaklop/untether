@@ -251,3 +251,34 @@ def test_discovery_omits_python_metadata_without_single_executable(
         discover_installed_launchers(env={"UV_TOOL_DIR": str(tool_root)}, home=tmp_path)
         == ()
     )
+
+
+def test_discovery_reads_cargo_receipt_and_launcher(tmp_path: Path) -> None:
+    cargo_home = tmp_path / "cargo"
+    cargo_home.mkdir()
+    (cargo_home / ".crates2.json").write_text(
+        json.dumps(
+            {
+                "installs": {
+                    "agent-cli 1.2.3 (registry+https://example.invalid)": {
+                        "bins": ["agent-cli"]
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (cargo_home / "bin").mkdir()
+    (cargo_home / "bin" / "agent-cli.cmd").write_text("", encoding="utf-8")
+
+    assert discover_installed_launchers(
+        env={"CARGO_HOME": str(cargo_home)}, home=tmp_path
+    ) == (
+        InstalledLauncher(
+            ecosystem="cargo",
+            package="agent-cli",
+            version="1.2.3",
+            command=str((cargo_home / "bin" / "agent-cli.cmd").resolve()),
+            metadata_path=str((cargo_home / ".crates2.json").resolve()),
+        ),
+    )

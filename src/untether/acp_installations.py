@@ -76,6 +76,7 @@ def discover_installed_launchers(
         if env.get("PIPX_BIN_DIR")
         else home / ".local" / "bin"
     )
+    cargo_home = Path(env["CARGO_HOME"]) if env.get("CARGO_HOME") else home / ".cargo"
     return (
         tuple(
             launcher
@@ -84,6 +85,7 @@ def discover_installed_launchers(
         )
         + _uv_launchers(uv_root)
         + _pipx_launchers(pipx_home, pipx_bin)
+        + _cargo_launchers(cargo_home)
     )
 
 
@@ -153,6 +155,45 @@ def _package_executable(root: Path, name: str) -> Path | None:
         if path.is_file():
             return path.resolve()
     return None
+
+
+def _cargo_launchers(home: Path) -> tuple[InstalledLauncher, ...]:
+    receipt = home / ".crates2.json"
+    try:
+        installs = json.loads(receipt.read_text(encoding="utf-8")).get("installs")
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return ()
+    if not isinstance(installs, dict):
+        return ()
+    launchers: list[InstalledLauncher] = []
+    for specification, value in installs.items():
+        parsed = _cargo_specification(specification)
+        bins = value.get("bins") if isinstance(value, dict) else None
+        if parsed is None or not isinstance(bins, list) or len(bins) != 1:
+            continue
+        package, version = parsed
+        bin_name = bins[0]
+        if not isinstance(bin_name, str) or not bin_name:
+            continue
+        executable = _package_executable(home / "bin", bin_name)
+        if executable is not None:
+            launchers.append(
+                InstalledLauncher(
+                    "cargo", package, version, str(executable), str(receipt.resolve())
+                )
+            )
+    return tuple(launchers)
+
+
+def _cargo_specification(value: object) -> tuple[str, str] | None:
+    if not isinstance(value, str):
+        return None
+    package, separator, remainder = value.partition(" ")
+    version, _, _source = remainder.partition(" ")
+    parsed = parse_registry_package(package, ecosystem="python")
+    if not separator or not version or parsed is None or parsed[1] is not None:
+        return None
+    return parsed[0], version
 
 
 def _uv_launchers(root: Path) -> tuple[InstalledLauncher, ...]:
