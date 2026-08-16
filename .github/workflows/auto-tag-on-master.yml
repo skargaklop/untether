@@ -37,6 +37,11 @@ jobs:
   auto-tag:
     name: Detect version bump and tag
     runs-on: ubuntu-latest
+    # Forks have no RELEASE_TAG_PAT (secrets don't carry over from the
+    # parent) and no PyPI publishing rights, so the whole tag->release
+    # pipeline is meaningless there. Skip neutrally instead of failing on
+    # every push. Upstream (non-fork) behavior is unchanged.
+    if: ${{ !github.event.repository.fork }}
     permissions:
       contents: write  # create + push tags
     steps:
