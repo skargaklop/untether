@@ -32,3 +32,7 @@ The interaction slice is deliberately bounded: reverse requests use opaque nonce
 ## ACP adapter gap-fix experience
 
 Inline `python -c` peer fixtures were brittle under Windows quoting; the file-based `tests/fixtures/acp_agent.py` subprocess fixture removed that failure class. `select_backends` had masked the untested production registry path — behavior-asserting tests now target `build_runtime_spec` directly. The `dynamic_engine_ids` guard in `/config` showed how getattr-defaulted guards silently rot; the field is now asserted in a transport-runtime test. Compaction did not need the old client's transport at all: resuming via the new peer, waiting for `available_commands_update`, and gating on an advertised `compact` command reproduces the legacy contract in ~100 lines, and `runners/_acp.py` is deleted.
+
+## Session identifier closure experience
+
+The identifier implementation worker stalled without yielding and made no changes; the requested code-review agent could not start because its runtime had no selected model. Inline execution used the approved source-only worktree and an explicit temporary `[:8]` restoration to prove the strengthened runner-label test was genuinely RED before restoring the full-ID implementation. Telegram rendering deliberately strips Markdown backticks into code entities, so the copyable-footer regression must assert rendered text plus entity span, not the pre-render Markdown source.
