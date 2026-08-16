@@ -326,6 +326,14 @@ def test_official_cline_npx_registry_entry_joins_dynamic_engines(
             ],
         }
     )[0]
+    npm_root = tmp_path / "npm"
+    package_dir = npm_root / "node_modules" / "cline"
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text(
+        '{"bin": {"cline": "bin/cline.js"}}', encoding="utf-8"
+    )
+    npx = npm_root / "npx.cmd"
+    npx.write_text("", encoding="utf-8")
     monkeypatch.setattr(
         runtime_loader, "list_backend_ids", lambda allowlist=None: ["codex"]
     )
@@ -341,6 +349,7 @@ def test_official_cline_npx_registry_entry_joins_dynamic_engines(
         "which",
         lambda command: {
             "codex": "C:/Tools/codex.cmd",
+            "npx": str(npx),
             "cline": "C:/Tools/cline.cmd",
         }.get(command),
     )

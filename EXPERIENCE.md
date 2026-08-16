@@ -43,15 +43,4 @@ Three scoped implementation workers did not execute: two exited without tool cal
 
 ## ACP registry discovery closure experience
 
-The official registry moved from the legacy `distributions` list to a singular
-`distribution` object, so installed `npx` agents such as Cline were silently
-discarded before runtime construction. Package names are not always launcher
-names; scoped npm packages and wrapper packages require the installed package's
-local `bin` metadata. The fix keeps discovery passive: `PATH` resolution and
-local metadata reads only, with no package-manager invocation, installation,
-probe, or shell command. A runtime regression proves that the official Cline
-shape reaches `dynamic_engine_ids`; the Telegram menu test proves the ordinary
-engine-command path publishes it. Official `uvx` entries use the local launcher
-named by their unscoped package because the registry supplies no independent
-entrypoint metadata. The full suite retained pre-existing Windows transport and
-AsyncMock warnings; no new warning was introduced by this slice.
+The official registry uses a singular `distribution` object, and the existing parser already accepted it. The safety gap was a fallback from package name to a same-named `PATH` command. Tests now require installed npm `package.json` `bin` metadata before a launcher can be bound; no metadata leaves the registry agent unavailable even if a same-named command exists. `uvx` remains explicit-configuration-only because passive discovery has no deterministic local metadata root. The existing Telegram command menu already enumerates and deduplicates available runtime engine IDs, so no menu production change was required. The focused ACP/runtime/menu gate and preserved session, compact/handoff, and batch gate remained green.

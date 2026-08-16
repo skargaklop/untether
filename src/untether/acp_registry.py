@@ -40,6 +40,10 @@ _UNSCOPED_PACKAGE_RE = re.compile(
     r"^[a-z0-9][a-z0-9._-]*(?:(?:@|==)[0-9][a-z0-9._+-]*)?$"
 )
 
+_SCOPED_NPM_PACKAGE_RE = re.compile(
+    r"^@[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*(?:@[0-9][a-z0-9._+-]*)?$"
+)
+
 
 class _RegistryDistributionModel(BaseModel):
     """Strict-but-open view of a single registry distribution entry."""
@@ -275,7 +279,7 @@ def _npm_bin(package: str) -> str | None:
 
 def _distribution_command(distribution: RegistryDistribution) -> str:
     if distribution.type == "npx" and distribution.package:
-        return _npm_bin(distribution.package) or distribution.cmd
+        return _npm_bin(distribution.package) or ""
     return distribution.cmd
 
 
@@ -314,16 +318,14 @@ def _official_distributions(
         env = _valid_env(package_distribution.get("env"))
         if not isinstance(package, str) or args is None or env is None:
             continue
-        if (
-            distribution_type == "npx"
-            and package.startswith("@")
-            and package.count("/") == 1
+        if distribution_type == "npx" and not (
+            _UNSCOPED_PACKAGE_RE.fullmatch(package)
+            or _SCOPED_NPM_PACKAGE_RE.fullmatch(package)
         ):
-            cmd = ""
-        elif _UNSCOPED_PACKAGE_RE.fullmatch(package):
-            cmd = re.split(r"@|==", package, maxsplit=1)[0]
-        else:
             continue
+        if distribution_type == "uvx" and not _UNSCOPED_PACKAGE_RE.fullmatch(package):
+            continue
+        cmd = ""
         distributions.append(
             RegistryDistribution("", distribution_type, cmd, args, env, package)
         )

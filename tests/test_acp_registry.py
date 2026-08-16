@@ -130,14 +130,22 @@ def test_discovery_uses_absolute_executable_and_cache(
     assert build_install_state(record)["installed"] is True
 
 
-def test_official_npx_distribution_discovers_installed_cline(
+def test_official_npx_distribution_discovers_metadata_declared_launcher(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    npm_root = tmp_path / "npm"
+    package_dir = npm_root / "node_modules" / "cline"
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text(
+        json.dumps({"bin": {"cline": "bin/cline.js"}}), encoding="utf-8"
+    )
+    npx = npm_root / "npx.cmd"
+    npx.write_text("", encoding="utf-8")
     executable = tmp_path / "cline.cmd"
     executable.write_text("", encoding="utf-8")
     monkeypatch.setattr(
         "untether.acp_registry.shutil.which",
-        lambda name: str(executable) if name == "cline" else None,
+        lambda name: {"npx": str(npx), "cline": str(executable)}.get(name),
     )
     agent = parse_registry_agents(
         {
@@ -157,11 +165,42 @@ def test_official_npx_distribution_discovers_installed_cline(
     distribution = choose_binary_distribution(agent, target="windows-x86_64")
 
     assert distribution is not None
-    assert distribution.cmd == "cline"
+    assert distribution.cmd == ""
     assert distribution.args == ("--acp",)
     record = discover_installation(agent, target="windows-x86_64", cache=None)
+    assert record.cmd == "cline"
     assert record.installed is True
     assert record.executable == str(executable.resolve())
+
+
+def test_official_npx_distribution_skips_package_name_without_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable = tmp_path / "cline.cmd"
+    executable.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "untether.acp_registry.shutil.which",
+        lambda name: str(executable) if name == "cline" else None,
+    )
+    agent = parse_registry_agents(
+        {
+            "version": REGISTRY_DOC_VERSION,
+            "agents": [
+                {
+                    "id": "cline",
+                    "distribution": {
+                        "npx": {"package": "cline@3.0.55", "args": ["--acp"]}
+                    },
+                }
+            ],
+        }
+    )[0]
+
+    record = discover_installation(agent, target="windows-x86_64", cache=None)
+
+    assert record.cmd == ""
+    assert record.installed is False
+    assert record.executable is None
 
 
 def test_official_binary_distribution_prefers_current_platform() -> None:
@@ -275,7 +314,7 @@ def test_official_unscoped_npx_distribution_uses_local_package_bin(
     assert record.executable == str(executable.resolve())
 
 
-def test_official_uvx_distribution_discovers_local_launcher(
+def test_official_uvx_distribution_requires_explicit_configuration(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     executable = tmp_path / "minion-code.cmd"
@@ -300,9 +339,9 @@ def test_official_uvx_distribution_discovers_local_launcher(
 
     record = discover_installation(agent, target="windows-x86_64", cache=None)
 
-    assert record.cmd == "minion-code"
-    assert record.installed is True
-    assert record.executable == str(executable.resolve())
+    assert record.cmd == ""
+    assert record.installed is False
+    assert record.executable is None
 
 
 def test_explicit_command_must_be_absolute() -> None:
