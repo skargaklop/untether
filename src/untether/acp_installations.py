@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Mapping, Protocol, Sequence
+from typing import Literal, Protocol
 
 _NPM_PACKAGE_RE = re.compile(
     r"^(?P<name>@[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*)(?:@(?P<version>[0-9][a-z0-9._+-]*))?$"
@@ -17,8 +19,11 @@ _PYTHON_PACKAGE_RE = re.compile(
 
 
 class _Distribution(Protocol):
-    type: str
-    package: str | None
+    @property
+    def type(self) -> str: ...
+
+    @property
+    def package(self) -> str | None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,13 +54,86 @@ def parse_registry_package(
 def discover_installed_launchers(
     *, env: Mapping[str, str], home: Path
 ) -> tuple[InstalledLauncher, ...]:
-    """Return launchers from available local metadata roots.
+    """Return launchers proven by local package-manager metadata only."""
+    roots: list[tuple[Literal["npm", "bun"], Path]] = []
+    app_data = env.get("APPDATA")
+    if app_data:
+        roots.append(("npm", Path(app_data) / "npm"))
+    bun_install = Path(env["BUN_INSTALL"]) if env.get("BUN_INSTALL") else home / ".bun"
+    roots.append(("bun", bun_install / "install" / "global"))
+    return tuple(
+        launcher
+        for ecosystem, root in roots
+        for launcher in _package_launchers(root, ecosystem=ecosystem)
+    )
 
-    Readers are intentionally added per supported package-manager format. This
-    initial interface performs no PATH probing and has no evidence source yet.
-    """
-    del env, home
-    return ()
+
+def _package_launchers(
+    root: Path, *, ecosystem: Literal["npm", "bun"]
+) -> tuple[InstalledLauncher, ...]:
+    node_modules = root / "node_modules"
+    if not node_modules.is_dir():
+        return ()
+    metadata_paths = tuple(node_modules.glob("*/package.json")) + tuple(
+        node_modules.glob("@*/*/package.json")
+    )
+    return tuple(
+        launcher
+        for metadata_path in metadata_paths
+        if (launcher := _package_launcher(root, metadata_path, ecosystem=ecosystem))
+        is not None
+    )
+
+
+def _package_launcher(
+    root: Path, metadata_path: Path, *, ecosystem: Literal["npm", "bun"]
+) -> InstalledLauncher | None:
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+    package = metadata.get("name") if isinstance(metadata, dict) else None
+    version = metadata.get("version") if isinstance(metadata, dict) else None
+    bin_value = metadata.get("bin") if isinstance(metadata, dict) else None
+    if (
+        not isinstance(package, str)
+        or parse_registry_package(package, ecosystem="npm") is None
+    ):
+        return None
+    if not isinstance(version, str) or not version:
+        return None
+    if isinstance(bin_value, str):
+        launcher_name = package.rsplit("/", 1)[-1]
+        launcher_target = bin_value
+    elif isinstance(bin_value, dict) and len(bin_value) == 1:
+        launcher_name, launcher_target = next(iter(bin_value.items()))
+    else:
+        return None
+    if not isinstance(launcher_name, str) or not launcher_name:
+        return None
+    if not isinstance(launcher_target, str) or not launcher_target:
+        return None
+    target_path = (metadata_path.parent / launcher_target).resolve()
+    if not target_path.is_relative_to(metadata_path.parent.resolve()):
+        return None
+    executable = _package_executable(root, launcher_name)
+    if executable is None:
+        return None
+    return InstalledLauncher(
+        ecosystem=ecosystem,
+        package=package,
+        version=version,
+        command=str(executable),
+        metadata_path=str(metadata_path.resolve()),
+    )
+
+
+def _package_executable(root: Path, name: str) -> Path | None:
+    for suffix in (".cmd", ".exe", ""):
+        path = root / f"{name}{suffix}"
+        if path.is_file():
+            return path.resolve()
+    return None
 
 
 def match_distribution(
