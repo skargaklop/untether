@@ -16,6 +16,15 @@ def test_lockfile_imports_without_fcntl_on_windows() -> None:
         import sys
         import types
 
+        # Pre-import everything the module graph pulls in before lying about
+        # the platform: stdlib modules (shutil, zipfile, ...) dispatch on
+        # sys.platform at import time and would try Windows-only builtins
+        # (e.g. _winapi) on POSIX once the platform is patched.
+        import hashlib  # noqa: F401
+        import json  # noqa: F401
+        import logging  # noqa: F401
+        import zipfile  # noqa: F401
+
         sys.platform = "win32"
         sys.modules["msvcrt"] = types.ModuleType("msvcrt")
         original_import = builtins.__import__
