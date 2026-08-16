@@ -741,6 +741,31 @@ class AcpRegistrySettings(BaseModel):
     cache_ttl_days: StrictInt = Field(default=3, gt=0)
 
 
+class AcpClientSettings(BaseModel):
+    """Capability toggles and interaction timeout for ACP client facility wiring."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    filesystem: bool = True
+    terminal: bool = True
+    elicitation_form: bool = True
+    elicitation_url: bool = False
+    interaction_timeout_s: float = Field(default=600.0, gt=0)
+
+
+class AcpMcpServerSettings(BaseModel):
+    """MCP server definition passed to the ACP agent at ``session/new``.
+
+    Server definitions vary by transport (``command``/``args``/``env`` vs a
+    bare ``url``), so the model is intentionally lenient: only ``name`` is
+    required and unknown keys are preserved for the agent.
+    """
+
+    model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
+
+    name: NonEmptyStr
+
+
 class AcpEngineSettings(BaseModel):
     """Explicit ACP engine configuration."""
 
@@ -758,6 +783,8 @@ class AcpEngineSettings(BaseModel):
     request_timeout_s: float = Field(default=60.0, gt=0)
     cancel_grace_s: float = Field(default=5.0, gt=0)
     close_timeout_s: float = Field(default=5.0, gt=0)
+    mcp_servers: list[AcpMcpServerSettings] = Field(default_factory=list)
+    client: AcpClientSettings = Field(default_factory=AcpClientSettings)
     config_option_map: dict[
         Literal["model", "reasoning", "permission_mode", "plan"], NonEmptyStr
     ] = Field(default_factory=dict)

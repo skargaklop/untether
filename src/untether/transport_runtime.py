@@ -57,6 +57,7 @@ class TransportRuntime:
     __slots__ = (
         "_allowlist",
         "_config_path",
+        "_dynamic_engine_ids",
         "_plugin_configs",
         "_projects",
         "_router",
@@ -72,6 +73,7 @@ class TransportRuntime:
         config_path: Path | None = None,
         plugin_configs: Mapping[str, Any] | None = None,
         watch_config: bool = False,
+        dynamic_engine_ids: frozenset[str] = frozenset(),
     ) -> None:
         self._apply(
             router=router,
@@ -80,6 +82,7 @@ class TransportRuntime:
             config_path=config_path,
             plugin_configs=plugin_configs,
             watch_config=watch_config,
+            dynamic_engine_ids=dynamic_engine_ids,
         )
 
     def update(
@@ -91,6 +94,7 @@ class TransportRuntime:
         config_path: Path | None = None,
         plugin_configs: Mapping[str, Any] | None = None,
         watch_config: bool = False,
+        dynamic_engine_ids: frozenset[str] = frozenset(),
     ) -> None:
         self._apply(
             router=router,
@@ -99,6 +103,7 @@ class TransportRuntime:
             config_path=config_path,
             plugin_configs=plugin_configs,
             watch_config=watch_config,
+            dynamic_engine_ids=dynamic_engine_ids,
         )
 
     def _apply(
@@ -110,6 +115,7 @@ class TransportRuntime:
         config_path: Path | None,
         plugin_configs: Mapping[str, Any] | None,
         watch_config: bool,
+        dynamic_engine_ids: frozenset[str] = frozenset(),
     ) -> None:
         self._router = router
         self._projects = projects
@@ -117,6 +123,12 @@ class TransportRuntime:
         self._config_path = config_path
         self._plugin_configs = dict(plugin_configs or {})
         self._watch_config = watch_config
+        self._dynamic_engine_ids = frozenset(dynamic_engine_ids)
+
+    @property
+    def dynamic_engine_ids(self) -> frozenset[str]:
+        """Engine ids installed from the ACP registry (not static backends)."""
+        return self._dynamic_engine_ids
 
     @property
     def default_engine(self) -> EngineId:

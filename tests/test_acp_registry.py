@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from untether.acp_registry import (
+    REGISTRY_DOC_VERSION,
     RegistryAgent,
     RegistryDistribution,
     build_install_state,
@@ -15,9 +16,9 @@ from untether.acp_registry import (
     discover_installation,
     fresh_cache,
     normalise_registry_id,
+    parse_registry_agents,
     read_stale_cache,
     resolve_explicit_command,
-    select_backends,
 )
 from untether.settings import AcpEngineSettings, AcpRegistrySettings, UntetherSettings
 
@@ -129,30 +130,103 @@ def test_discovery_uses_absolute_executable_and_cache(
     assert build_install_state(record)["installed"] is True
 
 
-def test_collisions_and_explicit_override() -> None:
-    agent = RegistryAgent(
-        id="demo-agent",
-        version="1",
-        distributions=(RegistryDistribution("windows-x86_64", "binary", "demo"),),
-    )
-    chosen = select_backends(
-        [agent],
-        target="windows-x86_64",
-        executables={"demo": "C:/demo.exe"},
-        explicit_ids={"demo_agent"},
-    )
-    assert chosen == []
+def test_explicit_command_must_be_absolute() -> None:
     with pytest.raises(ValueError, match="absolute"):
         resolve_explicit_command("demo", base_dir=Path.cwd())
-    assert (
-        select_backends(
-            [agent],
-            target="windows-x86_64",
-            executables={"demo": "C:/demo.exe"},
-            explicit_ids=set(),
-        )[0].agent_id
-        == "demo-agent"
+
+
+def test_parse_registry_agents_valid_document() -> None:
+    agents = parse_registry_agents(
+        {
+            "version": REGISTRY_DOC_VERSION,
+            "agents": [
+                {
+                    "id": "demo-agent",
+                    "version": "1.2.3",
+                    "distributions": [
+                        {
+                            "target": "linux-x86_64",
+                            "type": "binary",
+                            "cmd": "demo",
+                            "args": ["--flag"],
+                            "env": {"KEY": "value"},
+                        }
+                    ],
+                    "some_open_field": {"nested": True},
+                }
+            ],
+            "schema": "https://example.com/registry.schema.json",
+        }
     )
+    assert len(agents) == 1
+    assert agents[0].id == "demo-agent"
+    assert agents[0].version == "1.2.3"
+    dist = agents[0].distributions[0]
+    assert dist.target == "linux-x86_64"
+    assert dist.type == "binary"
+    assert dist.cmd == "demo"
+    assert dist.args == ("--flag",)
+    assert dist.env == {"KEY": "value"}
+
+
+def test_parse_registry_agents_converts_scalars_not_id() -> None:
+    with pytest.raises(ValueError, match="index 0"):
+        parse_registry_agents({"agents": [{"id": 42, "version": "1"}]})
+
+
+def test_parse_registry_agents_missing_agents_key_raises() -> None:
+    with pytest.raises(ValueError, match="agents must be a list"):
+        parse_registry_agents({"version": REGISTRY_DOC_VERSION})
+
+
+def test_parse_registry_agents_non_object_document_raises() -> None:
+    with pytest.raises(ValueError, match="document must be an object"):
+        parse_registry_agents([{"id": "demo-agent"}])
+
+
+def test_parse_registry_agents_wrong_document_version_raises() -> None:
+    with pytest.raises(ValueError, match="document version"):
+        parse_registry_agents({"version": "999", "agents": []})
+
+
+def test_parse_registry_agents_valid_without_document_version() -> None:
+    assert parse_registry_agents({"agents": [{"id": "demo-agent"}]})[0].id == (
+        "demo-agent"
+    )
+
+
+def test_parse_registry_agents_rejects_invalid_id_pattern() -> None:
+    with pytest.raises(ValueError, match="index 1"):
+        parse_registry_agents(
+            {
+                "agents": [
+                    {"id": "ok-agent"},
+                    {"id": "Not-Lowercase"},
+                ]
+            }
+        )
+
+
+def test_parse_registry_agents_tolerates_unknown_extra_fields() -> None:
+    agents = parse_registry_agents(
+        {
+            "agents": [
+                {
+                    "id": "demo-agent",
+                    "future_field": True,
+                    "distributions": [
+                        {
+                            "target": "linux-x86_64",
+                            "type": "binary",
+                            "cmd": "demo",
+                            "extra": "ignored",
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+    assert agents[0].distributions[0].cmd == "demo"
 
 
 def test_install_state_round_trip_shape() -> None:

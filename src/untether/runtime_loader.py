@@ -40,6 +40,7 @@ class RuntimeSpec:
     allowlist: list[str] | None
     plugin_configs: Mapping[str, Any] | None
     watch_config: bool = False
+    dynamic_engine_ids: frozenset[str] = frozenset()
 
     def to_runtime(self, *, config_path: Path | None) -> TransportRuntime:
         return TransportRuntime(
@@ -49,6 +50,7 @@ class RuntimeSpec:
             config_path=config_path,
             plugin_configs=self.plugin_configs,
             watch_config=self.watch_config,
+            dynamic_engine_ids=self.dynamic_engine_ids,
         )
 
     def apply(self, runtime: TransportRuntime, *, config_path: Path | None) -> None:
@@ -59,6 +61,7 @@ class RuntimeSpec:
             config_path=config_path,
             plugin_configs=self.plugin_configs,
             watch_config=self.watch_config,
+            dynamic_engine_ids=self.dynamic_engine_ids,
         )
 
 
@@ -274,14 +277,23 @@ def build_runtime_spec(
     )
     engine_ids = list(static_ids)
     explicit_ids = set(settings.acp.engines)
+    static_id_set = set(static_ids)
+    # 6.2(b): an id configured under BOTH a static backend and
+    # [acp.engines.<id>] is a hard config conflict — fail loudly rather than
+    # silently dropping one of the two backends.
+    overlap = static_id_set & explicit_ids
+    if overlap:
+        conflict = sorted(overlap)[0]
+        raise ConfigError(
+            f"ACP engine {conflict!r} is configured both as a static backend "
+            f"and under [acp.engines.{conflict}]"
+        )
     for engine_id, engine_settings in settings.acp.engines.items():
-        if engine_id in engine_ids:
-            engine_ids.remove(engine_id)
-        backends = [backend for backend in backends if backend.id != engine_id]
         try:
             backends.append(explicit_backend(engine_id, engine_settings))
         except (ValueError, OSError) as exc:
             raise ConfigError(f"Invalid ACP engine {engine_id!r}: {exc}") from exc
+    dynamic_ids: set[str] = set()
     if settings.acp.registry.enabled:
         cache_dir = config_path.parent / "cache"
         cache_path = cache_dir / "acp-registry-v1.json"
@@ -291,20 +303,45 @@ def build_runtime_spec(
         )
         install_cache = load_installation_cache(install_path)
         changed = False
+        reserved_lower = {value.lower() for value in reserved}
+        project_aliases = {alias.lower() for alias in settings.projects}
         target = current_platform_target()
         now = time.time()
         ttl_s = settings.acp.registry.cache_ttl_days * 86400
         for agent in agents:
             try:
                 engine_id = normalise_registry_id(agent.id)
-                if (
-                    engine_id in explicit_ids
-                    or engine_id in engine_ids
-                    or engine_id in RESERVED_CHAT_COMMANDS
-                ):
-                    continue
+            except ValueError:
+                continue
+            # Explicit [acp.engines.<id>] config takes precedence silently.
+            if engine_id in explicit_ids:
+                continue
+            # 6.2(a): a registry engine whose normalized id collides with an
+            # existing static engine id or project alias is skipped with a
+            # warning; reserved commands are skipped silently.
+            collision_reason: str | None = None
+            if engine_id in static_id_set:
+                collision_reason = "static engine id"
+            elif engine_id in project_aliases:
+                collision_reason = "project alias"
+            elif engine_id in reserved_lower:
+                collision_reason = "reserved command"
+            if collision_reason is not None:
+                logger.warning(
+                    "acp.registry.skipped_collision",
+                    agent=agent.id,
+                    engine_id=engine_id,
+                    reason=collision_reason,
+                )
+                continue
+            if engine_id in engine_ids:
+                continue
+            try:
                 distribution = choose_binary_distribution(agent, target=target)
-                cache_key = f"{agent.id}:{agent.version}:{target}:{distribution.cmd if distribution else ''}"
+                cache_key = (
+                    f"{agent.id}:{agent.version}:{target}:"
+                    f"{distribution.cmd if distribution else ''}"
+                )
                 cached = install_cache.get(cache_key)
                 fresh = (
                     isinstance(cached, dict)
@@ -323,16 +360,18 @@ def build_runtime_spec(
                     if fresh and cached is not None
                     else discover_installation(agent, target=target, cache=None)
                 )
-                if not fresh:
-                    install_cache[cache_key] = build_install_state(record)
-                    changed = True
-                if record.installed and distribution is not None and record.executable:
-                    backends.append(registry_backend(record, distribution))
-                    engine_ids.append(engine_id)
             except (ValueError, OSError):
                 continue
+            if not fresh:
+                install_cache[cache_key] = build_install_state(record)
+                changed = True
+            if record.installed and distribution is not None and record.executable:
+                backends.append(registry_backend(record, distribution))
+                engine_ids.append(engine_id)
+                dynamic_ids.add(engine_id)
         if changed:
             write_installation_cache(install_path, install_cache)
+    dynamic_engine_ids = frozenset(dynamic_ids)
     engine_ids = [backend.id for backend in backends]
     projects = settings.to_projects_config(
         config_path=config_path,
@@ -357,4 +396,5 @@ def build_runtime_spec(
         allowlist=allowlist,
         plugin_configs=settings.plugins.model_extra,
         watch_config=settings.watch_config,
+        dynamic_engine_ids=dynamic_engine_ids,
     )

@@ -76,6 +76,7 @@ class InteractionBroker:
                 broker=self,
             )
             self._pending[item.nonce] = item
+            publish(item)
         return item
 
     async def resolve(self, owner: str, nonce: str, result: Any) -> bool:
@@ -94,15 +95,31 @@ class InteractionBroker:
 
     async def cancel_owner(self, owner: str, error: BaseException | None = None) -> int:
         async with self._lock:
-            items = [
-                self._pending.pop(nonce)
-                for nonce, item in list(self._pending.items())
-                if item.owner == owner
-            ]
+            items = self._pop_owner(owner)
         for item in items:
+            unpublish(item.nonce)
             item._error = error or RuntimeError("interaction cancelled")
             item._event.set()
         return len(items)
+
+    def cancel_owner_nowait(
+        self, owner: str, error: BaseException | None = None
+    ) -> int:
+        """Synchronous cancel_owner for teardown paths that must not suspend
+        (async-generator aclose / GeneratorExit handling)."""
+        items = self._pop_owner(owner)
+        for item in items:
+            unpublish(item.nonce)
+            item._error = error or RuntimeError("interaction cancelled")
+            item._event.set()
+        return len(items)
+
+    def _pop_owner(self, owner: str) -> list[PendingInteraction]:
+        return [
+            self._pending.pop(nonce)
+            for nonce, item in list(self._pending.items())
+            if item.owner == owner
+        ]
 
     async def _take(self, owner: str, nonce: str) -> PendingInteraction:
         async with self._lock:
@@ -111,4 +128,28 @@ class InteractionBroker:
                 raise InteractionUnknown("unknown or expired interaction")
             if item.owner != owner:
                 raise InteractionOwnerError("interaction owner mismatch")
+            unpublish(nonce)
             return self._pending.pop(nonce)
+
+
+# Module-level nonce registry: maps every pending interaction's nonce to its
+# broker and owner so Telegram callbacks (acp_control) can resolve an
+# interaction without holding a runner reference. Populated only by
+# InteractionBroker.open; depopulated on every exit path (resolve / cancel /
+# cancel_owner / timeout via wait()'s broker.cancel).
+_NONCE_REGISTRY: dict[str, tuple[InteractionBroker, str]] = {}
+
+
+def publish(pending: PendingInteraction) -> None:
+    if pending.broker is None:
+        raise ValueError("pending interaction has no broker")
+    _NONCE_REGISTRY[pending.nonce] = (pending.broker, pending.owner)
+
+
+def unpublish(nonce: str) -> None:
+    _NONCE_REGISTRY.pop(nonce, None)
+
+
+def resolve_nonce(nonce: str) -> tuple[InteractionBroker, str] | None:
+    """Return (broker, owner) for a live interaction nonce, else None."""
+    return _NONCE_REGISTRY.get(nonce)

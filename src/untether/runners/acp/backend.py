@@ -3,12 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...backends import EngineBackend, EngineConfig
+from .compact import AcpCompactMixin
 from .runner import AcpRunner
 
 
-class _BackendRunner(AcpRunner):
-    def compact(self, resume, instructions=None):
-        return self.run(instructions or "compact", resume)
+class _BackendRunner(AcpCompactMixin, AcpRunner):
+    compact_accepts_instructions = True
 
 
 def build_acp_runner(config: EngineConfig, project_dir: Path) -> _BackendRunner:
@@ -28,6 +28,11 @@ def build_acp_runner(config: EngineConfig, project_dir: Path) -> _BackendRunner:
         cancel_grace_s=float(config.get("cancel_grace_s", 5.0)),
         request_timeout_s=float(config.get("request_timeout_s", 60.0)),
         close_timeout_s=float(config.get("close_timeout_s", 5.0)),
+        startup_timeout_s=float(config.get("startup_timeout_s", 30.0)),
+        mcp_servers=[
+            server.model_dump() if hasattr(server, "model_dump") else dict(server)
+            for server in config.get("mcp_servers", [])
+        ],
         config_option_map={
             str(key): str(value)
             for key, value in dict(config.get("config_option_map", {})).items()

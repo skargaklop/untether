@@ -1162,3 +1162,106 @@ def test_voice_provider_rejects_invalid_local_backend() -> None:
             },
             config_path=Path("untether.toml"),
         )
+
+
+def test_acp_mcp_server_settings_parse_and_preserve_open_fields() -> None:
+    from untether.settings import AcpMcpServerSettings
+
+    server = AcpMcpServerSettings(
+        name="tools",
+        command="mcp-server",
+        args=["--serve"],
+        url="http://localhost:9000",
+    )
+    extra = server.model_extra or {}
+    assert extra["command"] == "mcp-server"
+    assert extra["args"] == ["--serve"]
+    assert extra["url"] == "http://localhost:9000"
+
+
+def test_acp_engine_mcp_servers_default_and_nested_parse() -> None:
+    from untether.settings import AcpEngineSettings
+
+    assert AcpEngineSettings(command="agent").mcp_servers == []
+    engine = AcpEngineSettings(
+        command="agent",
+        mcp_servers=[{"name": "tools", "command": "mcp", "args": ["--serve"]}],
+    )
+    assert engine.mcp_servers[0].name == "tools"
+    assert (engine.mcp_servers[0].model_extra or {})["args"] == ["--serve"]
+
+
+def test_acp_engine_toml_mcp_servers_parsed_nested() -> None:
+    from untether.settings import UntetherSettings
+
+    settings = UntetherSettings.model_validate(
+        {
+            "transport": "telegram",
+            "transports": {
+                "telegram": {"bot_token": "token", "chat_id": 1, "allow_any_user": True}
+            },
+            "acp": {
+                "engines": {
+                    "agent": {
+                        "command": "agent",
+                        "mcp_servers": [{"name": "tools", "url": "http://mcp"}],
+                    }
+                }
+            },
+        }
+    )
+    engine = settings.acp.engines["agent"]
+    assert engine.mcp_servers[0].name == "tools"
+    assert (engine.mcp_servers[0].model_extra or {})["url"] == "http://mcp"
+
+
+def test_acp_client_settings_defaults_and_forbid_extra() -> None:
+    from pydantic import ValidationError
+
+    from untether.settings import AcpClientSettings
+
+    client = AcpClientSettings()
+    assert client.filesystem is True
+    assert client.terminal is True
+    assert client.elicitation_form is True
+    assert client.elicitation_url is False
+    assert client.interaction_timeout_s == 600.0
+
+    with pytest.raises(ValidationError):
+        AcpClientSettings.model_validate({"bogus": True})
+    with pytest.raises(ValidationError):
+        AcpClientSettings.model_validate({"interaction_timeout_s": 0})
+
+
+def test_acp_engine_client_defaults_and_nested_toml() -> None:
+    from untether.settings import AcpEngineSettings, UntetherSettings
+
+    engine = AcpEngineSettings(command="agent")
+    assert engine.client.filesystem is True
+    assert engine.client.interaction_timeout_s == 600.0
+
+    settings = UntetherSettings.model_validate(
+        {
+            "transport": "telegram",
+            "transports": {
+                "telegram": {"bot_token": "token", "chat_id": 1, "allow_any_user": True}
+            },
+            "acp": {
+                "engines": {
+                    "agent": {
+                        "command": "agent",
+                        "client": {
+                            "filesystem": False,
+                            "elicitation_url": True,
+                            "interaction_timeout_s": 30.0,
+                        },
+                    }
+                }
+            },
+        }
+    )
+    client = settings.acp.engines["agent"].client
+    assert client.filesystem is False
+    assert client.terminal is True
+    assert client.elicitation_url is True
+    assert client.interaction_timeout_s == 30.0

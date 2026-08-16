@@ -1,5 +1,6 @@
 import asyncio
 
+import anyio
 import pytest
 
 from untether.model import ActionEvent, CompletedEvent, ResumeToken, StartedEvent
@@ -443,14 +444,21 @@ async def test_runner_routes_reverse_permission_to_broker_while_prompt_pending()
             if method == "session/prompt":
                 await self.handler_registered.wait()
                 interaction = asyncio.create_task(
-                    self.handler({"tool": "shell", "options": [{"id": "allow"}]})
+                    self.handler(
+                        {
+                            "tool": "shell",
+                            "options": [{"optionId": "allow", "name": "Allow"}],
+                        }
+                    )
                 )
                 while broker.pending_count == 0:
                     await asyncio.sleep(0)
                 pending = next(iter(broker._pending.values()))
-                await broker.resolve("s1", pending.nonce, {"approved": True})
+                await broker.resolve(
+                    "s1", pending.nonce, {"outcome": "selected", "optionId": "allow"}
+                )
                 result = await interaction
-                assert result["approved"] is True
+                assert result == {"outcome": "selected", "optionId": "allow"}
                 self.permission_seen.set()
                 return {"stopReason": "end_turn"}
             return await super().request(method, params, **kwargs)
@@ -464,7 +472,9 @@ async def test_runner_routes_reverse_permission_to_broker_while_prompt_pending()
     permission = next(event for event in events if isinstance(event, ActionEvent))
     assert permission.action.kind == "tool"
     assert permission.action.detail["nonce"]
-    assert permission.action.detail["options"] == [{"id": "allow"}]
+    assert permission.action.detail["options"] == [
+        {"optionId": "allow", "name": "Allow"}
+    ]
     assert peer.permission_seen.is_set()
     assert broker.pending_count == 0
 
@@ -682,3 +692,465 @@ async def test_v2_stale_idle_before_prompt_does_not_complete_turn():
 
     assert events[-1].ok
     assert events[-1].answer == ""
+
+
+@pytest.mark.anyio
+async def test_runner_surfaces_acp_commands_meta_and_gates_steering_on_message_command():
+    class CommandPeer(FakePeer):
+        def __init__(self):
+            super().__init__()
+            self._updates = asyncio.Queue()
+            self._updates.put_nowait(
+                {
+                    "method": "session/update",
+                    "params": {
+                        "sessionUpdate": "available_commands_update",
+                        "availableCommands": [
+                            {"name": "message:ls"},
+                            {"name": "status"},
+                        ],
+                    },
+                }
+            )
+
+        async def next_notification(self):
+            return await self._updates.get()
+
+    peer = CommandPeer()
+    runner = AcpRunner(
+        engine="acp_test", command="unused", peer_factory=lambda: peer, turn_timeout_s=1
+    )
+    events = [event async for event in runner.run("hello", None)]
+    started = events[0]
+    assert isinstance(started, StartedEvent)
+    assert started.meta is not None
+    assert isinstance(started.meta["acp_commands"], list)
+    control = started.meta["control"]
+    assert control.can_steer is True
+
+
+@pytest.mark.anyio
+async def test_runner_does_not_gate_steering_without_message_command():
+    peer = FakePeer()
+    runner = AcpRunner(engine="acp_test", command="unused", peer_factory=lambda: peer)
+    events = [event async for event in runner.run("hello", None)]
+    control = events[0].meta["control"]
+    assert control.can_steer is False
+
+
+@pytest.mark.anyio
+async def test_stream_turn_yields_both_updates_before_completed():
+    class StreamingPeer(FakePeer):
+        def __init__(self):
+            super().__init__()
+            self._updates = asyncio.Queue()
+
+        async def request(self, method, params, **kwargs):
+            if method == "session/prompt":
+                await self._updates.put(
+                    {
+                        "method": "session/update",
+                        "params": {
+                            "sessionUpdate": "tool_call",
+                            "toolCallId": "c1",
+                            "title": "ls",
+                            "status": "completed",
+                        },
+                    }
+                )
+                await self._updates.put(
+                    {
+                        "method": "session/update",
+                        "params": {
+                            "sessionUpdate": "tool_call",
+                            "toolCallId": "c2",
+                            "title": "cat",
+                            "status": "completed",
+                        },
+                    }
+                )
+                await asyncio.sleep(0.02)
+            return await super().request(method, params)
+
+        async def next_notification(self):
+            return await self._updates.get()
+
+    peer = StreamingPeer()
+    runner = AcpRunner(engine="acp_test", command="unused", peer_factory=lambda: peer)
+    events = [event async for event in runner.run("hi", None)]
+    actions = [event for event in events if isinstance(event, ActionEvent)]
+    assert len(actions) == 2
+    assert events[-1].ok
+    done_idx = len(events) - 1
+    assert all(events.index(action) < done_idx for action in actions)
+
+
+@pytest.mark.anyio
+async def test_stream_turn_first_update_observable_while_turn_open():
+    class GatePeer(FakePeer):
+        def __init__(self):
+            super().__init__()
+            self._updates = asyncio.Queue()
+            self.release = asyncio.Event()
+
+        async def request(self, method, params, **kwargs):
+            if method == "session/prompt":
+                await self._updates.put(
+                    {
+                        "method": "session/update",
+                        "params": {
+                            "sessionUpdate": "tool_call",
+                            "toolCallId": "c1",
+                            "title": "ls",
+                            "status": "completed",
+                        },
+                    }
+                )
+                await self.release.wait()
+                return {"stopReason": "end_turn"}
+            return await super().request(method, params)
+
+        async def next_notification(self):
+            return await self._updates.get()
+
+    peer = GatePeer()
+    runner = AcpRunner(engine="acp_test", command="unused", peer_factory=lambda: peer)
+    gen = runner.run("hi", None)
+    first = await gen.__anext__()
+    assert isinstance(first, StartedEvent)
+    # Request is still gated (turn open); the action must surface before it
+    # completes via the streaming generator.
+    second = await gen.__anext__()
+    assert isinstance(second, ActionEvent)
+    assert peer.release.is_set() is False
+    peer.release.set()
+    rest = [event async for event in gen]
+    assert isinstance(rest[-1], CompletedEvent)
+    assert rest[-1].ok
+
+
+@pytest.mark.anyio
+async def test_v2_prompt_acceptance_uses_request_timeout_s():
+    class NeverAckPeer(FakePeer):
+        def __init__(self):
+            super().__init__(version=2)
+            self.prompt_timeout = None
+
+        async def request(self, method, params, **kwargs):
+            if method == "session/prompt":
+                self.prompt_timeout = kwargs.get("timeout_s")
+                raise TimeoutError("ACP prompt request timed out")
+            return await super().request(method, params)
+
+    peer = NeverAckPeer()
+    runner = AcpRunner(
+        engine="acp_v2",
+        command="unused",
+        peer_factory=lambda: peer,
+        request_timeout_s=0.5,
+    )
+    events = [event async for event in runner.run("hello", None)]
+    assert peer.prompt_timeout == 0.5
+    assert isinstance(events[-1], CompletedEvent)
+    assert not events[-1].ok
+    assert "timed out" in (events[-1].error or "").lower()
+
+
+@pytest.mark.anyio
+async def test_v1_prompt_unchanged_uses_turn_timeout_s():
+    class RecordingPeer(FakePeer):
+        def __init__(self):
+            super().__init__(version=1)
+            self.prompt_timeout = None
+
+        async def request(self, method, params, **kwargs):
+            if method == "session/prompt":
+                self.prompt_timeout = kwargs.get("timeout_s")
+            return await super().request(method, params)
+
+    peer = RecordingPeer()
+    runner = AcpRunner(
+        engine="acp_v1",
+        command="unused",
+        peer_factory=lambda: peer,
+        turn_timeout_s=123.0,
+        request_timeout_s=0.5,
+    )
+    events = [event async for event in runner.run("hello", None)]
+    assert peer.prompt_timeout == 123.0
+    assert events[-1].ok
+
+
+@pytest.mark.anyio
+async def test_initialize_uses_startup_timeout_s():
+    class RecordingInitPeer(FakePeer):
+        def __init__(self):
+            super().__init__()
+            self.init_timeouts = []
+
+        async def request(self, method, params, **kwargs):
+            if method == "initialize":
+                self.init_timeouts.append(kwargs.get("timeout_s"))
+            return await super().request(method, params)
+
+    peer = RecordingInitPeer()
+    runner = AcpRunner(
+        engine="acp_test",
+        command="unused",
+        peer_factory=lambda: peer,
+        startup_timeout_s=1.5,
+    )
+    events = [event async for event in runner.run("hello", None)]
+    assert peer.init_timeouts == [1.5]
+    assert events[-1].ok
+
+
+@pytest.mark.anyio
+async def test_startup_timeout_fails_run_within_bound():
+    class SleepingInitPeer(FakePeer):
+        def __init__(self, timeout_s):
+            super().__init__()
+            self.timeout_s = timeout_s
+            self.init_timeouts = []
+
+        async def request(self, method, params, **kwargs):
+            if method == "initialize":
+                self.init_timeouts.append(kwargs.get("timeout_s"))
+                await asyncio.sleep(self.timeout_s + 0.3)
+                raise TimeoutError("ACP initialize timed out")
+            return await super().request(method, params)
+
+    peer = SleepingInitPeer(0.05)
+    runner = AcpRunner(
+        engine="acp_test",
+        command="unused",
+        peer_factory=lambda: peer,
+        startup_timeout_s=0.05,
+    )
+    events = [event async for event in runner.run("hello", None)]
+    assert peer.init_timeouts == [0.05]
+    assert isinstance(events[-1], CompletedEvent)
+    assert not events[-1].ok
+    assert "timed out" in (events[-1].error or "").lower()
+
+
+@pytest.mark.anyio
+async def test_session_new_sends_mcp_servers_when_configured():
+    mcp_servers = [{"name": "tools", "command": "mcp", "args": ["--x"]}]
+    peer = FakePeer()
+    runner = AcpRunner(
+        engine="acp_test",
+        command="unused",
+        peer_factory=lambda: peer,
+        mcp_servers=mcp_servers,
+    )
+    events = [event async for event in runner.run("hello", None)]
+    new_params = next(
+        params for method, params in peer.requests if method == "session/new"
+    )
+    assert new_params["mcpServers"] == mcp_servers
+    assert events[-1].ok
+
+
+@pytest.mark.anyio
+async def test_session_new_omits_mcp_servers_when_unconfigured():
+    peer = FakePeer()
+    runner = AcpRunner(engine="acp_test", command="unused", peer_factory=lambda: peer)
+    events = [event async for event in runner.run("hello", None)]
+    new_params = next(
+        params for method, params in peer.requests if method == "session/new"
+    )
+    assert "mcpServers" not in new_params
+    assert events[-1].ok
+
+
+@pytest.mark.anyio
+async def test_resume_engine_mismatch_fails_before_peer_launch():
+    calls: list[int] = []
+
+    def make_peer():
+        calls.append(1)
+        return FakePeer()
+
+    token = ResumeToken("other_engine", "s1")
+    runner = AcpRunner(engine="acp_test", command="unused", peer_factory=make_peer)
+    events = [event async for event in runner.run("hello", token)]
+    assert calls == []
+    assert len(events) == 1
+    assert isinstance(events[0], CompletedEvent)
+    assert not events[0].ok
+    assert "engine" in (events[0].error or "")
+
+
+@pytest.mark.anyio
+async def test_permission_action_carries_inline_keyboard_and_outcome_wire_shape():
+    class PermissionKeyboardPeer(FakePeer):
+        def __init__(self):
+            super().__init__()
+            self.handler_registered = asyncio.Event()
+            self.outcome: dict | None = None
+
+        def register_handler(self, method, handler):
+            assert method == "session/request_permission"
+            self.handler = handler
+            self.handler_registered.set()
+
+        async def request(self, method, params, **kwargs):
+            if method == "session/prompt":
+                await self.handler_registered.wait()
+                interaction = asyncio.create_task(
+                    self.handler(
+                        {
+                            "title": "Allow file access?",
+                            "options": [
+                                {"optionId": "allow", "name": "Allow"},
+                                {"optionId": "reject", "name": "Reject"},
+                            ],
+                        }
+                    )
+                )
+                while broker.pending_count == 0:
+                    await asyncio.sleep(0)
+                pending = next(iter(broker._pending.values()))
+                await broker.resolve(
+                    "s1",
+                    pending.nonce,
+                    {"outcome": "selected", "optionId": "allow"},
+                )
+                self.outcome = await interaction
+                return {"stopReason": "end_turn"}
+            return await super().request(method, params, **kwargs)
+
+    broker = InteractionBroker(timeout_s=1)
+    peer = PermissionKeyboardPeer()
+    runner = AcpRunner(
+        engine="acp_test", command="unused", peer_factory=lambda: peer, broker=broker
+    )
+    events = [event async for event in runner.run("hello", None)]
+    assert events[-1].ok
+
+    action_events = [event for event in events if isinstance(event, ActionEvent)]
+    assert action_events
+    started = action_events[0]
+    assert started.action.kind == "tool"
+    assert started.action.title == "Allow file access?"
+    keyboard = started.action.detail["inline_keyboard"]
+    buttons = keyboard["buttons"]
+    assert len(buttons) == 2
+    assert buttons[0][0]["callback_data"] == f"acp_control:{started.action.id}:allow"
+    assert buttons[1][0]["callback_data"] == f"acp_control:{started.action.id}:reject"
+    assert peer.outcome == {"outcome": "selected", "optionId": "allow"}
+    same_id = [event for event in action_events if event.action.id == started.action.id]
+    assert len(same_id) == 2
+
+
+@pytest.mark.anyio
+async def test_permission_timeout_returns_cancelled_outcome():
+    class SlowPermissionPeer(FakePeer):
+        def __init__(self):
+            super().__init__()
+            self.handler_registered = asyncio.Event()
+            self.outcome: dict | None = None
+
+        def register_handler(self, method, handler):
+            self.handler = handler
+            self.handler_registered.set()
+
+        async def request(self, method, params, **kwargs):
+            if method == "session/prompt":
+                await self.handler_registered.wait()
+                self.outcome = await self.handler(
+                    {"options": [{"optionId": "allow", "name": "Allow"}]}
+                )
+                return {"stopReason": "end_turn"}
+            return await super().request(method, params, **kwargs)
+
+    broker = InteractionBroker(timeout_s=0.01)
+    peer = SlowPermissionPeer()
+    runner = AcpRunner(
+        engine="acp_test", command="unused", peer_factory=lambda: peer, broker=broker
+    )
+    events = [event async for event in runner.run("hello", None)]
+    assert peer.outcome == {"outcome": "cancelled"}
+    assert events[-1].ok
+
+
+@pytest.mark.anyio
+async def test_teardown_mid_turn_pending_permission_does_not_hang():
+    """RunnerBridge aclose regression (real subprocess): aborting a run while
+    a permission interaction is pending must resolve it, send the agent an
+    error outcome, not hang, and reap the subprocess."""
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    from untether.runners.acp.peer import AcpPeer as _RealPeer
+
+    fixture = str(_Path(__file__).parent / "fixtures" / "acp_agent.py")
+    peer_factory = lambda: _RealPeer(  # noqa: E731
+        _sys.executable, [fixture, "--scenario", "permission-request"]
+    )
+    runner = AcpRunner(
+        engine="acp_test",
+        command="unused",
+        peer_factory=peer_factory,
+        turn_timeout_s=30,
+    )
+
+    with anyio.fail_after(10):
+        agen = runner.run("hello", None)
+        started_seen = False
+        action_seen = False
+        async for event in agen:
+            if isinstance(event, StartedEvent):
+                started_seen = True
+            if isinstance(event, ActionEvent) and not action_seen:
+                action_seen = True
+                break
+        await agen.aclose()
+
+    assert started_seen
+    assert action_seen
+    assert runner.broker.pending_count == 0
+
+
+@pytest.mark.anyio
+async def test_e2e_fixture_permission_flow_resolves_via_nonce():
+    """Full E2E: real fixture agent requests permission mid-turn; the runner
+    surfaces an inline keyboard; resolving the nonce via the broker (as
+    acp_control does) completes the turn with the selected outcome on the
+    wire (fixture ends with stopReason end_turn on selection)."""
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    from untether.runners.acp.interactions import resolve_nonce
+    from untether.runners.acp.peer import AcpPeer as _RealPeer
+
+    fixture = str(_Path(__file__).parent / "fixtures" / "acp_agent.py")
+    runner = AcpRunner(
+        engine="acp_test",
+        command="unused",
+        peer_factory=lambda: _RealPeer(
+            _sys.executable, [fixture, "--scenario", "permission-request"]
+        ),
+        turn_timeout_s=30,
+    )
+
+    events = []
+    with anyio.fail_after(15):
+        async for event in runner.run("hello", None):
+            events.append(event)
+            if isinstance(event, ActionEvent) and event.action.detail.get(
+                "inline_keyboard"
+            ):
+                nonce = event.action.id
+                entry = resolve_nonce(nonce)
+                assert entry is not None
+                broker, owner = entry
+                await broker.resolve(
+                    owner, nonce, {"outcome": "selected", "optionId": "allow"}
+                )
+
+    completed = events[-1]
+    assert isinstance(completed, CompletedEvent)
+    assert completed.ok
+    assert runner.broker.pending_count == 0

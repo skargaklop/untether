@@ -2,12 +2,49 @@
 
 ## Unreleased
 
+
+- **acp:** harden the generic ACP adapter to protocol conformance. Frame-too-large no longer masquerades as EOF; JSON-RPC batches are version-gated; notification queue overflow fails the run instead of deadlocking; reverse-handler errors return proper JSON-RPC errors; `$/cancel_request` cancels in-flight reverse requests. The reducer covers canonical v1/v2 update variants, v2 patch semantics, thought events, and aggregate-overflow failure. The turn loop streams events mid-turn, permission/elicitation requests surface as Telegram buttons resolved by the new `acp_control` callback backend, client facilities (filesystem/terminal/elicitation) and `mcp_servers` are configurable and advertised, `startup_timeout_s` is enforced, the registry parses strictly with collision rules, and `dynamic_engine_ids` powers the `/config` About guard.
+
+## v0.35.6 (2026-08-14)
+
+### fixes
+
+- **windows:** publish the platform-safe lockfile implementation and verify the built wheel in a clean Windows `uv` tool installation.
+
+
+- **runners:** display the active model state for every engine. Agy, Grok, and OMP now report `auto` in the footer when no model is explicitly configured, and all three honor `/model` overrides in their metadata. Agy no longer leaks a synthetic UUID as a resume token when no upstream conversation id was scraped.
+
+### fixes
+
+- **telegram:** hot-reload of voice settings now actually applies the new configuration at runtime; previously the reload handler reported the diff but never called `update_from()`.
+- **runner_bridge:** retry explicit provider request timeouts (e.g. `timeout waiting for response`) across all engines. When a real session exists, it is nudged with `continue`; when no authentic session was created and `timeout_fresh_retry` is enabled, the original prompt is retried as a fresh session. The transient-error classifier now inspects both `CompletedEvent.error` and `CompletedEvent.answer` (Agy places timeout text in the answer). Runner-level subprocess retry remains timeout-negative to prevent duplicate side effects after visible output.
+
+## v0.35.5 (2026-08-11)
+
+### fixes
+
+- **windows:** publish the platform-safe lockfile implementation so installed Windows clients no longer import `fcntl` unconditionally. [#459]
+- **telegram:** load and dispatch the installed `/health` backend generically, expose catalog misses, and send an immediate health summary before bounded same-message diagnostic detail. [#348]
+
 ### changes
 
-- **telegram:** compact and handoff now use authorization-scoped five-minute confirmation cards, one-card lifecycle updates, safe cancellation, and transactional routing that changes a session only after its destination seed completes.
-- **directives:** add sticky `/plan` and `/subagent` preferences, dual-mode `/plan`/`/goal` classification, and native Claude/OpenCode `--agent` support while retaining one-shot skill data.
-- **runners:** apply lifecycle timeout/tree-cleanup settings to subprocess and ACP paths, distinguish JSONL timeouts from EOF, sanitize exhausted transient failures, and seed Pi goal-list sessions when the extension is installed.
-- **ci:** make formatting, Ruff, and zero-diagnostic `ty check src tests` mandatory on Ubuntu, macOS, and Windows; retain branch coverage as the Linux source of truth.
+- **telegram:** add configured Groq and local AVT voice transcription backends with hot reload, bounded subprocess output, and termination escalation. [#348]
+- **stats:** record statistics only for successfully delivered completed runs. [#348]
+
+### tests
+
+- **tests:** cover installed health command discovery, generic unavailable-command delivery, immutable health status, progressive HTML delivery, and `/pi` directive resolution. [#348]
+
+### docs
+
+- **docs:** document progressive `/health` behavior and reconcile the migration audit with deterministic health evidence. [#348]
+
+### changes
+
+- **telegram:** compact and handoff now use authorization-scoped five-minute confirmation cards, one-card lifecycle updates, safe cancellation, and transactional routing that changes a session only after its destination seed completes. [#348]
+- **directives:** add sticky `/plan` and `/subagent` preferences, dual-mode `/plan`/`/goal` classification, and native Claude/OpenCode `--agent` support while retaining one-shot skill data. [#348]
+- **runners:** apply lifecycle timeout/tree-cleanup settings to subprocess and ACP paths, distinguish JSONL timeouts from EOF, sanitize exhausted transient failures, and seed Pi goal-list sessions when the extension is installed. [#348]
+- **ci:** make formatting, Ruff, and zero-diagnostic `ty check src tests` mandatory on Ubuntu, macOS, and Windows; retain branch coverage as the Linux source of truth. [#348]
 
 ## v0.35.4 (2026-07-22)
 

@@ -3,6 +3,12 @@ from pathlib import Path
 import pytest
 
 import untether.runtime_loader as runtime_loader
+from untether.acp_registry import (
+    InstallationRecord,
+    RegistryAgent,
+    RegistryDistribution,
+    current_platform_target,
+)
 from untether.config import ConfigError
 from untether.settings import UntetherSettings
 
@@ -212,3 +218,157 @@ def test_setup_summary_all_engines_present(
     assert summary[0]["missing_on_path"] == []
     assert summary[0]["bad_config"] == []
     assert [e for e in logs if e.get("event") == "setup.warning"] == []
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: registry strictness & cleanup — registry collision rules in the
+# production path (build_runtime_spec) plus dynamic_engine_ids threading.
+# ---------------------------------------------------------------------------
+
+
+def _base_registry_settings(project_aliases: list[str] | None = None):
+    data = {
+        "transport": "telegram",
+        "transports": {
+            "telegram": {
+                "bot_token": "token",
+                "chat_id": 123,
+                "allow_any_user": True,
+            }
+        },
+    }
+    if project_aliases:
+        data["projects"] = {alias: {"path": "."} for alias in project_aliases}
+    return UntetherSettings.model_validate(data)
+
+
+def _registry_agent(agent_id: str = "demo-agent") -> RegistryAgent:
+    return RegistryAgent(
+        id=agent_id,
+        version="1",
+        distributions=(
+            RegistryDistribution(
+                target=current_platform_target(), type="binary", cmd="demo"
+            ),
+        ),
+    )
+
+
+def _patch_registry(
+    monkeypatch: pytest.MonkeyPatch, agents: list[RegistryAgent]
+) -> None:
+    monkeypatch.setattr(runtime_loader.shutil, "which", lambda _cmd: "/bin/echo")
+    monkeypatch.setattr(
+        runtime_loader, "list_backend_ids", lambda allowlist=None: ["codex"]
+    )
+    monkeypatch.setattr(
+        runtime_loader, "load_registry_agents", lambda *args, **kwargs: agents
+    )
+    monkeypatch.setattr(
+        runtime_loader,
+        "choose_binary_distribution",
+        lambda agent, target: agent.distributions[0],
+    )
+    monkeypatch.setattr(
+        runtime_loader,
+        "discover_installation",
+        lambda agent, target, cache: InstallationRecord(
+            agent.id, agent.version, target, "demo", 0.0, True, "C:/demo.exe"
+        ),
+    )
+    monkeypatch.setattr(
+        runtime_loader, "write_installation_cache", lambda *args, **kwargs: None
+    )
+
+
+def _registry_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    settings: UntetherSettings,
+):
+    config_path = tmp_path / "untether.toml"
+    config_path.touch()
+    spec = runtime_loader.build_runtime_spec(settings=settings, config_path=config_path)
+    runtime = spec.to_runtime(config_path=config_path)
+    spec.apply(runtime, config_path=config_path)
+    assert runtime.dynamic_engine_ids == spec.dynamic_engine_ids
+    return runtime
+
+
+def test_registry_engine_installed_and_dynamic_engine_ids(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A registry-installed engine joins static ids and is reported as dynamic."""
+    _patch_registry(monkeypatch, [_registry_agent("demo-agent")])
+    runtime = _registry_runtime(monkeypatch, tmp_path, _base_registry_settings())
+    assert "demo_agent" in runtime.engine_ids
+    assert "codex" in runtime.engine_ids
+    assert runtime.dynamic_engine_ids == frozenset({"demo_agent"})
+
+
+def test_registry_engine_project_alias_collision_skipped(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """6.2(a): registry id colliding with a project alias is skipped+warning."""
+    from structlog.testing import capture_logs
+
+    _patch_registry(monkeypatch, [_registry_agent("demo-agent")])
+    settings = _base_registry_settings(project_aliases=["demo_agent"])
+    with capture_logs() as logs:
+        runtime = _registry_runtime(monkeypatch, tmp_path, settings)
+    warnings = [e for e in logs if e.get("event") == "acp.registry.skipped_collision"]
+    assert len(warnings) == 1
+    assert warnings[0]["reason"] == "project alias"
+    assert warnings[0]["engine_id"] == "demo_agent"
+    assert "demo_agent" not in runtime.engine_ids
+    assert runtime.dynamic_engine_ids == frozenset()
+    assert "codex" in runtime.engine_ids
+
+
+def test_registry_engine_static_collision_skipped(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """6.2(a): registry id colliding with a static engine id is skipped+warned."""
+    from structlog.testing import capture_logs
+
+    _patch_registry(monkeypatch, [_registry_agent("demo-agent")])
+    monkeypatch.setattr(
+        runtime_loader,
+        "list_backend_ids",
+        lambda allowlist=None: ["codex", "demo_agent"],
+    )
+    with capture_logs() as logs:
+        runtime = _registry_runtime(monkeypatch, tmp_path, _base_registry_settings())
+    warnings = [e for e in logs if e.get("event") == "acp.registry.skipped_collision"]
+    assert len(warnings) == 1
+    assert warnings[0]["reason"] == "static engine id"
+    assert "demo_agent" not in runtime.engine_ids
+    assert runtime.dynamic_engine_ids == frozenset()
+    assert "codex" in runtime.engine_ids
+
+
+def test_acp_engine_explicit_and_static_conflict_raises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """6.2(b): same id under [acp.engines.<id>] AND a static backend -> ConfigError."""
+    _patch_registry(monkeypatch, [])
+    monkeypatch.setattr(
+        runtime_loader,
+        "list_backend_ids",
+        lambda allowlist=None: ["codex", "demo_engine"],
+    )
+    settings = _base_registry_settings()
+    settings.acp.engines["demo_engine"] = {"command": "C:/demo.exe"}
+    config_path = tmp_path / "untether.toml"
+    config_path.touch()
+    with pytest.raises(ConfigError, match="static backend"):
+        runtime_loader.build_runtime_spec(settings=settings, config_path=config_path)
+
+
+def test_registry_explicit_only_dynamic_engine_ids_empty(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """No registry agents installed -> dynamic_engine_ids is empty."""
+    _patch_registry(monkeypatch, [])
+    runtime = _registry_runtime(monkeypatch, tmp_path, _base_registry_settings())
+    assert runtime.dynamic_engine_ids == frozenset()

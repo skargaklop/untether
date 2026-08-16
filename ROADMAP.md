@@ -20,7 +20,7 @@ This roadmap reflects the project's direction based on recent development and co
 - **Amp engine** — full integration with Sourcegraph's Amp coding agent via stream-json (shipped across v0.34.x–v0.35.x)
 - **Webhook-driven workflows** — trigger agent runs from CI/CD events, GitHub webhooks, or external services (shipped in v0.28.0 as the triggers system with cron and webhook support)
 - **Session statistics** — `/stats` command for per-engine run counts, actions, and duration across today/week/all-time (shipped in v0.30.0)
-- **Device re-authentication** — `/auth` command for headless Codex re-auth via Telegram (shipped in v0.30.0)
+- **Generic ACP/ACP v2 engine adapter** — functional plugin backend for any ACP-capable engine with registry discovery, explicit engine configuration, full session lifecycle, streaming updates, Telegram permission buttons via `acp_control`, client facilities, and strict registry validation (shipped in v0.35.x)
 
 ## Future
 
@@ -29,7 +29,6 @@ This roadmap reflects the project's direction based on recent development and co
 - **Additional coding-agent engines** — requested carryover of Takopi Task 4. Research and, only where a stable headless protocol exists, add Droid, Cline, Kilo, Warp, Open Interpreter, Mimo Code, ZCode, and Kimi Code through Untether’s plugin runner contract, with captured protocol evidence, resume/config/docs, and fixture/live-gated tests. This is speculative research, not a migration acceptance gate.
 - **Cross-engine tool-action detail parity** — requested carryover of partial Takopi Task 20. Capture real tool input fields and normalize command/path/pattern titles and narration segmentation for Codex, OpenCode, Pi/OMP, and Agy while preserving shared generic helpers and existing Grok/Claude behavior.
 - **End-to-end model override guarantees** — requested carryover of substantially implemented Takopi Task 23. Document precedence and harness limitations; prove explicit per-run > topic > chat > engine/runner default behavior, persistent-scope isolation, and new/resumed/queued/batched/handoff propagation through `EngineRunOptions` and each native runner/ACP request without cross-scope bleed.
-- **Generic ACP/ACP v2 engine adapter** — turn the existing dormant ACP stdio client into a functional plugin backend for any compatible engine. Discover local ACP-capable engines where their capability can be established without guessing; otherwise load an explicit configured array of named engines and commands. Use dependency injection through the existing backend/`EngineRunOptions` construction seam so each configured engine supplies its own executable, arguments, and capabilities without global engine-specific branches. Add `/acp <engine> [other commands]` as a one-shot engine selector alongside the existing directive grammar. Implement the full session/prompt/update lifecycle, preserve the runner 3-event contract, document capability and model/resume limitations honestly, and cover discovery, configured engines, command parsing, dependency injection, protocol-v1/v2 negotiation, and fixture/live-gated behaviour. No generic ACP engine may be exposed until it can run prompts end-to-end.
 
 ## Contributing
 

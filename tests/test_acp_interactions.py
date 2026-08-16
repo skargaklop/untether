@@ -8,6 +8,7 @@ from untether.runners.acp.interactions import (
     InteractionBroker,
     InteractionOwnerError,
     InteractionUnknown,
+    resolve_nonce,
 )
 from untether.runners.acp.turn import AcpTurnControl
 
@@ -74,3 +75,44 @@ def test_auth_login_logout_and_retry_once() -> None:
     assert auth.retry_once(lambda: calls.append("retry")) is True
     assert auth.retry_once(lambda: calls.append("retry")) is False
     assert calls == ["browser", "logout", "retry"]
+
+
+@pytest.mark.anyio
+async def test_nonce_registry_publishes_on_open_and_clears_on_resolve() -> None:
+    broker = InteractionBroker(timeout_s=1)
+    pending = await broker.open("session-1", "permission", {"options": []})
+
+    entry = resolve_nonce(pending.nonce)
+    assert entry is not None
+    registered_broker, owner = entry
+    assert registered_broker is broker
+    assert owner == "session-1"
+
+    assert await broker.resolve("session-1", pending.nonce, {"outcome": "cancelled"})
+    assert resolve_nonce(pending.nonce) is None
+
+
+@pytest.mark.anyio
+async def test_nonce_registry_clears_on_owner_cancel() -> None:
+    broker = InteractionBroker(timeout_s=1)
+    await broker.open("session-1", "permission", {})
+    await broker.open("session-1", "elicitation", {})
+
+    assert await broker.cancel_owner("session-1")
+    assert resolve_nonce("anything") is None
+    assert broker.pending_count == 0
+
+
+@pytest.mark.anyio
+async def test_nonce_registry_unknown_nonce_returns_none() -> None:
+    assert resolve_nonce("no-such-nonce") is None
+
+
+@pytest.mark.anyio
+async def test_nonce_registry_clears_on_timeout_cancel() -> None:
+    broker = InteractionBroker(timeout_s=0.01)
+    pending = await broker.open("session-1", "permission", {})
+    assert resolve_nonce(pending.nonce) is not None
+    with pytest.raises(TimeoutError):
+        await pending.wait()
+    assert resolve_nonce(pending.nonce) is None

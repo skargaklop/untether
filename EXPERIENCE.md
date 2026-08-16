@@ -27,3 +27,8 @@ Phase D integration exposed a useful seam but also a limitation: registry discov
 ## ACP Phase C interaction experience
 
 The interaction slice is deliberately bounded: reverse requests use opaque nonces, owner checks, duplicate rejection, and timeout cancellation rather than exposing wire payloads to callbacks. ACP turn control is cancellation-only; it sends the protocol `session/cancel` notification and explicitly does not advertise steering. Authentication remains a small login/logout/retry seam, while filesystem and terminal facilities remain capability-gated until their complete root and process lifecycle adapters are enabled.
+
+
+## ACP adapter gap-fix experience
+
+Inline `python -c` peer fixtures were brittle under Windows quoting; the file-based `tests/fixtures/acp_agent.py` subprocess fixture removed that failure class. `select_backends` had masked the untested production registry path — behavior-asserting tests now target `build_runtime_spec` directly. The `dynamic_engine_ids` guard in `/config` showed how getattr-defaulted guards silently rot; the field is now asserted in a transport-runtime test. Compaction did not need the old client's transport at all: resuming via the new peer, waiting for `available_commands_update`, and gating on an advertised `compact` command reproduces the legacy contract in ~100 lines, and `runners/_acp.py` is deleted.

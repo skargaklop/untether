@@ -65,12 +65,30 @@ command = "D:/Tools/local-agent.exe"
 args = ["--acp"]
 protocol = "auto"
 env = { NO_COLOR = "1" }
-```
+startup_timeout_s = 30.0
+request_timeout_s = 60.0
+mcp_servers = [{ name = "tools", command = "mcp-server", args = ["--serve"] }]
+
+[acp.engines.local_agent.client]
+filesystem = true
+terminal = true
+elicitation_form = true
+elicitation_url = false
+interaction_timeout_s = 600.0
 
 Explicit engine IDs must match `[a-z0-9_]{1,32}`. `command` must be an
 absolute path to an existing executable; relative and bare commands are
 rejected. Arguments are passed as an argv list and `env` is an unlogged static
 overlay. Explicit engines may be used when registry discovery is disabled.
+
+`startup_timeout_s` bounds both `initialize` requests and negotiation;
+`request_timeout_s` bounds the v2 prompt acknowledgement. `mcp_servers` entries
+pass through verbatim as `session/new` `mcpServers`; only `name` is required,
+and unknown keys (for example `url`-based transports) are preserved for the
+agent. The `[acp.engines.<id>.client]` table configures the client facilities
+Untether advertises: `filesystem`, `terminal`, `elicitation_form`,
+`elicitation_url` toggles and the shared `interaction_timeout_s` for permission
+and elicitation waits.
 
 ## Sessions, updates, and safety
 
@@ -108,6 +126,14 @@ display terminals remain supported as updates. Reverse requests are authorized
 through the existing sender/owner checks, and unknown reverse methods return
 JSON-RPC `-32601` without crashing the peer.
 
+Aggregate reducer limits (`max_messages`, `max_actions`, `max_unknown_updates`)
+fail the run when exceeded. Per-item text trims (`max_answer`,
+`max_message_content`, `max_output`) are bounded projections of a single
+logical item and do not fail the run — a documented deviation. Batches are
+accepted only under negotiated v2; an oversized frame fails the run rather than
+being misread as EOF. `$/cancel_request` cancels the matching reverse request
+and answers `-32800`.
+
 ## Telegram commands
 
 Each installed registry agent receives one ordinary normalized slash command.
@@ -119,8 +145,14 @@ For example:
 
 This is the same directive, queue, router, options, progress, and result path as
 any other engine override. The Telegram command menu remains subject to its
-existing command-count limit and deterministic ordering. There is deliberately
 **no `/acp` command** and no aggregate ACP list or dispatch path.
+
+Agent-initiated permission and elicitation requests surface as ordinary
+progress-card buttons. Selecting one resolves through the internal
+`acp_control` callback backend, which maps the pressed option back to the
+pending request's nonce and answers the agent on the wire (`selected` with the
+option ID, or `cancelled`). Stale buttons from finished or timed-out turns are
+ignored benignly.
 
 ## Opt-in live probes
 

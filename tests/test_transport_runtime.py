@@ -27,6 +27,20 @@ def _make_runtime(*, project_default_engine: str | None = None) -> TransportRunt
     return TransportRuntime(router=router, projects=projects)
 
 
+def test_dynamic_engine_ids_field_exists_and_threads_through_update() -> None:
+    """The getattr-based telegram guard needs a real `dynamic_engine_ids`
+    attribute; default empty, threaded through update().
+    """
+    runtime = _make_runtime()
+    assert runtime.dynamic_engine_ids == frozenset()
+    runtime.update(
+        router=runtime._router,
+        projects=runtime._projects,
+        dynamic_engine_ids=frozenset({"agent_id"}),
+    )
+    assert runtime.dynamic_engine_ids == frozenset({"agent_id"})
+
+
 def test_resolve_message_extracts_pi_engine_directive() -> None:
     runtime = _make_runtime()
 

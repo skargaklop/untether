@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -12,14 +13,57 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from .backends import EngineBackend
 from .ids import is_valid_id
+from .settings import NonEmptyStr
 from .utils.json_state import atomic_write_json
 
 OFFICIAL_REGISTRY_URL = (
     "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json"
 )
+
+# Version of the top-level registry document we understand (the value of the
+# top-level "version" key). Verified against the served registry document
+# (https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json),
+# which carries "1.0.0". Applied only when a document actually carries a
+# top-level "version" key.
+REGISTRY_DOC_VERSION = "1.0.0"
+
+# Agent ids per get-started/registry.md: "Create a folder with your agent's ID
+# (lowercase, hyphens allowed)". Lowercase alphanumerics with hyphens between
+# segments — no leading/trailing/double hyphens.
+_REGISTRY_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+class _RegistryDistributionModel(BaseModel):
+    """Strict-but-open view of a single registry distribution entry."""
+
+    model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
+
+    target: NonEmptyStr
+    type: NonEmptyStr
+    cmd: NonEmptyStr
+    args: list[NonEmptyStr] = Field(default_factory=list)
+    env: dict[NonEmptyStr, NonEmptyStr] | None = None
+
+
+class _RegistryAgentModel(BaseModel):
+    """Strict-but-open view of a single registry agent entry."""
+
+    model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
+
+    id: NonEmptyStr
+    version: str = ""
+    distributions: list[_RegistryDistributionModel] = Field(default_factory=list)
+
+    @field_validator("id")
+    @classmethod
+    def _validate_agent_id(cls, value: str) -> str:
+        if not _REGISTRY_ID_RE.fullmatch(value):
+            raise ValueError(f"invalid ACP registry agent id: {value!r}")
+        return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,31 +221,43 @@ def resolve_explicit_command(command: str, *, base_dir: Path) -> str:
 
 
 def parse_registry_agents(value: Any) -> list[RegistryAgent]:
-    """Parse the consumed portion of an official registry document."""
-    raw = value.get("agents", value) if isinstance(value, dict) else value
+    """Strictly parse the consumed portion of an official registry document.
+
+    Raises ``ValueError`` naming the offending agent index on any shape or
+    conversion failure — never coerces non-string scalars.
+    """
+    if not isinstance(value, dict):
+        raise ValueError("ACP registry document must be an object")
+    raw_version = value.get("version")
+    if raw_version is not None and str(raw_version) != REGISTRY_DOC_VERSION:
+        raise ValueError(
+            f"unsupported ACP registry document version {raw_version!r}; "
+            f"expected {REGISTRY_DOC_VERSION!r}"
+        )
+    raw = value.get("agents")
     if not isinstance(raw, list):
         raise ValueError("ACP registry agents must be a list")
     agents: list[RegistryAgent] = []
-    for item in raw:
-        if not isinstance(item, dict):
-            raise ValueError("ACP registry agent must be an object")
-        distributions: list[RegistryDistribution] = []
-        for raw_dist in item.get("distributions", []):
-            if not isinstance(raw_dist, dict):
-                raise ValueError("ACP registry distribution must be an object")
-            distributions.append(
-                RegistryDistribution(
-                    target=str(raw_dist["target"]),
-                    type=str(raw_dist["type"]),
-                    cmd=str(raw_dist["cmd"]),
-                    args=tuple(str(x) for x in raw_dist.get("args", [])),
-                    env={str(k): str(v) for k, v in raw_dist.get("env", {}).items()}
-                    or None,
-                )
+    for index, item in enumerate(raw):
+        try:
+            model = _RegistryAgentModel.model_validate(item)
+        except ValidationError as exc:
+            raise ValueError(
+                f"invalid ACP registry agent at index {index}: {exc}"
+            ) from exc
+        distributions = tuple(
+            RegistryDistribution(
+                target=dist.target,
+                type=dist.type,
+                cmd=dist.cmd,
+                args=tuple(dist.args),
+                env=dist.env,
             )
+            for dist in model.distributions
+        )
         agents.append(
             RegistryAgent(
-                str(item["id"]), str(item.get("version", "")), tuple(distributions)
+                id=model.id, version=model.version, distributions=distributions
             )
         )
     return agents
@@ -253,39 +309,3 @@ def registry_backend(
         "env": distribution.env or {},
     }
     return acp_backend(normalise_registry_id(record.agent_id), config)
-
-
-def select_backends(
-    agents: list[RegistryAgent],
-    *,
-    target: str,
-    executables: dict[str, str],
-    explicit_ids: set[str],
-    reserved_ids: set[str] | None = None,
-) -> list[InstallationRecord]:
-    reserved = reserved_ids or set()
-    result: list[InstallationRecord] = []
-    seen = set(explicit_ids) | reserved
-    for agent in agents:
-        try:
-            engine_id = normalise_registry_id(agent.id)
-        except ValueError:
-            continue
-        if engine_id in seen:
-            continue
-        distribution = choose_binary_distribution(agent, target=target)
-        if distribution is None or distribution.cmd not in executables:
-            continue
-        result.append(
-            InstallationRecord(
-                agent.id,
-                agent.version,
-                target,
-                distribution.cmd,
-                _now(),
-                True,
-                str(Path(executables[distribution.cmd]).resolve()),
-            )
-        )
-        seen.add(engine_id)
-    return result

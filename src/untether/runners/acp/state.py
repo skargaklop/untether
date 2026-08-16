@@ -6,6 +6,9 @@ from typing import Any
 
 from ...events import EventFactory
 from ...model import Action, ActionEvent, ActionKind, ActionPhase
+from .peer import AcpProtocolError
+
+_absent = object()
 
 
 @dataclass(slots=True)
@@ -30,9 +33,31 @@ class AcpMessageLedger:
         *,
         replace: bool = False,
         include_answer: bool = True,
+        patch: dict[str, Any] | None = None,
     ) -> None:
+        """Record a message projection part.
+
+        Chunk (default) mode appends *text*; full mode (``replace=True``) swaps it.
+        *patch* applies ACP v2 merge semantics to the message dict: omitted key
+        leaves the field unchanged, explicit ``None`` clears it, any other value
+        sets it. Exactly one of *patch* and ``text`` is the active operation.
+        """
         message = self.messages.setdefault(ident, {"content": "", "role": "assistant"})
         message["role"] = role
+        if patch is not None:
+            content_value = patch.get("content", _absent)
+            if content_value is not _absent:
+                content = "" if content_value is None else str(content_value)
+                content = content[-self.max_message_content :]
+                message["content"] = content
+                if role == "assistant":
+                    self.answer_parts[ident] = content[-self.max_answer :]
+                else:
+                    self.answer_parts.pop(ident, None)
+            if "role" in patch and patch["role"] is not None:
+                message["role"] = patch["role"]
+            self._check_capacity()
+            return
         previous = str(message.get("content", ""))
         content = text if replace else previous + text
         message["content"] = content[-self.max_message_content :]
@@ -42,14 +67,11 @@ class AcpMessageLedger:
             self.answer_parts[ident] = part[-self.max_answer :]
         elif role != "assistant":
             self.answer_parts.pop(ident, None)
-        self._trim()
+        self._check_capacity()
 
-    def _trim(self) -> None:
-        if len(self.messages) <= self.max_messages:
-            return
-        for ident in list(self.messages)[: -self.max_messages]:
-            del self.messages[ident]
-            self.answer_parts.pop(ident, None)
+    def _check_capacity(self) -> None:
+        if len(self.messages) > self.max_messages:
+            raise AcpProtocolError("ACP state aggregate overflow: messages")
 
 
 @dataclass(slots=True)
@@ -65,6 +87,7 @@ class AcpSessionState:
     answer: str = ""
     usage: dict[str, Any] = field(default_factory=dict)
     foreground_state: str | None = None
+    has_been_running: bool = False
     stop_reason: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     messages: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -72,6 +95,11 @@ class AcpSessionState:
     actions: dict[str, Action] = field(default_factory=dict)
     _output: dict[str, str] = field(default_factory=dict)
     _replayed_answer: str = ""
+    available_commands: set[str] = field(default_factory=set)
+    config_options: list[dict[str, Any]] = field(default_factory=list)
+    mode: str | None = None
+    _tool_content: dict[str, str] = field(default_factory=dict)
+    _thought_parts: dict[str, str] = field(default_factory=dict)
     _message_ledger: AcpMessageLedger = field(init=False)
     _factory: EventFactory = field(default_factory=lambda: EventFactory("acp"))
 
@@ -99,11 +127,21 @@ class AcpSessionState:
             state = update.get("state", update.get("currentState"))
             if isinstance(state, str):
                 self.foreground_state = state
+                if state == "running":
+                    self.has_been_running = True
             reason = update.get("stopReason", update.get("stop_reason"))
             if reason is not None:
                 self.stop_reason = str(reason)
             return []
-        if kind in {"agent_message_chunk", "message", "text", "assistant_message"}:
+        if kind in {
+            "agent_message",
+            "user_message",
+            "agent_message_chunk",
+            "user_message_chunk",
+            "message",
+            "text",
+            "assistant_message",
+        }:
             ident = str(
                 update.get("messageId") or update.get("message_id") or "current"
             )
@@ -111,38 +149,89 @@ class AcpSessionState:
             role = update.get(
                 "role", self.messages.get(ident, {}).get("role", "assistant")
             )
-            replacing = update.get("replace") or update.get("contentType") == "replace"
-            include_answer = True
-            if text and role == "assistant" and self._replayed_answer.startswith(text):
-                self._replayed_answer = self._replayed_answer[len(text) :]
-                include_answer = False
-            self._message_ledger.update(
-                ident,
-                role,
-                text,
-                replace=replacing,
-                include_answer=include_answer,
+            is_user = kind in {"user_message", "user_message_chunk"} or (
+                isinstance(role, str) and role == "user"
             )
+            if is_user:
+                role = "user"
+            if kind == "agent_message":
+                patch = {"content": text} if "content" in update else {}
+                self._message_ledger.update(ident, role, "", patch=patch)
+            else:
+                replacing = (
+                    update.get("replace") or update.get("contentType") == "replace"
+                )
+                include_answer = True
+                if (
+                    text
+                    and role == "assistant"
+                    and self._replayed_answer.startswith(text)
+                ):
+                    self._replayed_answer = self._replayed_answer[len(text) :]
+                    include_answer = False
+                self._message_ledger.update(
+                    ident,
+                    role,
+                    text,
+                    replace=replacing,
+                    include_answer=include_answer,
+                )
             self.messages = self._message_ledger.messages
             self.answer = self._message_ledger.answer
             return []
+        if kind in {"agent_thought", "agent_thought_chunk"}:
+            ident = str(
+                update.get("messageId") or update.get("message_id") or "thought"
+            )
+            text = self._text(update.get("content", update.get("text", "")))
+            if kind == "agent_thought":
+                part = text
+            else:
+                part = (self._thought_parts.get(ident, "") + text)[-self.max_output :]
+            self._thought_parts[ident] = part
+            return [
+                self._event(
+                    f"thought:{ident}",
+                    "note",
+                    part or "Thinking",
+                    {"messageId": ident, "content": part}
+                    if part
+                    else {"messageId": ident},
+                    "updated" if f"thought:{ident}" in self.actions else "started",
+                    None,
+                    update,
+                )
+            ]
         if kind in {"metadata", "session_metadata"}:
             value = update.get("metadata", update.get("value", {}))
             if isinstance(value, dict):
                 self.metadata.update(value)
             return []
         if kind in {"tool_call", "tool_call_update", "tool"}:
+            if not (
+                update.get("toolCallId") or update.get("callId") or update.get("id")
+            ):
+                raise AcpProtocolError(f"ACP malformed {kind}: missing toolCallId")
             ident = self._id(update, "toolCallId", "callId", "id")
-            title = str(update.get("title") or update.get("name") or ident)
+            action_id = f"tool:{ident}"
+            existing = self.actions.get(action_id)
+            if "title" in update:
+                title = str(update["title"]) if update["title"] is not None else ident
+            elif "name" in update and update["name"] is not None:
+                title = str(update["name"])
+            elif existing is not None:
+                title = existing.title
+            else:
+                title = ident
             detail = dict(update)
-            action_kind: ActionKind = "file_change" if update.get("diff") else "tool"
-            phase = (
-                "completed"
-                if update.get("status") in {"completed", "failed", "error"}
-                else ("updated" if ident in self.actions else "started")
-            )
+            phase: ActionPhase
+            if update.get("status") in {"completed", "failed", "error"}:
+                phase = "completed"
+            else:
+                phase = "updated" if existing is not None else "started"
+            action_kind: ActionKind = "file_change" if detail.get("diff") else "tool"
             event = self._event(
-                f"tool:{ident}",
+                action_id,
                 action_kind,
                 title,
                 detail,
@@ -151,6 +240,35 @@ class AcpSessionState:
                 update,
             )
             return [event]
+        if kind == "tool_call_content_chunk":
+            if not (
+                update.get("toolCallId") or update.get("callId") or update.get("id")
+            ):
+                raise AcpProtocolError(
+                    "ACP malformed tool_call_content_chunk: missing toolCallId"
+                )
+            ident = self._id(update, "toolCallId", "callId", "id")
+            action_id = f"tool:{ident}"
+            existing = self.actions.get(action_id)
+            content = self._text(update.get("content", ""))
+            acc = (self._tool_content.get(ident, "") + content)[-self.max_output :]
+            self._tool_content[ident] = acc
+            if existing is None:
+                detail = {"title": ident, "content": acc}
+            else:
+                detail = dict(existing.detail)
+                detail["content"] = acc
+            return [
+                self._event(
+                    action_id,
+                    "tool",
+                    str(detail.get("title") or ident),
+                    detail,
+                    "updated" if existing is not None else "started",
+                    None,
+                    update,
+                )
+            ]
         if kind in {"plan", "plan_update"}:
             ident = str(update.get("planId") or "current")
             return [
@@ -164,7 +282,18 @@ class AcpSessionState:
                     update,
                 )
             ]
-        if kind in {"terminal_output", "terminal_chunk", "terminal"}:
+        if kind in {
+            "terminal_output",
+            "terminal_chunk",
+            "terminal",
+            "terminal_output_chunk",
+        }:
+            if kind == "terminal_output_chunk" and not (
+                update.get("terminalId") or update.get("id")
+            ):
+                raise AcpProtocolError(
+                    "ACP malformed terminal_output_chunk: missing terminalId"
+                )
             ident = self._id(update, "terminalId", "id")
             data = update.get("data", update.get("text", ""))
             if (
@@ -188,6 +317,29 @@ class AcpSessionState:
                     update,
                 )
             ]
+        if kind == "terminal_update":
+            if not (update.get("terminalId") or update.get("id")):
+                raise AcpProtocolError(
+                    "ACP malformed terminal_update: missing terminalId"
+                )
+            ident = self._id(update, "terminalId", "id")
+            action_id = f"terminal:{ident}"
+            phase = (
+                "completed"
+                if update.get("status") == "exited"
+                else ("updated" if action_id in self.actions else "started")
+            )
+            return [
+                self._event(
+                    action_id,
+                    "command",
+                    "Terminal",
+                    dict(update),
+                    phase,
+                    phase != "completed",
+                    update,
+                )
+            ]
         if kind in {"usage_update", "usage"}:
             raw = update.get("usage")
             if isinstance(raw, dict):
@@ -198,18 +350,46 @@ class AcpSessionState:
             return []
         if kind in {"session_end", "stop", "turn_complete", "error"}:
             return []
+        if kind == "session_info_update":
+            meta = update.get("metadata")
+            if isinstance(meta, dict):
+                self.metadata.update(meta)
+            title = update.get("title")
+            if title is not None:
+                self.metadata["title"] = str(title)
+            return []
+        if kind == "available_commands_update":
+            commands = update.get("availableCommands", [])
+            if isinstance(commands, list):
+                for item in commands:
+                    if isinstance(item, dict) and isinstance(item.get("name"), str):
+                        self.available_commands.add(item["name"])
+            return []
+        if kind == "config_option_update":
+            options = update.get("configOptions")
+            if isinstance(options, list):
+                self.config_options.extend(
+                    dict(item) for item in options if isinstance(item, dict)
+                )
+            else:
+                self.config_options.append(dict(update))
+            if len(self.config_options) > self.max_unknown_updates:
+                del self.config_options[: -self.max_unknown_updates]
+            return []
+        if kind in {"mode_update", "current_mode_update"}:
+            mode = update.get("mode", update.get("currentMode", update.get("value")))
+            if mode is not None and not isinstance(mode, (dict, list)):
+                self.mode = str(mode)
+            return []
         self.unknown_updates.append(dict(update))
         if len(self.unknown_updates) > self.max_unknown_updates:
-            del self.unknown_updates[: -self.max_unknown_updates]
+            raise AcpProtocolError("ACP state aggregate overflow: unknown_updates")
         return []
 
     def _trim_actions(self) -> None:
         if len(self.actions) <= self.max_actions:
             return
-        for ident in list(self.actions)[: -self.max_actions]:
-            del self.actions[ident]
-            if ident.startswith("terminal:"):
-                self._output.pop(ident.removeprefix("terminal:"), None)
+        raise AcpProtocolError("ACP state aggregate overflow: actions")
 
     def _event(
         self,
@@ -221,7 +401,7 @@ class AcpSessionState:
         ok: bool | None,
         update: dict[str, Any],
     ) -> ActionEvent:
-        if ident in self.actions:
+        if ident in self.actions and phase != "completed":
             phase = "updated"
         action = Action(id=ident, kind=action_kind, title=title, detail=detail)
         self.actions[ident] = action
@@ -247,4 +427,14 @@ class AcpSessionState:
             return value
         if isinstance(value, dict):
             return str(value.get("text") or value.get("value") or "")
+        if isinstance(value, list):
+            parts: list[str] = []
+            for item in value:
+                if isinstance(item, dict):
+                    block = item.get("text") or item.get("value")
+                    if block is not None:
+                        parts.append(str(block))
+                elif item is not None:
+                    parts.append(str(item))
+            return "".join(parts)
         return ""
