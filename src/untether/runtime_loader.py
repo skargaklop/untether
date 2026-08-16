@@ -338,10 +338,10 @@ def build_runtime_spec(
                 continue
             try:
                 distribution = choose_binary_distribution(agent, target=target)
-                cache_key = (
-                    f"{agent.id}:{agent.version}:{target}:"
-                    f"{distribution.cmd if distribution else ''}"
+                distribution_key = (
+                    distribution.package or distribution.cmd if distribution else ""
                 )
+                cache_key = f"{agent.id}:{agent.version}:{target}:{distribution_key}"
                 cached = install_cache.get(cache_key)
                 fresh = (
                     isinstance(cached, dict)

@@ -360,6 +360,68 @@ def test_official_cline_npx_registry_entry_joins_dynamic_engines(
     assert "cline" in runtime.engine_ids
 
 
+def test_official_cline_ignores_legacy_negative_cache_without_command(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    agent = parse_registry_agents(
+        {
+            "version": REGISTRY_DOC_VERSION,
+            "agents": [
+                {
+                    "id": "cline",
+                    "version": "3.0.55",
+                    "distribution": {
+                        "npx": {"package": "cline@3.0.55", "args": ["--acp"]}
+                    },
+                }
+            ],
+        }
+    )[0]
+    npm_root = tmp_path / "npm"
+    package_dir = npm_root / "node_modules" / "cline"
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text(
+        '{"bin": {"cline": "bin/cline.js"}}', encoding="utf-8"
+    )
+    npx = npm_root / "npx.cmd"
+    npx.write_text("", encoding="utf-8")
+    legacy_key = f"cline:3.0.55:{current_platform_target()}:"
+    monkeypatch.setattr(
+        runtime_loader, "list_backend_ids", lambda allowlist=None: ["codex"]
+    )
+    monkeypatch.setattr(
+        runtime_loader, "load_registry_agents", lambda *args, **kwargs: [agent]
+    )
+    monkeypatch.setattr(
+        runtime_loader,
+        "load_installation_cache",
+        lambda _path: {
+            legacy_key: {
+                "checked_at": runtime_loader.time.time(),
+                "installed": False,
+                "executable": None,
+            }
+        },
+    )
+    monkeypatch.setattr(
+        runtime_loader, "write_installation_cache", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        acp_registry.shutil,
+        "which",
+        lambda command: {
+            "codex": "C:/Tools/codex.cmd",
+            "npx": str(npx),
+            "cline": "C:/Tools/cline.cmd",
+        }.get(command),
+    )
+
+    runtime = _registry_runtime(monkeypatch, tmp_path, _base_registry_settings())
+
+    assert runtime.dynamic_engine_ids == frozenset({"cline"})
+    assert "cline" in runtime.engine_ids
+
+
 def test_registry_engine_project_alias_collision_skipped(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
