@@ -260,7 +260,11 @@ def _npm_bin(package: str) -> str | None:
     npx = shutil.which("npx")
     if not npx:
         return None
-    package_name = package.rsplit("@", 1)[0]
+    package_name = (
+        package.rsplit("@", 1)[0]
+        if not package.startswith("@") or package.count("@") > 1
+        else package
+    )
     package_json = (
         Path(npx).resolve().parent / "node_modules" / package_name / "package.json"
     )

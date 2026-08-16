@@ -273,6 +273,44 @@ def test_official_scoped_npx_distribution_uses_local_package_bin(
     assert record.executable == str(executable.resolve())
 
 
+def test_official_unversioned_scoped_npx_distribution_uses_local_package_bin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    npm_root = tmp_path / "npm"
+    package_dir = npm_root / "node_modules" / "@scope" / "agent"
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text(
+        json.dumps({"bin": {"agent": "bin/agent.js"}}), encoding="utf-8"
+    )
+    npx = npm_root / "npx.cmd"
+    npx.write_text("", encoding="utf-8")
+    executable = tmp_path / "agent.cmd"
+    executable.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "untether.acp_registry.shutil.which",
+        lambda name: {"npx": str(npx), "agent": str(executable)}.get(name),
+    )
+    agent = parse_registry_agents(
+        {
+            "version": REGISTRY_DOC_VERSION,
+            "agents": [
+                {
+                    "id": "scoped-agent",
+                    "distribution": {
+                        "npx": {"package": "@scope/agent", "args": ["--acp"]}
+                    },
+                }
+            ],
+        }
+    )[0]
+
+    record = discover_installation(agent, target="windows-x86_64", cache=None)
+
+    assert record.cmd == "agent"
+    assert record.installed is True
+    assert record.executable == str(executable.resolve())
+
+
 def test_official_unscoped_npx_distribution_uses_local_package_bin(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
