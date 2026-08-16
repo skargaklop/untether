@@ -16,28 +16,32 @@ def test_lockfile_imports_without_fcntl_on_windows() -> None:
         import sys
         import types
 
+        # Warm the full transitive import graph under the REAL platform
+        # first — including untether.logging (structlog pulls asyncio and
+        # subprocess, whose import time dispatch loads _winapi/_overlapped
+        # on Windows) and every stdlib module lockfile.py names. After the
+        # platform lie below, only untether.lockfile itself is imported
+        # fresh; all of its imports resolve from sys.modules, so nothing
+        # platform-dependent is re-imported post-flip.
+        import contextlib  # noqa: F401
+        import hashlib  # noqa: F401
+        import json  # noqa: F401
+        import os  # noqa: F401
+        import dataclasses  # noqa: F401
+        import pathlib  # noqa: F401
+        import untether.logging  # noqa: F401
+        assert "untether.lockfile" not in sys.modules
 
-        class _WinStub(types.ModuleType):
-            # Stand-in for Windows-only builtins on POSIX hosts. Stdlib
-            # modules imported after the platform lie (subprocess does
-            # ``from _winapi import CREATE_NEW_CONSOLE, ...`` at import
-            # time) read arbitrary attributes; the values are never used
-            # at import time, so a constant 0 satisfies them all.
+
+        class _MsvcrtStub(types.ModuleType):
+            # lockfile.py's win32 branch imports msvcrt at module scope but
+            # only touches locking/LK_* inside functions, so the stub only
+            # needs to exist. The real msvcrt wins on genuine Windows.
             def __getattr__(self, name):
                 return 0
 
 
-        # Load the genuine builtins where they exist (real Windows); fall
-        # back to stubs on POSIX BEFORE lying about the platform, so every
-        # later platform-dispatched stdlib import hits the sys.modules
-        # cache instead of the missing real module.
-        for _name in ("_winapi", "msvcrt", "winreg", "nt"):
-            if _name not in sys.modules:
-                try:
-                    __import__(_name)
-                except ImportError:
-                    sys.modules[_name] = _WinStub(_name)
-
+        sys.modules.setdefault("msvcrt", _MsvcrtStub("msvcrt"))
         sys.platform = "win32"
         original_import = builtins.__import__
 
