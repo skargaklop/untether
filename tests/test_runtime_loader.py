@@ -4,6 +4,7 @@ import pytest
 
 import untether.acp_registry as acp_registry
 import untether.runtime_loader as runtime_loader
+from untether.acp_installations import InstalledLauncher
 from untether.acp_registry import (
     REGISTRY_DOC_VERSION,
     InstallationRecord,
@@ -268,6 +269,9 @@ def _patch_registry(
         runtime_loader, "load_registry_agents", lambda *args, **kwargs: agents
     )
     monkeypatch.setattr(
+        runtime_loader, "discover_installed_launchers", lambda **_kwargs: ()
+    )
+    monkeypatch.setattr(
         runtime_loader,
         "choose_binary_distribution",
         lambda agent, target: agent.distributions[0],
@@ -275,7 +279,7 @@ def _patch_registry(
     monkeypatch.setattr(
         runtime_loader,
         "discover_installation",
-        lambda agent, target, cache: InstallationRecord(
+        lambda agent, target, cache, installed: InstallationRecord(
             agent.id, agent.version, target, "demo", 0.0, True, "C:/demo.exe"
         ),
     )
@@ -345,6 +349,19 @@ def test_official_cline_npx_registry_entry_joins_dynamic_engines(
         runtime_loader, "write_installation_cache", lambda *args, **kwargs: None
     )
     monkeypatch.setattr(
+        runtime_loader,
+        "discover_installed_launchers",
+        lambda **_kwargs: (
+            InstalledLauncher(
+                ecosystem="npm",
+                package="cline",
+                version="3.0.55",
+                command="C:/Tools/cline.cmd",
+                metadata_path="C:/npm/node_modules/cline/package.json",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
         acp_registry.shutil,
         "which",
         lambda command: {
@@ -405,6 +422,19 @@ def test_official_cline_ignores_legacy_negative_cache_without_command(
     )
     monkeypatch.setattr(
         runtime_loader, "write_installation_cache", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        runtime_loader,
+        "discover_installed_launchers",
+        lambda **_kwargs: (
+            InstalledLauncher(
+                ecosystem="npm",
+                package="cline",
+                version="3.0.55",
+                command="C:/Tools/cline.cmd",
+                metadata_path="C:/npm/node_modules/cline/package.json",
+            ),
+        ),
     )
     monkeypatch.setattr(
         acp_registry.shutil,

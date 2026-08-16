@@ -22,8 +22,9 @@ neutral note where user-visible text is safe.
 
 Official-registry discovery is enabled by default. The fixed registry endpoint
 is `https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json`.
-Untether considers a current-platform `binary` distribution and locally
-installed launchers from official `npx` package metadata.
+Untether considers a current-platform `binary` distribution and `npx` or `uvx`
+package distributions with exactly one launcher proven by local package-manager
+metadata.
 
 Two cache files live under `~/.untether/cache/`:
 
@@ -39,10 +40,11 @@ registry cache, otherwise dynamic engines are omitted without removing static or
 explicit engines. Configuration reload reuses unexpired cache entries.
 
 Discovery never downloads or installs packages, runs a registry command, hashes
-an unrelated executable, or constructs a shell command. It resolves launchers
-only from `PATH` after reading the installed npm package's local `bin` metadata.
-`uvx`, missing metadata, and ambiguous packages remain omitted until an explicit
-engine configuration supplies an absolute command.
+an unrelated executable, or constructs a shell command. It accepts a launcher
+only when the local npm, Bun, uv, or pipx metadata inventory proves the registry
+package and direct executable match. Missing metadata and ambiguous packages
+remain omitted until an explicit engine configuration supplies an absolute
+command.
 
 Registry IDs are normalized by replacing `-` with `_`; for example,
 `amp-acp` becomes engine and command ID `amp_acp`. Invalid, overlong, reserved,
