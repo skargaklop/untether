@@ -297,12 +297,70 @@ def test_continue_allows_id_promotion() -> None:
     assert state.allow_id_promotion is True
 
 
-def test_normal_resume_does_not_allow_id_promotion() -> None:
-    """new_state() with a normal resume token keeps allow_id_promotion=False."""
-    runner = PiRunner(pi_cmd="pi", extra_args=[], model=None, provider=None)
-    resume_token = ResumeToken(engine=ENGINE, value="ses_existing")
-    state = runner.new_state("prompt", resume_token)
+def test_legacy_short_resume_id_promotes_from_header() -> None:
+    """A legacy 8-char short id persisted by pre-fix code promotes to the full
+    session id from the first SessionHeader — repairs old chat state without
+    user action (the pi CLI accepts short prefixes, so the resumed session is
+    the same one)."""
+    state = PiStreamState(resume=ResumeToken(engine=ENGINE, value="019ff2cc"))
+
+    events = translate_pi_event(
+        pi_schema.SessionHeader(
+            id="019ff2cc-3874-7000-a6c2-4aee9a2a508b",
+            version=3,
+            timestamp="2026-01-13T00:33:34.702Z",
+            cwd="/tmp",
+        ),
+        title="pi",
+        meta=None,
+        state=state,
+    )
+    started = next(e for e in events if isinstance(e, StartedEvent))
+    assert started.resume == ResumeToken(
+        engine=ENGINE, value="019ff2cc-3874-7000-a6c2-4aee9a2a508b"
+    )
+
+
+def test_legacy_short_resume_id_promotes_via_new_state() -> None:
+    """The production path (new_state → translate) heals legacy short ids:
+    the flag stays False but the SessionHeader guard promotes anyway."""
+    runner = _pi_runner()
+    state = runner.new_state(
+        "prompt", ResumeToken(engine=ENGINE, value="019ff2cc")
+    )
     assert state.allow_id_promotion is False
+
+    events = translate_pi_event(
+        pi_schema.SessionHeader(
+            id="019ff2cc-3874-7000-a6c2-4aee9a2a508b",
+            version=3,
+            timestamp="2026-01-13T00:33:34.702Z",
+            cwd="/tmp",
+        ),
+        title="pi",
+        meta=None,
+        state=state,
+    )
+    started = next(e for e in events if isinstance(e, StartedEvent))
+    assert started.resume == ResumeToken(
+        engine=ENGINE, value="019ff2cc-3874-7000-a6c2-4aee9a2a508b"
+    )
+    # Promotion is one-shot: a second header must not overwrite the value.
+    events2 = translate_pi_event(
+        pi_schema.SessionHeader(
+            id="deadbeef-0000-0000-0000-000000000000",
+            version=3,
+            timestamp="2026-01-13T00:33:35.000Z",
+            cwd="/tmp",
+        ),
+        title="pi",
+        meta=None,
+        state=state,
+    )
+    assert all(
+        not isinstance(e, StartedEvent) or e.resume.value.startswith("019ff2cc-")
+        for e in events2
+    )
 
 
 def test_continue_session_id_promoted_from_header() -> None:

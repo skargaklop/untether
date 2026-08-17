@@ -48,6 +48,17 @@ ENGINE: EngineId = "pi"
 _RESUME_RE = re.compile(r"(?im)^\s*`?pi\s+--session\s+(?P<token>.+?)`?\s*$")
 
 _SESSION_ID_PREFIX_LEN = 8  # legacy: kept for log compatibility, unused for display
+_LEGACY_SESSION_ID_RE = re.compile(r"^[0-9a-f]{8}$")
+
+
+def _is_legacy_short_session_id(value: str) -> bool:
+    """Return True for 8-hex-char ids persisted by pre-#565 code.
+
+    Old builds stored only ``uuid[:8]`` of the session id. Pi accepts such
+    prefixes for ``--session``, so these tokens still resume the right
+    session and can be promoted to the full id from the SessionHeader.
+    """
+    return bool(_LEGACY_SESSION_ID_RE.match(value))
 
 
 def _load_env_extras() -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -115,11 +126,17 @@ def _maybe_promote_session_id(state: PiStreamState, session_id: str | None) -> N
         return
     if state.started:
         return
-    if not state.allow_id_promotion:
+    legacy_short = _is_legacy_short_session_id(state.resume.value)
+    if not state.allow_id_promotion and not legacy_short:
         return
     # For /continue runs the resume value is empty; for fresh runs it's a
-    # session path — either way, promotion is allowed when the flag is set.
-    if state.resume.value and not _looks_like_session_path(state.resume.value):
+    # session path; for pre-fix chat state it's a legacy 8-char short id —
+    # all three promote to the full id from the SessionHeader.
+    if (
+        state.resume.value
+        and not legacy_short
+        and not _looks_like_session_path(state.resume.value)
+    ):
         return
     old_value = state.resume.value
     state.resume = ResumeToken(engine=ENGINE, value=session_id)
