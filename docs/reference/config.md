@@ -441,12 +441,11 @@ not remove static or explicitly configured engines.
 | `engines.<id>.protocol` | `"auto"`\|`"1"`\|`"2"` | `"auto"` | Selects ACP negotiation. v1 is stable; v2 is draft. |
 | `engines.<id>.env` | table | `{}` | Static environment overlay. Values are not logged. |
 
-Registry discovery considers a current-platform `binary` distribution plus
-`npx` and `uvx` package entries only when Untether's local package-manager
-metadata inventory proves exactly one installed launcher. Missing metadata and
-ambiguous packages require explicit configuration with an absolute executable
-path. It does not download, install, execute, or probe registry entries at
-startup.
+Registry discovery considers a current-platform `binary` distribution plus an
+`npx` package only when its installed local `bin` metadata identifies one
+launcher that resolves on `PATH`. `uvx`, missing metadata, and ambiguous
+packages require explicit configuration with an absolute executable path. It
+does not download, install, execute, or probe registry entries at startup.
 Registry IDs are normalized from hyphens to underscores (for example,
 `amp-acp` becomes `amp_acp`) and must be valid, collision-free engine IDs.
 Explicit configuration wins over a registry entry with the same normalized ID.

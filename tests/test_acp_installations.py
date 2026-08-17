@@ -27,7 +27,7 @@ def test_parse_registry_package_preserves_npm_scope_and_normalises_python() -> N
     )
 
 
-def test_match_distribution_matches_package_across_registry_versions() -> None:
+def test_match_distribution_requires_exact_package_version_and_ecosystem() -> None:
     launcher = InstalledLauncher(
         ecosystem="npm",
         package="cline",
@@ -45,7 +45,7 @@ def test_match_distribution_matches_package_across_registry_versions() -> None:
             RegistryDistribution(target="", type="npx", cmd="", package="cline@3.0.56"),
             (launcher,),
         )
-        == launcher
+        is None
     )
     assert (
         match_distribution(

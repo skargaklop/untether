@@ -341,10 +341,12 @@ def match_distribution(
         return None
     if parsed is None:
         return None
-    package, _version = parsed
+    package, version = parsed
     candidates = [
         launcher
         for launcher in installed
-        if launcher.ecosystem in ecosystems and launcher.package == package
+        if launcher.ecosystem in ecosystems
+        and launcher.package == package
+        and (version is None or launcher.version == version)
     ]
     return candidates[0] if len(candidates) == 1 else None

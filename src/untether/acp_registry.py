@@ -15,7 +15,6 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from .acp_installations import InstalledLauncher, match_distribution
 from .backends import EngineBackend
 from .ids import is_valid_id
 from .settings import NonEmptyStr
@@ -193,18 +192,10 @@ def discover_installation(
     *,
     target: str | None = None,
     cache: dict[str, Any] | None,
-    installed: tuple[InstalledLauncher, ...] = (),
 ) -> InstallationRecord:
     target = target or current_platform_target()
     distribution = choose_binary_distribution(agent, target=target)
-    launcher = (
-        match_distribution(distribution, installed)
-        if distribution and distribution.type in {"npx", "uvx"}
-        else None
-    )
-    cmd = (
-        Path(launcher.command).stem if launcher else _distribution_command(distribution)
-    )
+    cmd = _distribution_command(distribution) if distribution else ""
     if cache and cache.get("installed") and cache.get("executable"):
         executable = str(Path(cache["executable"]).resolve())
         if Path(executable).is_file():
@@ -217,11 +208,8 @@ def discover_installation(
                 True,
                 executable,
             )
-    if launcher:
-        executable = launcher.command
-    else:
-        found = shutil.which(Path(cmd).name) if cmd else None
-        executable = str(Path(found).resolve()) if found else None
+    found = shutil.which(Path(cmd).name) if cmd else None
+    executable = str(Path(found).resolve()) if found else None
     return InstallationRecord(
         agent.id, agent.version, target, cmd, _now(), executable is not None, executable
     )
@@ -268,8 +256,35 @@ def _valid_env(value: Any) -> dict[str, str] | None:
     return value
 
 
-def _distribution_command(distribution: RegistryDistribution | None) -> str:
-    return distribution.cmd if distribution else ""
+def _npm_bin(package: str) -> str | None:
+    npx = shutil.which("npx")
+    if not npx:
+        return None
+    package_name = (
+        package.rsplit("@", 1)[0]
+        if not package.startswith("@") or package.count("@") > 1
+        else package
+    )
+    package_json = (
+        Path(npx).resolve().parent / "node_modules" / package_name / "package.json"
+    )
+    try:
+        bin_value = json.loads(package_json.read_text(encoding="utf-8")).get("bin")
+    except (OSError, ValueError, TypeError):
+        return None
+    if isinstance(bin_value, str):
+        return package_name.rsplit("/", 1)[-1]
+    if isinstance(bin_value, dict) and len(bin_value) == 1:
+        name, value = next(iter(bin_value.items()))
+        if isinstance(name, str) and name and isinstance(value, str) and value:
+            return name
+    return None
+
+
+def _distribution_command(distribution: RegistryDistribution) -> str:
+    if distribution.type == "npx" and distribution.package:
+        return _npm_bin(distribution.package) or ""
+    return distribution.cmd
 
 
 def _official_distributions(
