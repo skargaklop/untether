@@ -146,6 +146,11 @@ def test_startup_message_core_fields() -> None:
     assert "help-guides" in message
     assert "report a bug" in message
 
+    assert (
+        "Send a message to start, or /config for settings. Use /menu to open the start menu."
+        in message
+    )
+
 
 def test_startup_message_shows_topics_when_enabled() -> None:
     runtime = _build_healthy_runtime()

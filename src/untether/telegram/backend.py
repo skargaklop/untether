@@ -177,7 +177,8 @@ def _build_startup_message(
         "https://github.com/littlebearapps/untether?tab=readme-ov-file#-contributing"
     )
     footer = (
-        f"\n\nSend a message to start, or /config for settings."
+        "\n\nSend a message to start, or /config for settings. "
+        "Use /menu to open the start menu."
         f"\n\n\N{OPEN BOOK} [Click here for help]({_DOCS_URL})"
         f" | \N{BUG} [Click here to report a bug]({_ISSUES_URL})"
     )

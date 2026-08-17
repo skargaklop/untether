@@ -323,7 +323,7 @@ Untether is now running and listening for messages!
     *installed engines:* codex<br>
     mode: assistant
 
-    Send a message to start, or /config for settings.
+    Send a message to start, or /config for settings. Use /menu to open the start menu.
 
     📖 Click here for help | 🐛 Click here to report a bug
 

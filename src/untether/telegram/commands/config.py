@@ -1023,7 +1023,7 @@ async def _page_engine(ctx: CommandContext, action: str | None = None) -> None:
 
     prefs = ChatPrefsStore(resolve_prefs_path(config_path))
     chat_id = ctx.message.channel_id
-    available = list(ctx.runtime.engine_ids)
+    available = list(ctx.runtime.available_engine_ids())
 
     if action == "md_clr":
         # Clear model override (handled here for the merged page)
