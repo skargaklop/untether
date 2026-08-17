@@ -39,7 +39,6 @@ def _make_ctx(
     ctx.config_path = config_path
     ctx.runtime.engine_ids = engine_ids
     ctx.runtime.default_engine = default_engine
-    ctx.runtime.available_engine_ids.return_value = engine_ids
     ctx.runtime.default_context_for_chat.return_value = None
     ctx.runtime.project_default_engine.return_value = None
     ctx.executor = AsyncMock()
@@ -884,26 +883,6 @@ class TestEngine:
         assert "config:ag:codex" in data
         assert "config:ag:claude" in data
         assert "config:ag:opencode" in data
-
-    @pytest.mark.anyio
-    async def test_engine_shows_only_launchable_dynamic_engines(self, tmp_path):
-        """The chooser follows runtime availability, including ACP discoveries."""
-        state_path = tmp_path / "prefs.json"
-        cmd = ConfigCommand()
-        ctx = _make_ctx(
-            args_text="ag",
-            text="config:ag",
-            config_path=state_path,
-            engine_ids=("codex", "missing"),
-        )
-        ctx.runtime.available_engine_ids.return_value = ("codex", "cline")
-
-        await cmd.handle(ctx)
-
-        data = _buttons_data(_last_edit_msg(ctx))
-        assert "config:ag:codex" in data
-        assert "config:ag:cline" in data
-        assert "config:ag:missing" not in data
 
     @pytest.mark.anyio
     async def test_engine_set_returns_home(self, tmp_path):

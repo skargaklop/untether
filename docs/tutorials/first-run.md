@@ -23,7 +23,7 @@ Untether keeps running in your terminal. In Telegram, your bot will post a start
     *directories:* 3<br>
     mode: assistant
 
-    Send a message to start, or /config for settings. Use /menu to open the start menu.
+    Send a message to start, or /config for settings.
 
     📖 Click here for help | 🐛 Click here to report a bug
 

@@ -87,7 +87,6 @@ aq = "untether.telegram.commands.ask_question:BACKEND"
 stats = "untether.telegram.commands.stats:BACKEND"
 auth = "untether.telegram.commands.auth:BACKEND"
 threads = "untether.telegram.commands.threads:BACKEND"
-menu = "untether.telegram.commands.menu_panel:BACKEND"
 at = "untether.telegram.commands.at:BACKEND"
 health = "untether.telegram.commands.health:BACKEND"
 
