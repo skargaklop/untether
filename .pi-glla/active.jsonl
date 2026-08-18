@@ -1,0 +1,4 @@
+{"type":"session_rebound","value":{"reason":"startup"},"at":"2026-08-17T11:49:55.933Z"}
+{"type":"session_waiting_for_load","value":{"reason":"startup"},"at":"2026-08-17T11:49:55.947Z"}
+{"type":"state","value":{"goal":null,"list":[],"loop":null,"mainModelRecovery":null,"lastModelRef":"omniroute/deepseek-4-flash-combined"},"at":"2026-08-17T11:49:55.948Z"}
+{"type":"session_shutdown","value":{"reason":"quit"},"at":"2026-08-17T11:50:38.327Z"}
