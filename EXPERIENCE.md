@@ -43,7 +43,15 @@ Three scoped implementation workers did not execute: two exited without tool cal
 
 ## ACP registry discovery closure experience
 
-The official registry uses a singular `distribution` object, and the existing parser already accepted it. The safety gap was a fallback from package name to a same-named `PATH` command. Tests now require installed npm `package.json` `bin` metadata before a launcher can be bound; no metadata leaves the registry agent unavailable even if a same-named command exists. `uvx` remains explicit-configuration-only because passive discovery has no deterministic local metadata root. The existing Telegram command menu already enumerates and deduplicates available runtime engine IDs, so no menu production change was required. The focused ACP/runtime/menu gate and preserved session, compact/handoff, and batch gate remained green.
+The official registry uses a singular `distribution` object, which the parser already accepts. The remaining production gap was that `build_runtime_spec()` did not supply the passive installation inventory to registry discovery, leaving package-backed agents unavailable. The runtime now carries one local npm/Bun/uv/pipx/Cargo metadata inventory into discovery; package matching accepts the installed package despite a registry version update, but still requires exactly one proven launcher. The existing Telegram command menu already enumerates and deduplicates available runtime engine IDs, so no menu production change was required. The focused ACP/runtime/menu gate and preserved session, compact/handoff, and batch gate remained green.
+
+## Launcher inventory matching experience
+
+The direct Cline probe showed the local package version can lag the pinned registry version. Exact version matching therefore rejected a verified installed launcher even though its package and sole executable were unambiguous; matching now keys on ecosystem and normalised package identity, retaining the one-launcher ambiguity guard. Scoped packages are not guessed: all package-derived commands originate from inventory metadata.
+
+## Telegram inline menu experience
+
+The restored quick-action menu replays fixed slash commands from a closed callback mapping, so callback payloads cannot inject arbitrary command text. The updated panel adds Agent, Queue, and Health shortcuts to the original eight rows. Disabled-topic replay, unknown-action handling, and dynamic Engines filtering are covered by focused loop and command tests.
 
 ## ACP negative-cache invalidation experience
 

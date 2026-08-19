@@ -349,14 +349,10 @@ def test_omp_legacy_short_resume_id_heals_to_full_id_after_retagging() -> None:
     from the SessionHeader, with the engine retagged to omp (the omp CLI
     accepts short prefixes, so the resumed session stays the same one)."""
     runner = OmpRunner(extra_args=[], model=None, provider=None)
-    state = runner.new_state(
-        "hi", ResumeToken(engine=ENGINE, value="019f2e9c")
-    )
+    state = runner.new_state("hi", ResumeToken(engine=ENGINE, value="019f2e9c"))
 
     events = runner.translate(
-        pi_schema.SessionHeader(
-            id="019f2e9c-3874-7000-a6c2-4aee9a2a508b", version=1
-        ),
+        pi_schema.SessionHeader(id="019f2e9c-3874-7000-a6c2-4aee9a2a508b", version=1),
         state=state,
         resume=ResumeToken(engine=ENGINE, value="019f2e9c"),
         found_session=None,

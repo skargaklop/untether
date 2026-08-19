@@ -274,8 +274,13 @@ def _patch_registry(
     )
     monkeypatch.setattr(
         runtime_loader,
+        "discover_installed_launchers",
+        lambda **_kwargs: (),
+    )
+    monkeypatch.setattr(
+        runtime_loader,
         "discover_installation",
-        lambda agent, target, cache: InstallationRecord(
+        lambda agent, target, cache, installed: InstallationRecord(
             agent.id, agent.version, target, "demo", 0.0, True, "C:/demo.exe"
         ),
     )

@@ -607,6 +607,10 @@ def _dispatch_builtin_command(
         task_group.start_soon(handler)
         return True
 
+    if command_id == "topic" and (not cfg.topics.enabled or topic_store is None):
+        task_group.start_soon(partial(reply, text="topics are not enabled."))
+        return True
+
     if cfg.topics.enabled and topic_store is not None:
         if command_id == "topic":
             handler = partial(
@@ -3759,6 +3763,37 @@ async def run_main_loop(
                             scheduler,
                             state,
                         )
+                    elif update.data and update.data.startswith("menu:"):
+                        from .commands.menu_panel import menu_command_text
+
+                        command_text = menu_command_text(update.data)
+                        tg.start_soon(_safe_answer_callback, update.callback_query_id)
+                        if command_text is not None:
+                            callback_message = (
+                                update.raw.get("message", {})
+                                if isinstance(update.raw, dict)
+                                else {}
+                            )
+                            callback_chat = callback_message.get("chat", {})
+                            tg.start_soon(
+                                route_message,
+                                TelegramIncomingMessage(
+                                    transport=update.transport,
+                                    chat_id=update.chat_id,
+                                    message_id=update.message_id,
+                                    text=command_text,
+                                    reply_to_message_id=None,
+                                    reply_to_text=None,
+                                    sender_id=update.sender_id,
+                                    thread_id=callback_message.get("message_thread_id"),
+                                    is_topic_message=callback_message.get(
+                                        "is_topic_message"
+                                    ),
+                                    chat_type=callback_chat.get("type"),
+                                    is_forum=callback_chat.get("is_forum"),
+                                    raw=callback_message,
+                                ),
+                            )
                     elif update.data:
                         # Route callback to command backend if registered
                         cb_command_id, cb_args_text = parse_callback_data(update.data)

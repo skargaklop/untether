@@ -325,9 +325,7 @@ def test_legacy_short_resume_id_promotes_via_new_state() -> None:
     """The production path (new_state → translate) heals legacy short ids:
     the flag stays False but the SessionHeader guard promotes anyway."""
     runner = _pi_runner()
-    state = runner.new_state(
-        "prompt", ResumeToken(engine=ENGINE, value="019ff2cc")
-    )
+    state = runner.new_state("prompt", ResumeToken(engine=ENGINE, value="019ff2cc"))
     assert state.allow_id_promotion is False
 
     events = translate_pi_event(

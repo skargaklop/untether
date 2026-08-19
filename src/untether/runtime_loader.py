@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import time
 from collections.abc import Iterable, Mapping
@@ -7,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from .acp_installations import discover_installed_launchers
 from .acp_registry import (
     InstallationRecord,
     build_install_state,
@@ -308,6 +310,9 @@ def build_runtime_spec(
         target = current_platform_target()
         now = time.time()
         ttl_s = settings.acp.registry.cache_ttl_days * 86400
+        installed_launchers = discover_installed_launchers(
+            env=os.environ, home=Path.home()
+        )
         for agent in agents:
             try:
                 engine_id = normalise_registry_id(agent.id)
@@ -352,13 +357,18 @@ def build_runtime_spec(
                         agent.id,
                         agent.version,
                         target,
-                        distribution.cmd if distribution else "",
+                        str(cached.get("cmd", "")),
                         float(cached.get("checked_at", now)),
                         bool(cached.get("installed")),
                         cached.get("executable"),
                     )
                     if fresh and cached is not None
-                    else discover_installation(agent, target=target, cache=None)
+                    else discover_installation(
+                        agent,
+                        target=target,
+                        cache=None,
+                        installed=installed_launchers,
+                    )
                 )
             except (ValueError, OSError):
                 continue
