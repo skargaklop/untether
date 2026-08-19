@@ -365,6 +365,28 @@ def test_omp_legacy_short_resume_id_heals_to_full_id_after_retagging() -> None:
     )
 
 
+def test_omp_legacy_short_resume_id_matches_full_header_in_runner_validation() -> None:
+    """The JSONL runner must accept the full ID OMP emits for a legacy prefix."""
+    runner = OmpRunner(extra_args=[], model=None, provider=None)
+    legacy = ResumeToken(engine=ENGINE, value="019f589d")
+    emitted = StartedEvent(
+        engine=ENGINE,
+        resume=ResumeToken(
+            engine=ENGINE, value="019f589d-9c90-7000-a710-f8281a7c716c"
+        ),
+        title="omp",
+    )
+
+    found, emit = runner.handle_started_event(
+        emitted, expected_session=legacy, found_session=None
+    )
+
+    assert found == emitted.resume
+    assert emit is True
+
+
+
+
 def test_omp_started_meta_prefers_run_option_model() -> None:
     from untether.runners.run_options import EngineRunOptions, apply_run_options
 

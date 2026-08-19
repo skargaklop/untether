@@ -617,6 +617,26 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
             args.append(self.sanitize_prompt(final_prompt))
         return args
 
+    def handle_started_event(
+        self,
+        event: StartedEvent,
+        *,
+        expected_session: ResumeToken | None,
+        found_session: ResumeToken | None,
+    ) -> tuple[ResumeToken | None, bool]:
+        if (
+            expected_session is not None
+            and expected_session.engine == self.engine
+            and _is_legacy_short_session_id(expected_session.value)
+            and event.resume.value.startswith(f"{expected_session.value}-")
+        ):
+            expected_session = event.resume
+        return super().handle_started_event(
+            event,
+            expected_session=expected_session,
+            found_session=found_session,
+        )
+
     def stdin_payload(
         self,
         prompt: str,
