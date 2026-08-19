@@ -4,6 +4,7 @@ import pytest
 
 import untether.acp_registry as acp_registry
 import untether.runtime_loader as runtime_loader
+from untether.acp_installations import InstalledLauncher
 from untether.acp_registry import (
     REGISTRY_DOC_VERSION,
     InstallationRecord,
@@ -343,6 +344,19 @@ def test_official_cline_npx_registry_entry_joins_dynamic_engines(
         runtime_loader, "list_backend_ids", lambda allowlist=None: ["codex"]
     )
     monkeypatch.setattr(
+        runtime_loader,
+        "discover_installed_launchers",
+        lambda **_kwargs: (
+            InstalledLauncher(
+                ecosystem="npm",
+                package="cline",
+                version="3.0.55",
+                command="C:/Tools/cline.cmd",
+                metadata_path="C:/npm/node_modules/cline/package.json",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
         runtime_loader, "load_registry_agents", lambda *args, **kwargs: [agent]
     )
     monkeypatch.setattr(runtime_loader, "load_installation_cache", lambda _path: {})
@@ -410,6 +424,19 @@ def test_official_cline_ignores_legacy_negative_cache_without_command(
     )
     monkeypatch.setattr(
         runtime_loader, "write_installation_cache", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        runtime_loader,
+        "discover_installed_launchers",
+        lambda **_kwargs: (
+            InstalledLauncher(
+                ecosystem="npm",
+                package="cline",
+                version="3.0.55",
+                command="C:/Tools/cline.cmd",
+                metadata_path="C:/npm/node_modules/cline/package.json",
+            ),
+        ),
     )
     monkeypatch.setattr(
         acp_registry.shutil,
