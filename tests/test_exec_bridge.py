@@ -2953,9 +2953,16 @@ async def test_stall_mcp_hung_escalation_notifies_after_frozen_ring() -> None:
     async with anyio.create_task_group() as tg:
 
         async def drive() -> None:
-            # Advance past threshold, let 5 stall checks fire (all with frozen ring)
-            clock.set(100.5)
-            await anyio.sleep(0.15)
+            # Keep the fake clock far ahead of the stall threshold while the
+            # loop ticks, so every 10 ms tick passes its gate no matter how
+            # slow coverage instrumentation makes each iteration. The loop
+            # itself sleeps in real time; the budget below is generous on
+            # purpose and the count is asserted after the fact, not raced.
+            for _ in range(30):
+                clock.set(clock() + 0.1)
+                await anyio.sleep(0.02)
+                if edits._stall_warn_count >= 5:
+                    break
             edits.signal_send.close()
 
         tg.start_soon(edits.run)
