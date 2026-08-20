@@ -371,9 +371,7 @@ def test_omp_legacy_short_resume_id_matches_full_header_in_runner_validation() -
     legacy = ResumeToken(engine=ENGINE, value="019f589d")
     emitted = StartedEvent(
         engine=ENGINE,
-        resume=ResumeToken(
-            engine=ENGINE, value="019f589d-9c90-7000-a710-f8281a7c716c"
-        ),
+        resume=ResumeToken(engine=ENGINE, value="019f589d-9c90-7000-a710-f8281a7c716c"),
         title="omp",
     )
 
@@ -383,8 +381,6 @@ def test_omp_legacy_short_resume_id_matches_full_header_in_runner_validation() -
 
     assert found == emitted.resume
     assert emit is True
-
-
 
 
 def test_omp_started_meta_prefers_run_option_model() -> None:
