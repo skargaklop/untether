@@ -3,6 +3,16 @@
 ## Unreleased
 
 
+- **resume:** `/pi --resume <id>` (and the same form for every engine) no
+  longer silently ignores the id. Slash directives consume the engine token,
+  leaving a bare `--resume <id>` that no runner regex matched; resolution now
+  falls through three tiers (engine-prefixed native form, `{engine} resume`
+  universal alias, bare flag bound to the directive or resolved default
+  engine, rebinding to the topic/chat/project default at dispatch). The bare
+  keyword form (`resume <id>`) requires an explicit engine directive so plain
+  prompts starting with "resume" are never hijacked. Pi additionally accepts
+  `--resume`/`resume`/`-r`/`-s` as aliases of its native `--session`.
+
 - **acp:** harden the generic ACP adapter to protocol conformance. Frame-too-large no longer masquerades as EOF; JSON-RPC batches are version-gated; notification queue overflow fails the run instead of deadlocking; reverse-handler errors return proper JSON-RPC errors; `$/cancel_request` cancels in-flight reverse requests. The reducer covers canonical v1/v2 update variants, v2 patch semantics, thought events, and aggregate-overflow failure. The turn loop streams events mid-turn, permission/elicitation requests surface as Telegram buttons resolved by the new `acp_control` callback backend, client facilities (filesystem/terminal/elicitation) and `mcp_servers` are configurable and advertised, `startup_timeout_s` is enforced, the registry parses strictly with collision rules, and `dynamic_engine_ids` powers the `/config` About guard.
 
 ## v0.35.6 (2026-08-14)

@@ -46,6 +46,21 @@ def test_pi_resume_format_and_extract(tmp_path: Path) -> None:
     assert runner.extract_resume('`pi --session "pi session.jsonl"`') == spaced
 
 
+def test_pi_extract_resume_accepts_universal_resume_aliases() -> None:
+    """`pi --resume <id>` / `pi resume <id>` / `pi -r <id>` must resolve like
+    the native `pi --session <id>` form (universal cross-engine aliases)."""
+    runner = PiRunner(pi_cmd="pi", extra_args=[], model=None, provider=None)
+    sid = "019f589d-9c90-7000-a710-f828d1a7c716"
+    token = ResumeToken(engine=ENGINE, value=sid)
+
+    assert runner.extract_resume(f"pi --resume {sid}") == token
+    assert runner.extract_resume(f"pi resume {sid}") == token
+    assert runner.extract_resume(f"pi -r {sid}") == token
+    assert runner.extract_resume(f"`pi --resume {sid}`") == token
+    assert runner.extract_resume(f"pi --resume {sid}\ndo the work") == token
+    assert runner.is_resume_line(f"pi --resume {sid}")
+
+
 def test_translate_success_fixture() -> None:
     state = PiStreamState(resume=ResumeToken(engine=ENGINE, value="session.jsonl"))
     events: list = []

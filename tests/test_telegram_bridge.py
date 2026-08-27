@@ -2221,6 +2221,91 @@ async def test_run_main_loop_auto_resumes_topic_default_engine(
     )
 
 
+
+@pytest.mark.anyio
+async def test_run_main_loop_bare_resume_rebinds_topic_default_engine(
+    tmp_path: Path,
+) -> None:
+    """`--resume <id>` without an engine binds to the topic default engine.
+
+    Regression: bare flag forms bound at parse time to the *global* default
+    engine; a topic with its own default engine would run the wrong engine
+    with an id from another engine's session store.
+    """
+    state_path = tmp_path / "untether.toml"
+    topic_path = resolve_state_path(state_path)
+    store = TopicStateStore(topic_path)
+    await store.set_default_engine(123, 77, "claude")
+
+    transport = FakeTransport()
+    bot = FakeBot()
+    codex_runner = ScriptRunner([Return(answer="ok")], engine=CODEX_ENGINE)
+    claude_runner = ScriptRunner([Return(answer="ok")], engine="claude")
+    router = AutoRouter(
+        entries=[
+            RunnerEntry(engine=codex_runner.engine, runner=codex_runner),
+            RunnerEntry(engine=claude_runner.engine, runner=claude_runner),
+        ],
+        default_engine=codex_runner.engine,
+    )
+    projects = ProjectsConfig(
+        projects={
+            "proj": ProjectConfig(
+                alias="proj",
+                path=tmp_path,
+                worktrees_dir=Path(".worktrees"),
+                chat_id=123,
+            )
+        },
+        default_project=None,
+        chat_map={123: "proj"},
+    )
+    runtime = TransportRuntime(
+        router=router,
+        projects=projects,
+        config_path=state_path,
+    )
+    cfg = TelegramBridgeConfig(
+        bot=bot,
+        runtime=runtime,
+        chat_id=123,
+        startup_msg="",
+        exec_cfg=ExecBridgeConfig(
+            transport=transport,
+            presenter=MarkdownPresenter(),
+            final_notify=True,
+        ),
+        forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
+        media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
+        topics=TelegramTopicsSettings(
+            enabled=True,
+            scope="main",
+        ),
+    )
+
+    async def poller(_cfg: TelegramBridgeConfig):
+        yield TelegramIncomingMessage(
+            transport="telegram",
+            chat_id=123,
+            message_id=1,
+            text="--resume claude-session-1 continue the migration",
+            reply_to_message_id=None,
+            reply_to_text=None,
+            sender_id=123,
+            thread_id=77,
+        )
+
+    await run_main_loop(cfg, poller)
+
+    assert codex_runner.calls == []
+    assert len(claude_runner.calls) == 1
+    assert claude_runner.calls[0][1] == ResumeToken(
+        engine="claude", value="claude-session-1"
+    )
+    assert claude_runner.calls[0][0].endswith("continue the migration")
+
+
 @pytest.mark.anyio
 async def test_run_main_loop_zero_batch_debounce_dispatches_prompt(
     tmp_path: Path,

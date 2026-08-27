@@ -184,3 +184,196 @@ def test_resolve_message_project_directive_clears_ambient_branch() -> None:
 
     assert resolved.context == RunContext(project="other", branch=None)
     assert resolved.context_source == "directives"
+
+
+def test_resolve_message_slash_engine_bare_resume_directive() -> None:
+    """`/pi --resume <id>` — engine directive consumed, bare resume binds to pi.
+
+    Regression: the id was silently ignored and the run continued in the
+    topic's stored session (or fresh). The bare resume form must resolve
+    against the directive engine and be stripped from the prompt.
+    """
+    runtime = _make_runtime()
+
+    resolved = runtime.resolve_message(
+        text="/pi --resume 019f589d-9c90-7000-a710-f828d1a7c716", reply_text=None
+    )
+
+    assert resolved.engine_override == "pi"
+    assert resolved.resume_token is not None
+    assert resolved.resume_token.engine == "pi"
+    assert resolved.resume_token.value == "019f589d-9c90-7000-a710-f828d1a7c716"
+    assert resolved.prompt == ""
+    assert resolved.resume_from_bare is True
+
+
+def test_resolve_message_bare_resume_without_engine_uses_default() -> None:
+    """Flag form `--resume <id>` with no engine directive binds to the default
+    engine (flag forms are unambiguous — never natural language)."""
+    runtime = _make_runtime()  # default engine: codex
+
+    resolved = runtime.resolve_message(text="--resume abc123", reply_text=None)
+
+    assert resolved.resume_token is not None
+    assert resolved.resume_token.engine == "codex"
+    assert resolved.resume_token.value == "abc123"
+    assert resolved.prompt == ""
+    assert resolved.resume_from_bare is True
+
+
+def test_resolve_message_bare_resume_with_prompt_rest() -> None:
+    """Bare resume followed by prompt text keeps the text as the prompt."""
+    runtime = _make_runtime()
+
+    resolved = runtime.resolve_message(
+        text="/pi --resume sess-1 fix the failing test now", reply_text=None
+    )
+
+    assert resolved.resume_token is not None
+    assert resolved.resume_token.value == "sess-1"
+    assert resolved.prompt == "fix the failing test now"
+
+
+def test_resolve_message_engine_resume_alias_overrides_engine() -> None:
+    """`codex resume <id>` anywhere — alias engine wins over directives."""
+    runtime = _make_runtime()
+
+    resolved = runtime.resolve_message(text="codex resume abc", reply_text=None)
+
+    assert resolved.resume_token is not None
+    assert resolved.resume_token.engine == "codex"
+    assert resolved.resume_token.value == "abc"
+
+
+def test_resolve_message_engine_alias_no_engine_registered_keeps_none() -> None:
+    """Unknown engine in the alias (`foo resume x`) must not produce a token."""
+    runtime = _make_runtime()
+
+    resolved = runtime.resolve_message(text="foo resume abc", reply_text=None)
+
+    assert resolved.resume_token is None
+    assert resolved.prompt == "foo resume abc"
+
+
+def test_resolve_message_plain_prompt_unchanged() -> None:
+    """Sanity: no resume forms — nothing consumed, no token."""
+    runtime = _make_runtime()
+
+    resolved = runtime.resolve_message(text="/pi hello world", reply_text=None)
+
+    assert resolved.resume_token is None
+    assert resolved.prompt == "hello world"
+
+
+def test_resolve_message_slash_engine_resume_alias_keeps_prompt() -> None:
+    """`/pi pi resume x` — the in-prompt engine-prefixed form still wins
+    and the line is stripped, leaving the rest of the prompt."""
+    runtime = _make_runtime()
+
+    resolved = runtime.resolve_message(
+        text="/pi `pi resume session.jsonl`\ncontinue the work", reply_text=None
+    )
+
+    assert resolved.resume_token is not None
+    assert resolved.resume_token.engine == "pi"
+    assert resolved.resume_token.value == "session.jsonl"
+    assert resolved.prompt == "continue the work"
+
+
+def test_resolve_message_bare_keyword_resume_requires_engine_directive() -> None:
+    """Bare `resume <word>` must NOT hijack a plain prompt (no engine context);
+    with an explicit engine directive it is an unambiguous session reference."""
+    runtime = _make_runtime()
+
+    plain = runtime.resolve_message(text="resume work on the parser", reply_text=None)
+    assert plain.resume_token is None
+    assert plain.prompt == "resume work on the parser"
+
+    addressed = runtime.resolve_message(text="/pi resume sess-9", reply_text=None)
+    assert addressed.resume_token is not None
+    assert addressed.resume_token.engine == "pi"
+    assert addressed.resume_token.value == "sess-9"
+    assert addressed.prompt == ""
+
+
+def test_resolve_message_slash_bare_resume_all_engines() -> None:
+    """Cross-engine regression: `/ENGINE --resume <id>` must bind the id to
+    ENGINE for every registered engine (universal alias), not silently fall
+    back to a stored topic session.
+    """
+    from untether.runners.agy import AgyRunner
+    from untether.runners.amp import AmpRunner
+    from untether.runners.claude import ClaudeRunner
+    from untether.runners.codex import CodexRunner
+    from untether.runners.gemini import GeminiRunner
+    from untether.runners.grok import GrokRunner
+    from untether.runners.omp import OmpRunner
+    from untether.runners.opencode import OpenCodeRunner
+
+    runners: list = [
+        ClaudeRunner(),
+        CodexRunner(codex_cmd="codex", extra_args=[]),
+        GrokRunner(),
+        GeminiRunner(),
+        AgyRunner(),
+        OpenCodeRunner(),
+        OmpRunner(extra_args=[], model=None, provider=None),
+        AmpRunner(),
+    ]
+    entries = [RunnerEntry(engine=r.engine, runner=r) for r in runners]
+    router = AutoRouter(entries=entries, default_engine="codex")
+    projects = ProjectsConfig(projects={}, default_project=None)
+    runtime = TransportRuntime(router=router, projects=projects)
+
+    for runner in runners:
+        engine = runner.engine
+        sid = "sess-abc123"
+        resolved = runtime.resolve_message(
+            text=f"/{engine} --resume {sid} continue the work", reply_text=None
+        )
+        assert resolved.engine_override == engine
+        assert resolved.resume_token is not None, f"{engine}: no token"
+        assert resolved.resume_token.engine == engine, f"{engine}: wrong engine"
+        assert resolved.resume_token.value == sid, f"{engine}: wrong id"
+        assert resolved.prompt == "continue the work", f"{engine}: prompt dirty"
+
+
+def test_resolve_message_engine_resume_alias_all_engines() -> None:
+    """`ENGINE resume <id>` (unbackticked, no slash) must resolve for every
+    engine via the universal alias — today only some runners' own regexes
+    accept it.
+    """
+    from untether.runners.agy import AgyRunner
+    from untether.runners.amp import AmpRunner
+    from untether.runners.claude import ClaudeRunner
+    from untether.runners.codex import CodexRunner
+    from untether.runners.gemini import GeminiRunner
+    from untether.runners.grok import GrokRunner
+    from untether.runners.omp import OmpRunner
+    from untether.runners.opencode import OpenCodeRunner
+
+    runners: list = [
+        ClaudeRunner(),
+        CodexRunner(codex_cmd="codex", extra_args=[]),
+        GrokRunner(),
+        GeminiRunner(),
+        AgyRunner(),
+        OpenCodeRunner(),
+        OmpRunner(extra_args=[], model=None, provider=None),
+        AmpRunner(),
+    ]
+    entries = [RunnerEntry(engine=r.engine, runner=r) for r in runners]
+    router = AutoRouter(entries=entries, default_engine="codex")
+    projects = ProjectsConfig(projects={}, default_project=None)
+    runtime = TransportRuntime(router=router, projects=projects)
+
+    for runner in runners:
+        engine = runner.engine
+        sid = "conv-7788"
+        resolved = runtime.resolve_message(
+            text=f"{engine} resume {sid}\ncontinue the work", reply_text=None
+        )
+        assert resolved.resume_token is not None, f"{engine}: no token"
+        assert resolved.resume_token.engine == engine, f"{engine}: wrong engine"
+        assert resolved.resume_token.value == sid, f"{engine}: wrong id"
+        assert resolved.prompt == "continue the work", f"{engine}: prompt dirty"

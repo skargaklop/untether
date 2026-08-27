@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,11 @@ from .directives import (
 )
 from .model import EngineId, ResumeToken
 from .plugins import normalize_allowlist
+from .resume_parse import (
+    parse_bare_resume,
+    parse_engine_resume_alias,
+    strip_engine_resume_prefix,
+)
 from .router import AutoRouter, EngineStatus
 from .runner import Runner
 from .worktrees import WorktreeError, resolve_run_cwd
@@ -26,6 +32,11 @@ type ContextSource = Literal[
     "default_project",
     "none",
 ]
+
+# Bare keyword resume (`resume <id>` without flags). Distinguished from the
+# unambiguous flag forms (--resume/-r/-s/--session) so a plain English prompt
+# ("resume work on the parser") is never mistaken for a session reference.
+_BARE_RESUME_KEYWORD_RE = re.compile(r"(?is)^\s*resume\s+\S+")
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +54,11 @@ class ResolvedMessage:
     # None when no directive is present; precedence is enforced at the run
     # boundary in loop._directive_options / _resolve_engine_run_options.
     model: str | None = None
+    # True when the resume token came from a bare flag form (`--resume <id>`)
+    # after engine directives were stripped — the token's engine was *derived*
+    # (directive or default engine), not stated by the user. Dispatchers use
+    # this to re-bind the token when run-time engine resolution differs.
+    resume_from_bare: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,7 +232,9 @@ class TransportRuntime:
             projects=self._projects,
         )
         reply_ctx = parse_context_line(reply_text, projects=self._projects)
-        resume_token = self._router.resolve_resume(directives.prompt, reply_text)
+        prompt, resume_token, bare = self._resolve_resume(
+            directives, reply_text=reply_text
+        )
         chat_project = self._projects.project_for_chat(chat_id)
         default_project = chat_project or self._projects.default_project
 
@@ -227,7 +245,7 @@ class TransportRuntime:
             default_project=default_project,
         )
         return ResolvedMessage(
-            prompt=directives.prompt,
+            prompt=prompt,
             resume_token=resume_token,
             engine_override=directives.engine,
             context=context,
@@ -237,7 +255,51 @@ class TransportRuntime:
             skill=directives.skill,
             subagent=directives.subagent,
             model=directives.model,
+            resume_from_bare=bare,
         )
+
+    def _resolve_resume(
+        self, directives: ParsedDirectives, *, reply_text: str | None
+    ) -> tuple[str, ResumeToken | None, bool]:
+        """Resolve the resume token from the post-directive prompt.
+
+        Three tiers, most specific first:
+        1. Engine-prefixed form anywhere in the prompt/reply (``pi --session
+           x``, ``claude --resume x``) — each runner's own regex; the token
+           states its engine.
+        2. ``{engine} resume <id>`` alias anywhere — engine must be a
+           registered engine id; overrides the directive engine.
+        3. Leading bare flag form (``--resume <id>``, ``-r <id>``, ``--session
+           <id>``) — only reached after directives were stripped, so
+           ``/pi --resume x`` lands here with the ``pi`` directive consumed.
+           Binds to the directive engine when present, else the default
+           engine. The bare *keyword* form (``resume <id>``) additionally
+           requires an engine directive so a plain English prompt starting
+           with "resume" is never hijacked.
+        """
+        engine_ids = {str(engine).lower() for engine in self._router.engine_ids}
+
+        alias = parse_engine_resume_alias(directives.prompt)
+        if alias is not None and alias[0].lower() in engine_ids:
+            engine, value = alias
+            cleaned = strip_engine_resume_prefix(directives.prompt)
+            return cleaned, ResumeToken(engine=engine, value=value), False
+
+        engine_prefixed = self._router.resolve_resume(directives.prompt, reply_text)
+        if engine_prefixed is not None:
+            prompt = strip_engine_resume_prefix(
+                directives.prompt, engine=str(engine_prefixed.engine)
+            )
+            return prompt, engine_prefixed, False
+
+        bare = parse_bare_resume(directives.prompt)
+        if bare is not None:
+            value, rest = bare
+            engine = directives.engine or self._router.default_engine
+            keyword = _BARE_RESUME_KEYWORD_RE.match(directives.prompt) is not None
+            if not keyword or directives.engine is not None:
+                return rest, ResumeToken(engine=engine, value=value), True
+        return directives.prompt, None, False
 
     def project_default_engine(self, context: RunContext | None) -> EngineId | None:
         if context is None or context.project is None:

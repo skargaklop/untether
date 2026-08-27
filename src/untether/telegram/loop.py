@@ -2812,8 +2812,22 @@ async def run_main_loop(
                     topic_key=topic_key,
                 )
                 engine_override = engine_resolution.engine
+                resume_token = resolved.resume_token
+                if (
+                    resume_token is not None
+                    and resolved.resume_from_bare
+                    and resume_token.engine != engine_resolution.engine
+                ):
+                    # Bare flag form (`--resume <id>`): the engine was derived
+                    # at parse time from the directive/global default, but
+                    # dispatch-time resolution (topic/chat/project default)
+                    # owns the engine choice — rebind the token to it.
+                    resume_token = ResumeToken(
+                        engine=engine_resolution.engine,
+                        value=resume_token.value,
+                    )
                 resume_decision = await resume_resolver.resolve(
-                    resume_token=resolved.resume_token,
+                    resume_token=resume_token,
                     reply_id=reply_id,
                     chat_id=chat_id,
                     user_msg_id=user_msg_id,

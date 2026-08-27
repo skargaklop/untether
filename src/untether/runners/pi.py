@@ -45,7 +45,9 @@ logger = get_logger(__name__)
 
 ENGINE: EngineId = "pi"
 
-_RESUME_RE = re.compile(r"(?im)^\s*`?pi\s+--session\s+(?P<token>.+?)`?\s*$")
+_RESUME_RE = re.compile(
+    r"(?im)^\s*`?pi\s+(?:--session|--resume|-r|-s|resume)\s+(?P<token>.+?)`?\s*(?:\n|$)"
+)
 
 _SESSION_ID_PREFIX_LEN = 8  # legacy: kept for log compatibility, unused for display
 _LEGACY_SESSION_ID_RE = re.compile(r"^[0-9a-f]{8}$")
