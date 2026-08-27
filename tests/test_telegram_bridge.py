@@ -2221,7 +2221,6 @@ async def test_run_main_loop_auto_resumes_topic_default_engine(
     )
 
 
-
 @pytest.mark.anyio
 async def test_run_main_loop_bare_resume_rebinds_topic_default_engine(
     tmp_path: Path,
