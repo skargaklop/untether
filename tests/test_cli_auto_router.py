@@ -8,6 +8,7 @@ import pytest
 
 from untether import cli
 from untether.backends import EngineBackend, SetupIssue
+from untether.cli import run as cli_run
 from untether.settings import UntetherSettings
 from untether.transports import SetupResult
 
@@ -79,6 +80,52 @@ def _settings() -> UntetherSettings:
             },
         }
     )
+
+
+def test_run_auto_router_releases_lock_before_telegram_restart(
+    monkeypatch, tmp_path: Path
+) -> None:
+    setup = SetupResult(issues=[], config_path=tmp_path / "untether.toml")
+    transport = _FakeTransport(setup)
+    transport.id = "telegram"
+    engine_backend = _engine_backend()
+    config_path = tmp_path / "untether.toml"
+    lock = _DummyLock()
+    exec_calls: list[tuple[str, list[str]]] = []
+
+    monkeypatch.setattr(
+        cli,
+        "_resolve_setup_engine",
+        lambda _override: (None, None, None, "codex", engine_backend),
+    )
+    monkeypatch.setattr(cli, "_resolve_transport_id", lambda _override: "telegram")
+    monkeypatch.setattr(cli, "get_transport", lambda _id, allowlist=None: transport)
+    monkeypatch.setattr(cli, "load_settings", lambda: (_settings(), config_path))
+    monkeypatch.setattr(cli, "setup_logging", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        cli,
+        "build_runtime_spec",
+        lambda **_kwargs: type(
+            "Spec", (), {"to_runtime": lambda self, **_kwargs: "runtime"}
+        )(),
+    )
+    monkeypatch.setattr(cli, "acquire_config_lock", lambda _path, _token: lock)
+
+    def fake_execv(executable: str, argv: list[str]) -> None:
+        assert lock.released is True
+        exec_calls.append((executable, argv))
+
+    monkeypatch.setattr(cli_run.os, "execv", fake_execv)
+
+    cli._run_auto_router(
+        default_engine_override=None,
+        transport_override="telegram",
+        final_notify=True,
+        debug=False,
+        onboard=False,
+    )
+
+    assert len(exec_calls) == 1
 
 
 def test_run_auto_router_success_releases_lock(monkeypatch, tmp_path: Path) -> None:

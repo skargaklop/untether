@@ -326,6 +326,12 @@ def _run_auto_router(
     finally:
         if lock_handle is not None:
             lock_handle.release()
+    if transport_id == "telegram":
+        logger.info("restart.relaunching")
+        os.execv(
+            sys.executable,
+            [sys.executable, "-c", "from untether.cli import main; main()", *sys.argv[1:]],
+        )
 
 
 def _print_version_and_exit() -> None:

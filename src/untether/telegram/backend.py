@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -324,11 +323,6 @@ class TelegramBackend(TransportBackend):
             )
 
         anyio.run(run_loop)
-        logger.info("restart.relaunching")
-        os.execv(
-            sys.executable,
-            [sys.executable, "-c", "from untether.cli import main; main()", *sys.argv[1:]],
-        )
 
 
 telegram_backend = TelegramBackend()

@@ -269,17 +269,9 @@ def test_telegram_backend_build_and_run_wires_config(
 
     captured: dict[str, Any] = {}
 
-    loop_calls = 0
-
     async def fake_run_main_loop(cfg, **kwargs) -> None:
-        nonlocal loop_calls
-        loop_calls += 1
         captured["cfg"] = cfg
         captured["kwargs"] = kwargs
-
-    def fake_execv(executable: str, argv: list[str]) -> None:
-        captured["execv"] = (executable, argv)
-        raise KeyboardInterrupt
 
     class _FakeClient:
         def __init__(self, token: str, **kwargs: Any) -> None:
@@ -290,7 +282,6 @@ def test_telegram_backend_build_and_run_wires_config(
 
     monkeypatch.setattr(telegram_backend, "run_main_loop", fake_run_main_loop)
     monkeypatch.setattr(telegram_backend, "TelegramClient", _FakeClient)
-    monkeypatch.setattr(telegram_backend.os, "execv", fake_execv)
 
     transport_config = TelegramTransportSettings(
         bot_token="token",
@@ -306,14 +297,13 @@ def test_telegram_backend_build_and_run_wires_config(
         topics=TelegramTopicsSettings(enabled=True, scope="main"),
     )
 
-    with pytest.raises(KeyboardInterrupt):
-        telegram_backend.TelegramBackend().build_and_run(
-            transport_config=transport_config,
-            config_path=config_path,
-            runtime=runtime,
-            final_notify=False,
-            default_engine_override=None,
-        )
+    telegram_backend.TelegramBackend().build_and_run(
+        transport_config=transport_config,
+        config_path=config_path,
+        runtime=runtime,
+        final_notify=False,
+        default_engine_override=None,
+    )
 
     cfg = captured["cfg"]
     kwargs = captured["kwargs"]
@@ -333,14 +323,6 @@ def test_telegram_backend_build_and_run_wires_config(
     assert cfg.bot.token == "token"
     assert kwargs["watch_config"] is True
     assert kwargs["transport_id"] == "telegram"
-    assert loop_calls == 1
-    executable, argv = captured["execv"]
-    assert executable == telegram_backend.sys.executable
-    assert argv[:3] == [
-        telegram_backend.sys.executable,
-        "-c",
-        "from untether.cli import main; main()",
-    ]
 
 
 def test_detect_cli_version_returns_version(monkeypatch: pytest.MonkeyPatch) -> None:
