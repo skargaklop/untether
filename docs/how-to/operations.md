@@ -52,7 +52,7 @@ Send `/restart` in Telegram to initiate a graceful shutdown:
 1. Untether stops accepting new runs
 2. Active runs are drained (allowed to finish)
 3. The process exits cleanly
-4. Run `untether` again in your terminal (or your process supervisor restarts it automatically)
+4. Untether replaces itself with a fresh process, preserving the original CLI arguments
 
 !!! tip "Prefer /restart over killing the process"
     `/restart` lets in-progress runs complete before shutting down. Killing the process with `kill` or `systemctl restart` may interrupt active runs and lose work.
