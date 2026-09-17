@@ -3562,6 +3562,63 @@ async def test_run_main_loop_new_clears_chat_sessions(tmp_path: Path) -> None:
 
 
 @pytest.mark.anyio
+async def test_run_main_loop_ctx_sets_topic_binding(tmp_path: Path) -> None:
+    state_path = tmp_path / "untether.toml"
+    transport = FakeTransport()
+    runner = ScriptRunner([Return(answer="should not run")], engine=CODEX_ENGINE)
+    projects = ProjectsConfig(
+        projects={
+            "projects": ProjectConfig(
+                alias="projects",
+                path=tmp_path,
+                worktrees_dir=Path(".worktrees"),
+            )
+        },
+        default_project="projects",
+    )
+    runtime = TransportRuntime(
+        router=_make_router(runner),
+        projects=projects,
+        config_path=state_path,
+    )
+    cfg = TelegramBridgeConfig(
+        bot=FakeBot(),
+        runtime=runtime,
+        chat_id=123,
+        startup_msg="",
+        exec_cfg=ExecBridgeConfig(
+            transport=transport,
+            presenter=MarkdownPresenter(),
+            final_notify=True,
+        ),
+        forward_coalesce_s=FAST_FORWARD_COALESCE_S,
+        prompt_batch_debounce_s=0.0,
+        media_group_debounce_s=FAST_MEDIA_GROUP_DEBOUNCE_S,
+        topics=TelegramTopicsSettings(enabled=True, scope="main"),
+    )
+
+    async def poller(_cfg: TelegramBridgeConfig):
+        yield TelegramIncomingMessage(
+            transport="telegram",
+            chat_id=123,
+            message_id=1,
+            text="/ctx set projects",
+            reply_to_message_id=None,
+            reply_to_text=None,
+            sender_id=123,
+            thread_id=77,
+            chat_type="supergroup",
+        )
+
+    await run_main_loop(cfg, poller)
+
+    snapshot = await TopicStateStore(resolve_state_path(state_path)).get_thread(123, 77)
+    assert snapshot is not None
+    assert snapshot.context == RunContext(project="projects", branch=None)
+    assert runner.calls == []
+
+
+@pytest.mark.anyio
 async def test_run_main_loop_new_clears_topic_sessions(tmp_path: Path) -> None:
     state_path = tmp_path / "untether.toml"
     store = TopicStateStore(resolve_state_path(state_path))

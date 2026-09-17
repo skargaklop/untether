@@ -543,6 +543,8 @@ def _dispatch_builtin_command(
             )
         task_group.start_soon(cast(Callable[..., Awaitable[Any]], handler))
         return True
+
+    if command_id == "ctx":
         topic_key = (
             _topic_key(msg, cfg, scope_chat_ids=scope_chat_ids)
             if cfg.topics.enabled and topic_store is not None
