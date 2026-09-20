@@ -7,6 +7,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 import anyio
 
@@ -45,6 +46,56 @@ def _read_meminfo_fields(fields: tuple[str, ...]) -> dict[str, int]:
     except (OSError, FileNotFoundError, PermissionError):
         return {}
     return out
+
+
+def _read_windows_resources() -> tuple[int, int, int] | None:
+    """Return CPU percent, total RAM KB, and available RAM KB on Windows."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+
+        class MemoryStatus(ctypes.Structure):
+            _fields_: ClassVar[list[tuple[str, object]]] = [
+                ("length", ctypes.c_ulong),
+                ("memory_load", ctypes.c_ulong),
+                ("total_physical", ctypes.c_ulonglong),
+                ("available_physical", ctypes.c_ulonglong),
+                ("total_page_file", ctypes.c_ulonglong),
+                ("available_page_file", ctypes.c_ulonglong),
+                ("total_virtual", ctypes.c_ulonglong),
+                ("available_virtual", ctypes.c_ulonglong),
+                ("available_extended_virtual", ctypes.c_ulonglong),
+            ]
+
+        idle = ctypes.c_ulonglong()
+        kernel = ctypes.c_ulonglong()
+        user = ctypes.c_ulonglong()
+        if not ctypes.windll.kernel32.GetSystemTimes(
+            ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user)
+        ):
+            return None
+        time.sleep(0.1)
+        idle_after = ctypes.c_ulonglong()
+        kernel_after = ctypes.c_ulonglong()
+        user_after = ctypes.c_ulonglong()
+        if not ctypes.windll.kernel32.GetSystemTimes(
+            ctypes.byref(idle_after),
+            ctypes.byref(kernel_after),
+            ctypes.byref(user_after),
+        ):
+            return None
+        total_delta = kernel_after.value - kernel.value + user_after.value - user.value
+        idle_delta = idle_after.value - idle.value
+        cpu = round(100 * (total_delta - idle_delta) / total_delta) if total_delta else 0
+
+        memory = MemoryStatus()
+        memory.length = ctypes.sizeof(memory)
+        if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(memory)):
+            return None
+        return cpu, memory.total_physical // 1024, memory.available_physical // 1024
+    except (AttributeError, OSError, ValueError):
+        return None
 
 
 def _format_mb(kb: int) -> str:
@@ -187,6 +238,19 @@ class UsageSnapshot:
 
 
 def _collect_system() -> SystemSnapshot:
+    if sys.platform == "win32":
+        windows = _read_windows_resources()
+        if windows is None:
+            return SystemSnapshot("unavailable", "CPU: unavailable · RAM: unavailable")
+        cpu, total, available = windows
+        used = max(0, total - available)
+        return SystemSnapshot(
+            "ok",
+            f"CPU: {cpu}% · RAM: {_format_mb(used)} used · "
+            f"{_format_mb(available)} available "
+            f"({100 * used // total if total else 0}%)",
+        )
+
     mem = _read_meminfo_fields(("MemTotal", "MemAvailable", "SwapTotal", "SwapFree"))
     if not mem:
         return SystemSnapshot("unavailable", "RAM: unavailable")

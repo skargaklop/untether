@@ -209,7 +209,22 @@ def test_render_includes_system_and_triggers(tmp_path) -> None:
     assert "triggers" in snapshot
 
 
+def test_system_collector_includes_windows_cpu_and_memory(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(
+        health,
+        "_read_windows_resources",
+        lambda: (25, 8 * 1024 * 1024, 3 * 1024 * 1024),
+    )
+
+    snapshot = health._collect_system()
+
+    assert snapshot.status == "ok"
+    assert snapshot.text == "CPU: 25% · RAM: 5.0 GB used · 3.0 GB available (62%)"
+
+
 def test_system_collector_includes_usage_and_swap(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(
         health,
         "_read_meminfo_fields",
