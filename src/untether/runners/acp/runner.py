@@ -48,10 +48,20 @@ class AcpRunner(ResumeTokenMixin):
     facilities: AcpClientFacilities | None = None
     resume_re: re.Pattern[str] = field(
         default=re.compile(
-            r"(?im)^\s*`?[\w-]+\s+(?:resume\s+)?(?P<token>[\w.-]+)`?\s*$"
+            r"(?im)^\s*`?(?P<engine>[\w-]+)\s+resume\s+"
+            r"(?P<token>[\w.-]+)`?\s*$"
         ),
         repr=False,
     )
+
+    def extract_resume(self, text: str | None) -> ResumeToken | None:
+        if not text:
+            return None
+        found: str | None = None
+        for match in self.resume_re.finditer(text):
+            if match.group("engine").lower() == str(self.engine).lower():
+                found = match.group("token")
+        return ResumeToken(engine=self.engine, value=found) if found else None
 
     def _peer(self) -> Any:
         if self.peer_factory is not None:

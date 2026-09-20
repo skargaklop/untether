@@ -9,6 +9,16 @@ from untether.runners.acp.runner import AcpRunner
 from untether.runners.run_options import EngineRunOptions, apply_run_options
 
 
+def test_resume_token_requires_this_acp_engine_name() -> None:
+    runner = AcpRunner(engine="cline", command="unused")
+
+    assert runner.extract_resume("Report only.") is None
+    assert runner.extract_resume("`pi resume session-1`") is None
+    assert runner.extract_resume("`cline resume session-1`") == ResumeToken(
+        engine="cline", value="session-1"
+    )
+
+
 class FakePeer:
     def __init__(
         self,
