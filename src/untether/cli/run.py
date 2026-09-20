@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from collections.abc import Callable
 from functools import partial
@@ -328,9 +329,15 @@ def _run_auto_router(
             lock_handle.release()
     if transport_id == "telegram":
         logger.info("restart.relaunching")
-        os.execv(
-            sys.executable,
+        subprocess.Popen(
             [sys.executable, "-c", "from untether.cli import main; main()", *sys.argv[1:]],
+            close_fds=True,
+            creationflags=(
+                subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+                if sys.platform == "win32"
+                else 0
+            ),
+            start_new_session=sys.platform != "win32",
         )
 
 

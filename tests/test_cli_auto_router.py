@@ -91,7 +91,7 @@ def test_run_auto_router_releases_lock_before_telegram_restart(
     engine_backend = _engine_backend()
     config_path = tmp_path / "untether.toml"
     lock = _DummyLock()
-    exec_calls: list[tuple[str, list[str]]] = []
+    spawn_calls: list[list[str]] = []
 
     monkeypatch.setattr(
         cli,
@@ -111,11 +111,11 @@ def test_run_auto_router_releases_lock_before_telegram_restart(
     )
     monkeypatch.setattr(cli, "acquire_config_lock", lambda _path, _token: lock)
 
-    def fake_execv(executable: str, argv: list[str]) -> None:
+    def fake_popen(argv: list[str], **_kwargs: object) -> None:
         assert lock.released is True
-        exec_calls.append((executable, argv))
+        spawn_calls.append(argv)
 
-    monkeypatch.setattr(cli_run.os, "execv", fake_execv)
+    monkeypatch.setattr(cli_run.subprocess, "Popen", fake_popen)
 
     cli._run_auto_router(
         default_engine_override=None,
@@ -125,7 +125,14 @@ def test_run_auto_router_releases_lock_before_telegram_restart(
         onboard=False,
     )
 
-    assert len(exec_calls) == 1
+    assert spawn_calls == [
+        [
+            cli_run.sys.executable,
+            "-c",
+            "from untether.cli import main; main()",
+            *cli_run.sys.argv[1:],
+        ]
+    ]
 
 
 def test_run_auto_router_success_releases_lock(monkeypatch, tmp_path: Path) -> None:
