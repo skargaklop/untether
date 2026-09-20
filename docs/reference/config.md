@@ -292,7 +292,8 @@ Budget alerts always appear regardless of `[footer]` settings.
     [watchdog]
     liveness_timeout = 600.0
     stall_auto_kill = false
-    stall_repeat_seconds = 180.0
+    stall_repeat_seconds = 300.0
+    stall_max_warnings = 15
     tool_timeout = 600.0
     mcp_tool_timeout = 900.0
     detect_stuck_after_tool_result = false
@@ -318,7 +319,8 @@ Budget alerts always appear regardless of `[footer]` settings.
 |-----|------|---------|-------|
 | `liveness_timeout` | float | `600.0` | Seconds of no stdout before `subprocess.liveness_stall` warning (60–3600). |
 | `stall_auto_kill` | bool | `false` | Auto-kill stalled processes. Requires zero TCP + CPU not increasing. |
-| `stall_repeat_seconds` | float | `180.0` | Interval between repeat stall warnings in Telegram (30–600). |
+| `stall_repeat_seconds` | float | `300.0` | Interval between repeat stall warnings in Telegram (30–600). |
+| `stall_max_warnings` | int | `15` | Maximum consecutive stall warnings before auto-cancel (1–100). |
 | `tool_timeout` | float | `600.0` | Stall threshold (seconds) for running local tool calls like Bash, Read, Write (60–7200). Increase for long builds or benchmarks. |
 | `mcp_tool_timeout` | float | `900.0` | Stall threshold (seconds) for running MCP tool calls (60–7200). MCP tools are network-bound and may legitimately run for 10–20+ minutes. |
 | `detect_stuck_after_tool_result` | bool | `false` | Enable the stuck-after-tool_result detector ([#322](https://github.com/littlebearapps/untether/issues/322)) — fires when a `tool_result` arrives and the engine goes silent for `stuck_after_tool_result_timeout` seconds while CPU-active (matches the upstream Claude-code / `mcp-remote` / undici wedge). Opt-in this release; will default `true` once the recovery path has more staging soak time. The detector is suppressed during legitimate long-running background primitives (`Monitor`, `Bash run_in_background=true`, `Agent run_in_background=true`, `ScheduleWakeup`, `RemoteTrigger`) via the per-session tracking infrastructure ([#346](https://github.com/littlebearapps/untether/issues/346) / [#347](https://github.com/littlebearapps/untether/issues/347)). |

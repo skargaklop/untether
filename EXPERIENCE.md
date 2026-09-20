@@ -1,5 +1,19 @@
 # ACP Phase E Experience
 
+## Inactivity/stall policy change experience
+
+### Difficulties
+
+The warning cap remained a class-level default while other watchdog values were copied from live per-run settings, so testing had to exercise the `handle_message` wiring rather than only model validation. The repository's default pytest options also include a coverage gate that is inappropriate for focused RED/GREEN runs.
+
+### Solutions
+
+Added one settings contract test for the five-minute repeat default, 15-warning default, and 1–100 bounds, plus one bridge test proving a live `WatchdogSettings` value reaches `ProgressEdits`. Focused tests use `-o addopts=''`, and the implementation is limited to the Pydantic field, per-run assignment, aligned fallback default, and config reference.
+
+### Inconveniences
+
+Python commands require explicit Windows `USERPROFILE` and `HOME`; `.local/` and `.trash/` already contained untracked state and were deliberately preserved.
+
 ## Difficulties
 
 The ACP peer API is intentionally duplex: prompt responses and session updates can arrive through separate paths, while the existing runner contract requires one ordered event stream. The main difficulty was keeping reducer state independent from transport details and preserving the exact Started/Action/Completed lifecycle.

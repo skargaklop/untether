@@ -497,7 +497,8 @@ class WatchdogSettings(BaseModel):
 
     liveness_timeout: float = Field(default=600.0, ge=60, le=3600)
     stall_auto_kill: bool = False
-    stall_repeat_seconds: float = Field(default=180.0, ge=30, le=600)
+    stall_repeat_seconds: float = Field(default=300.0, ge=30, le=600)
+    stall_max_warnings: int = Field(default=15, ge=1, le=100)
     # #590: after an engine subprocess exits (including clean rc=0), sweep
     # surviving process-group members and captured descendant PIDs — the
     # Claude CLI leaks MCP node children on exit fleet-wide (1/run on sl,
@@ -672,8 +673,8 @@ class ProgressSettings(BaseModel):
     # #481: heartbeat tick cadence for the long-running-action elapsed-time
     # tail and the post-result closing-message poller. Distinct from the
     # stall-monitor cadence (60s) because lowering that would silently
-    # break stall_repeat_seconds=180 ≈ 3-tick math and the wider stall test
-    # corpus. The stall monitor's loop sleeps min(heartbeat_interval,
+    # alter stall warning timing and break the wider stall test corpus.
+    # The stall monitor's loop sleeps min(heartbeat_interval,
     # stall_check_interval) and only runs the threshold check at the slower
     # cadence. Range 5s-120s.
     heartbeat_interval: float = Field(default=30.0, ge=5, le=120)

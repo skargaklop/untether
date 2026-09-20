@@ -2025,6 +2025,35 @@ async def test_progress_edits_stall_detected_without_any_events() -> None:
 
 
 @pytest.mark.anyio
+async def test_handle_message_applies_live_stall_max_warnings(monkeypatch) -> None:
+    from untether.settings import WatchdogSettings
+
+    captured: dict[str, int] = {}
+
+    async def capture_run(self) -> None:
+        captured["stall_max_warnings"] = self._STALL_MAX_WARNINGS
+
+    monkeypatch.setattr(
+        "untether.runner_bridge._load_watchdog_settings",
+        lambda: WatchdogSettings(stall_max_warnings=23),
+    )
+    monkeypatch.setattr(ProgressEdits, "run", capture_run)
+
+    await handle_message(
+        ExecBridgeConfig(
+            transport=FakeTransport(),
+            presenter=MarkdownPresenter(),
+            final_notify=False,
+        ),
+        runner=_return_runner(),
+        incoming=IncomingMessage(channel_id=123, message_id=10, text="hi"),
+        resume_token=None,
+    )
+
+    assert captured["stall_max_warnings"] == 23
+
+
+@pytest.mark.anyio
 async def test_progress_edits_stall_notification_repeats_after_interval() -> None:
     """Stall notification repeats after _stall_repeat_seconds."""
     transport = FakeTransport()

@@ -881,6 +881,22 @@ def test_timeout_nudge_settings_defaults() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_watchdog_stall_policy_defaults_and_bounds() -> None:
+    from pydantic import ValidationError
+
+    from untether.settings import WatchdogSettings
+
+    ws = WatchdogSettings()
+    assert ws.stall_repeat_seconds == 300.0
+    assert ws.stall_max_warnings == 15
+    assert WatchdogSettings(stall_max_warnings=1).stall_max_warnings == 1
+    assert WatchdogSettings(stall_max_warnings=100).stall_max_warnings == 100
+    with pytest.raises(ValidationError):
+        WatchdogSettings(stall_max_warnings=0)
+    with pytest.raises(ValidationError):
+        WatchdogSettings(stall_max_warnings=101)
+
+
 def test_watchdog_prespawn_ram_defaults() -> None:
     from untether.settings import WatchdogSettings
 

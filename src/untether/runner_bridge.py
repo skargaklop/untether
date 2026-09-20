@@ -1062,7 +1062,7 @@ class ProgressEdits:
         # cancel-decision logs can say how recently the process existed.
         self._last_alive_at: float | None = None
         self._stall_check_interval: float = 60.0
-        self._stall_repeat_seconds: float = 180.0
+        self._stall_repeat_seconds: float = 300.0
         self._prev_recent_events: list[tuple[float, str]] | None = None
         self._frozen_ring_count: int = 0
         # #481: heartbeat tick cadence. The stall monitor loop sleeps
@@ -1301,8 +1301,8 @@ class ProgressEdits:
 
         The loop sleeps ``min(heartbeat_interval, stall_check_interval)``
         per tick. The stall path runs only when enough wall-clock has
-        elapsed since the last stall check, preserving the existing
-        ``stall_repeat_seconds`` ≈ 3-tick math the test suite relies on.
+        elapsed since the last stall check; ``stall_repeat_seconds`` still
+        controls the wall-clock interval between warnings.
         """
         from .utils.proc_diag import (
             collect_proc_diag,
@@ -1317,7 +1317,7 @@ class ProgressEdits:
             # #481: tick at the FASTER of the two cadences — heartbeat
             # (30 s default) drives the long-running tail and closing
             # message; stall warnings still gate themselves at wall-clock
-            # ``_stall_repeat_seconds`` (180 s default) so faster ticks
+            # ``_stall_repeat_seconds`` (300 s default) so faster ticks
             # don't cause warning spam (the gate at line 992-993 below
             # bails out when too soon to repeat). Tests that override
             # ``_stall_check_interval`` to 0.01 s still get fast ticks.
@@ -2790,7 +2790,7 @@ class ProgressEdits:
     # deliberations.
     _STALL_THRESHOLD_APPROVAL_FIRST: float = 600.0
     _STALL_THRESHOLD_APPROVAL: float = 1800.0  # refire threshold after first
-    _STALL_MAX_WARNINGS: int = 10  # absolute cap
+    _STALL_MAX_WARNINGS: int = 15  # fallback; live watchdog config overrides per run
     _STALL_MAX_WARNINGS_NO_PID: int = 3  # aggressive cap when pid=None + no events
     _TCP_ACTIVE_THRESHOLD: int = 20  # TCP connections above this suggest active work
     # #333 Tier 2: post-result idle limbo threshold. The Claude watchdog
@@ -3628,6 +3628,7 @@ async def handle_message(
     watchdog = _load_watchdog_settings()
     if watchdog is not None:
         edits._stall_repeat_seconds = watchdog.stall_repeat_seconds
+        edits._STALL_MAX_WARNINGS = watchdog.stall_max_warnings
         edits._STALL_THRESHOLD_TOOL = watchdog.tool_timeout
         edits._STALL_THRESHOLD_MCP_TOOL = watchdog.mcp_tool_timeout
         edits._STALL_THRESHOLD_SUBAGENT = watchdog.subagent_timeout
