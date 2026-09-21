@@ -181,19 +181,7 @@ async def handle_compact_command(
     user_msg_id = msg.message_id
 
     # --- Engine resolution with precedence ---
-    reply_resume: ResumeToken | None = None
-    if msg.reply_to_text:
-        for eid in cfg.runtime.engine_ids:
-            try:
-                resolved_r = cfg.runtime.resolve_runner(
-                    resume_token=None, engine_override=eid
-                )
-                if resolved_r.available:
-                    reply_resume = resolved_r.runner.extract_resume(msg.reply_to_text)
-                    if reply_resume is not None:
-                        break
-            except (KeyError, LookupError, ValueError):
-                continue
+    reply_resume = cfg.runtime.resolve_resume_from_reply(msg.reply_to_text)
     if engine_override is not None:
         engine = engine_override
     elif reply_resume is not None:

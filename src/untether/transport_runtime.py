@@ -190,6 +190,10 @@ class TransportRuntime:
         """
         return self._router.list_models(engine)
 
+    def resolve_resume_from_reply(self, reply_text: str | None) -> ResumeToken | None:
+        """Extract a resume marker from a rendered Telegram reply footer."""
+        return self._router.resolve_resume(None, reply_text)
+
     def project_aliases(self) -> tuple[str, ...]:
         return tuple(project.alias for project in self._projects.projects.values())
 

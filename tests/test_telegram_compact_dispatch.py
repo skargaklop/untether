@@ -103,7 +103,7 @@ async def test_compact_reply_footer_bypasses_debounce_and_uses_footer_session() 
                     "/compact focus on tests",
                     message_id=2,
                     reply_to_message_id=99,
-                    reply_to_text=f"done\n`codex resume {session_id}`",
+                    reply_to_text=f"done\n↩️ `codex resume {session_id}`",
                 ),
             ]
         ),

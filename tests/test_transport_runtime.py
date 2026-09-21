@@ -2,6 +2,7 @@ from pathlib import Path
 
 from untether.config import ProjectConfig, ProjectsConfig
 from untether.context import RunContext
+from untether.model import ResumeToken
 from untether.router import AutoRouter, RunnerEntry
 from untether.runners.mock import Return, ScriptRunner
 from untether.transport_runtime import TransportRuntime
@@ -39,6 +40,16 @@ def test_dynamic_engine_ids_field_exists_and_threads_through_update() -> None:
         dynamic_engine_ids=frozenset({"agent_id"}),
     )
     assert runtime.dynamic_engine_ids == frozenset({"agent_id"})
+
+
+def test_resolve_resume_from_reply_strips_telegram_footer_prefix() -> None:
+    runtime = _make_runtime()
+
+    resolved = runtime.resolve_resume_from_reply(
+        "done\n↩️ `codex resume footer-session`"
+    )
+
+    assert resolved == ResumeToken(engine="codex", value="footer-session")
 
 
 def test_resolve_message_extracts_pi_engine_directive() -> None:

@@ -1,5 +1,9 @@
 # ACP Phase E Experience
 
+## Untether Pi compact/handoff investigation
+
+The existing Pi extractor tests covered a bare marker but not the actual Telegram-rendered footer with its leading `↩️` prefix. `AutoRouter.resolve_resume()` already normalized that prefix, but `/compact` and `/handoff` bypassed the router and called runner extractors directly. The fix reuses the router normalization through `TransportRuntime.resolve_resume_from_reply()`, and the compact regression now uses a realistic rendered footer. The failure reproduced entirely in memory; no session files or local state inspection was required.
+
 ## Telegram direct shell command experience
 
 ### Difficulties
