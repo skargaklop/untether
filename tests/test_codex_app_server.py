@@ -5,7 +5,7 @@ from typing import Any
 import anyio
 import pytest
 
-from untether.model import CompletedEvent, StartedEvent
+from untether.model import CompletedEvent, ResumeToken, StartedEvent
 from untether.runners.codex import (
     AppServerCodexRunner,
     _AppServerTurnControl,
@@ -43,6 +43,10 @@ class FakeAppServer:
     async def thread_start(self, params: dict) -> dict:
         self.calls.append(("thread/start", params))
         return {"thread": {"id": "thread-1"}}
+
+    async def thread_fork(self, thread_id: str) -> dict:
+        self.calls.append(("thread/fork", {"threadId": thread_id}))
+        return {"thread": {"id": "thread-forked"}}
 
     async def ensure_thread_loaded(self, thread_id: str) -> None:
         self.calls.append(("thread/resume", {"threadId": thread_id}))
@@ -111,6 +115,38 @@ async def test_app_server_emits_plan_and_goal_and_steering_protocol(
         and payload == {"threadId": "thread-1", "turnId": "turn-1"}
         for method, payload in fake.calls
     )
+
+
+@pytest.mark.anyio
+async def test_app_server_client_forks_thread_via_native_protocol(monkeypatch) -> None:
+    from untether.runners.codex import _AppServerClient
+
+    client = _AppServerClient(codex_cmd="codex", extra_args=[])
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    async def request(method: str, params: dict[str, str]) -> dict:
+        calls.append((method, params))
+        return {"thread": {"id": "thread-forked"}}
+
+    monkeypatch.setattr(client, "request", request)
+
+    assert await client.thread_fork("thread-source") == {
+        "thread": {"id": "thread-forked"}
+    }
+    assert calls == [("thread/fork", {"threadId": "thread-source"})]
+
+
+@pytest.mark.anyio
+async def test_app_server_runner_fork_returns_new_resume_token(monkeypatch) -> None:
+    fake = FakeAppServer()
+    monkeypatch.setattr("untether.runners.codex._AppServerClient", lambda **_: fake)
+    runner = AppServerCodexRunner(codex_cmd="codex", extra_args=[])
+
+    token = await runner.fork(ResumeToken("codex", "thread-source"))
+
+    assert token == ResumeToken("codex", "thread-forked")
+    assert ("thread/fork", {"threadId": "thread-source"}) in fake.calls
+    assert fake.closed
 
 
 def test_codex_defaults_to_app_server_and_retains_exec_fallback(tmp_path) -> None:

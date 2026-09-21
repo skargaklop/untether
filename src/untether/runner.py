@@ -12,7 +12,7 @@ import time
 from collections import deque
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field, replace
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, cast, runtime_checkable
 from weakref import WeakValueDictionary
 
 import anyio
@@ -32,6 +32,13 @@ from .utils.streams import drain_stderr, iter_bytes_lines
 from .utils.subprocess import manage_subprocess
 
 _lock_logger = get_logger(__name__)
+
+
+@runtime_checkable
+class ForkableRunner(Protocol):
+    """Runner capability for a native session fork without a model turn."""
+
+    async def fork(self, resume: ResumeToken) -> ResumeToken: ...
 
 
 class RunnerTimeoutError(RuntimeError):

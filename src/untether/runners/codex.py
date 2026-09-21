@@ -960,6 +960,12 @@ class _AppServerClient:
             raise RuntimeError("thread/start returned no thread")
         return result
 
+    async def thread_fork(self, thread_id: str) -> dict[str, Any]:
+        result = await self.request("thread/fork", {"threadId": thread_id})
+        if not isinstance(result, dict) or not isinstance(result.get("thread"), dict):
+            raise RuntimeError("thread/fork returned no thread")
+        return result
+
     async def ensure_thread_loaded(self, thread_id: str) -> None:
         await self.request("thread/resume", {"threadId": thread_id})
 
@@ -1033,6 +1039,22 @@ class AppServerCodexRunner(SlashCompactMixin, ResumeTokenMixin, BaseRunner):
             title,
         )
         self._client = _AppServerClient(codex_cmd=codex_cmd, extra_args=extra_args)
+
+    async def fork(self, resume: ResumeToken) -> ResumeToken:
+        if resume.engine != self.engine:
+            raise RuntimeError(f"resume token is for engine {resume.engine!r}")
+        client = self._client
+        await client.start()
+        try:
+            result = await client.thread_fork(resume.value)
+            thread = result["thread"]
+            thread_id = thread.get("id") if isinstance(thread, dict) else None
+            if not isinstance(thread_id, str) or not thread_id:
+                raise RuntimeError("thread/fork returned no thread id")
+            return ResumeToken(engine=self.engine, value=thread_id)
+        finally:
+            with anyio.move_on_after(2, shield=True):
+                await client.close()
 
     async def run_impl(
         self, prompt: str, resume: ResumeToken | None

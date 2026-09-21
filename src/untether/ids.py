@@ -10,6 +10,7 @@ RESERVED_CHAT_COMMANDS = frozenset(
     {
         "cancel",
         "continue",
+        "fork",
         "file",
         "new",
         "agent",

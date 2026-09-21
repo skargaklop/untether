@@ -73,6 +73,7 @@ def build_bot_commands(
     for cmd, description in [
         ("new", "start a new thread"),
         ("continue", "continue most recent CLI session"),
+        ("fork", "fork current session"),
         ("ctx", "show or update context"),
         ("agent", "set default engine"),
         ("model", "set model override"),

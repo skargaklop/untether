@@ -3254,10 +3254,55 @@ async def run_main_loop(
                     return
 
                 # --- Compact/handoff: intercept before normal command dispatch ---
+                from .commands.fork import fork_session
                 from .commands.parse import (
                     parse_compact_invocation,
+                    parse_fork_invocation,
                     parse_handoff_invocation,
                 )
+
+                try:
+                    fork_invocation = parse_fork_invocation(
+                        text, engine_ids=cfg.runtime.engine_ids
+                    )
+                except ValueError as exc:
+                    await reply(text=f"error:\n{exc}")
+                    return
+                if fork_invocation is not None:
+                    try:
+                        defaults = await resolve_engine_defaults(
+                            explicit_engine=fork_invocation.engine,
+                            context=ambient_context,
+                            chat_id=chat_id,
+                            topic_key=topic_key,
+                        )
+                        fork_engine = defaults.engine
+                        source = (
+                            ResumeToken(fork_engine, fork_invocation.session_id)
+                            if fork_invocation.session_id
+                            else None
+                        )
+                        resolved = cfg.runtime.resolve_runner(
+                            resume_token=source, engine_override=fork_engine
+                        )
+                        if not resolved.available:
+                            result_message = f"fork is not supported by {fork_engine}"
+                        else:
+                            result = await fork_session(
+                                runner=resolved.runner,
+                                engine=fork_engine,
+                                explicit_session=source,
+                                chat_store=state.chat_session_store,
+                                chat_key=chat_session_key,
+                                topic_store=state.topic_store,
+                                topic_key=topic_key,
+                            )
+                            result_message = result.message
+                    except Exception:  # Command failures must become user replies.
+                        logger.exception("session.fork.dispatch_failed", engine=fork_engine)
+                        result_message = f"could not fork {fork_engine} session"
+                    await reply(text=result_message)
+                    return
 
                 compact_invocation = parse_compact_invocation(
                     text, engine_ids=cfg.runtime.engine_ids

@@ -9,6 +9,7 @@ from .executor import _should_show_resume_line as should_show_resume_line
 from .file_transfer import _handle_file_command as handle_file_command
 from .file_transfer import _handle_file_put_default as handle_file_put_default
 from .file_transfer import _save_file_put as save_file_put
+from .fork import fork_session
 from .listen import _handle_listen_command as handle_listen_command
 from .media import _handle_media_group as handle_media_group
 from .menu import _reserved_commands as get_reserved_commands
@@ -29,6 +30,7 @@ handle_trigger_command = handle_listen_command
 __all__ = [
     "dispatch_callback",
     "dispatch_command",
+    "fork_session",
     "get_reserved_commands",
     "handle_agent_command",
     "handle_chat_ctx_command",

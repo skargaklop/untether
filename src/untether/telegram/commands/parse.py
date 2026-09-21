@@ -69,6 +69,12 @@ def parse_dot_typo(text: str, known_commands: Container[str]) -> str | None:
 
 
 @dataclass(frozen=True, slots=True)
+class ForkInvocation:
+    engine: EngineId | None = None
+    session_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class CompactInvocation:
     """Parsed result of a /compact (or /handoff) invocation.
 
@@ -178,6 +184,26 @@ def parse_command_invocation(
         instructions=instructions,
         destination_engine=destination_engine,
     )
+
+
+def parse_fork_invocation(
+    text: str,
+    *,
+    engine_ids: tuple[EngineId, ...],
+) -> ForkInvocation | None:
+    command, args_text = _parse_slash_command(text)
+    if command != "fork":
+        return None
+    if "\n" in text or "\r" in text:
+        raise ValueError("usage: /fork [engine] [session-id]")
+    args = args_text.split()
+    if len(args) > 2:
+        raise ValueError("usage: /fork [engine] [session-id]")
+    engine_map = {item.lower(): item for item in engine_ids}
+    engine = engine_map.get(args[0].lower()) if args else None
+    if args and engine is None:
+        raise ValueError(f"unknown engine: {args[0]}")
+    return ForkInvocation(engine=engine, session_id=args[1] if len(args) == 2 else None)
 
 
 def parse_compact_invocation(

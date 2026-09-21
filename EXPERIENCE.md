@@ -75,3 +75,17 @@ The rebuilt global package matched source exactly and direct no-cache discovery 
 ## Resume-directive fix experience
 
 Four scoped subagent spawns (three investigation plus one implementation) exited without a single tool call or yield, so the controller executed the resume fix inline. The edit tool mangled two same-file edits issued close together (duplicated import blocks, a dropped test body, a truncated docstring); every boundary-echo warning required an immediate re-read of the touched region before continuing. The handoff's urgent `settings.py` duplicate-class repair was stale: verifying by importing the module before editing saved a pointless revert. Cross-engine verification was cheap once real runner constructors were enumerated: all eight engines construct with trivial kwargs, so one loop over real runners replaced per-engine mocks. The bridge prepends its Telegram preamble to prompts, so end-to-end assertions must use suffix containment (`endswith`), not equality.
+
+## Telegram fork implementation experience
+
+### Difficulties
+
+The first implementation pass exposed that runner-level native fork support is not present in the current contract, and a command-only wrapper cannot honestly claim provider support. Codex also has two distinct modes, but only app-server exposes the native `thread/fork` operation; exec mode must remain explicitly unsupported. Focused pytest must run through `uv run` with Windows `USERPROFILE` and `HOME` set.
+
+### Solutions
+
+Added a runtime-checkable `ForkableRunner` capability, implemented Codex app-server `thread/fork`, and left every unverified runner unsupported. Reused the established effective-engine resolver rather than selecting the first configured engine. Parser, source precedence, failure-state preservation, provider protocol, and practical loop dispatch are covered; the full suite and repository-wide Ruff gate pass.
+
+### Inconveniences
+
+Pre-existing `.local/` and `.trash/` remain untracked and untouched.

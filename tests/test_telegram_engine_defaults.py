@@ -75,3 +75,26 @@ async def test_resolve_engine_for_message_sources(tmp_path) -> None:
     )
     assert resolved.source == "project_default"
     assert resolved.engine == "pi"
+
+    project_without_default = ProjectConfig(
+        alias="plain",
+        path=tmp_path,
+        worktrees_dir=Path(".worktrees"),
+    )
+    global_runtime = TransportRuntime(
+        router=router,
+        projects=ProjectsConfig(
+            projects={"plain": project_without_default}, default_project=None
+        ),
+    )
+    resolved = await resolve_engine_for_message(
+        runtime=global_runtime,
+        context=RunContext(project="plain"),
+        explicit_engine=None,
+        chat_id=1,
+        topic_key=None,
+        topic_store=None,
+        chat_prefs=None,
+    )
+    assert resolved.source == "global_default"
+    assert resolved.engine == "codex"
