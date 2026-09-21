@@ -71,8 +71,61 @@ def discover_shell(kind: ShellKind, *, platform: str | None = None) -> str:
     return executable
 
 
-def build_shell_argv(kind: ShellKind, executable: str, command: str) -> list[str]:
+def _normalise_windows_paths(command: str) -> str:
+    """Make Windows drive paths safe for Bash without rewriting other escapes."""
+    result: list[str] = []
+    index = 0
+    quote: str | None = None
+    while index < len(command):
+        char = command[index]
+        if char in {"'", '"'}:
+            quote = None if quote == char else char if quote is None else quote
+        is_drive_path = (
+            char.isascii()
+            and char.isalpha()
+            and index + 2 < len(command)
+            and command[index + 1] == ":"
+            and command[index + 2] == "\\"
+            and (
+                index == 0
+                or command[index - 1].isspace()
+                or command[index - 1] in "'=(["
+            )
+        )
+        if not is_drive_path:
+            result.append(char)
+            index += 1
+            continue
+
+        result.extend((char, ":"))
+        index += 2
+        while index < len(command):
+            char = command[index]
+            if (quote and char == quote) or (
+                quote is None and (char.isspace() or char in "|&;<>()")
+            ):
+                break
+            if char == "\\":
+                result.append("/")
+                while index + 1 < len(command) and command[index + 1] == "\\":
+                    index += 1
+            else:
+                result.append(char)
+            index += 1
+    return "".join(result)
+
+
+def build_shell_argv(
+    kind: ShellKind,
+    executable: str,
+    command: str,
+    *,
+    platform: str | None = None,
+) -> list[str]:
+    platform = sys.platform if platform is None else platform
     if kind == "bash":
+        if platform == "win32":
+            command = _normalise_windows_paths(command)
         return [executable, "-lc", command]
     return [
         executable,

@@ -39,6 +39,32 @@ def test_parse_shell_command_requires_content_and_only_leading_nohup_detaches() 
         parse_shell_command("nohup")
 
 
+def test_build_bash_argv_normalises_unquoted_windows_paths() -> None:
+    assert build_shell_argv(
+        "bash",
+        "/bin/bash",
+        r"ls D:\OSPanel\home\dolibarr.local",
+        platform="win32",
+    ) == [
+        "/bin/bash",
+        "-lc",
+        "ls D:/OSPanel/home/dolibarr.local",
+    ]
+    assert (
+        build_shell_argv(
+            "bash",
+            "/bin/bash",
+            r"printf '%s' C:\one\\two",
+            platform="win32",
+        )[-1]
+        == "printf '%s' C:/one/two"
+    )
+    assert (
+        build_shell_argv("bash", "/bin/bash", r"printf '%s' \n", platform="linux")[-1]
+        == r"printf '%s' \n"
+    )
+
+
 def test_discover_and_build_shell_argv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "untether.telegram.commands.direct_shell.shutil.which",
