@@ -113,6 +113,16 @@ async def test_compact_reply_footer_bypasses_debounce_and_uses_footer_session() 
     assert runner.compact_calls == [
         (ResumeToken(engine="codex", value=session_id), "focus on tests")
     ]
+    assert any(
+        call["message"].text == "compacting codex session…"
+        for call in cast(FakeTransport, cfg.exec_cfg.transport).send_calls
+    )
+    operation_edits = [
+        call["message"].text
+        for call in cast(FakeTransport, cfg.exec_cfg.transport).edit_calls
+    ]
+    assert "claimed" not in operation_edits
+    assert operation_edits[-1] == "completed — compaction finished."
 
 
 @pytest.mark.anyio

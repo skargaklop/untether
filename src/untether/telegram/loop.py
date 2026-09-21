@@ -2580,7 +2580,6 @@ async def run_main_loop(
                     return
                 try:
                     if job.kind in {"compact", "handoff"}:
-                        await _edit_operation_card(job, "claimed")
                         return
                     tracker = ProgressTracker(engine=job.resume_token.engine)
                     tracker.set_resume(job.resume_token)

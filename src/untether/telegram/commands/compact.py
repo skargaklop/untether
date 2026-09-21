@@ -273,7 +273,7 @@ async def handle_compact_command(
 
         card = await cfg.exec_cfg.transport.send(
             channel_id=chat_id,
-            message=_card(f"queued — compacting {resume_token.engine} session…"),
+            message=_card(f"compacting {resume_token.engine} session…"),
             options=SendOptions(
                 reply_to=MessageRef(channel_id=chat_id, message_id=user_msg_id),
                 notify=True,
