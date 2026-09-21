@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 
+import anyio
 import pytest
 
 from untether.model import CompletedEvent, ResumeToken, StartedEvent, UntetherEvent
@@ -95,6 +97,42 @@ async def test_shared_retry_keeps_nontransient_grok_failure_to_one_attempt() -> 
     assert runner.attempts == 1
     assert isinstance(events[-1], CompletedEvent)
     assert events[-1].error == "authentication failed"
+
+
+class _SuccessfulScopedGrok(GrokRunner):
+    consume_task: asyncio.Task[object] | None = None
+    cleanup_task: asyncio.Task[object] | None = None
+    cleanup_ran = False
+
+    async def _run_single_attempt_events(
+        self, prompt: str, resume: ResumeToken | None
+    ) -> AsyncIterator[UntetherEvent]:
+        _ = prompt, resume
+        self.consume_task = asyncio.current_task()
+        try:
+            async with anyio.create_task_group():
+                yield CompletedEvent(
+                    engine="grok",
+                    ok=True,
+                    answer="done",
+                    resume=None,
+                )
+        finally:
+            self.cleanup_task = asyncio.current_task()
+            self.cleanup_ran = True
+
+
+@pytest.mark.anyio
+async def test_shared_retry_closes_successful_attempt_in_consuming_task() -> None:
+    runner = _SuccessfulScopedGrok(extra_args=[])
+
+    events = [event async for event in runner.run_impl("hello", None)]
+
+    assert len(events) == 1
+    assert isinstance(events[0], CompletedEvent)
+    assert events[0].ok is True
+    assert runner.cleanup_ran
+    assert runner.cleanup_task is runner.consume_task
 
 
 def _decode(payload: bytes) -> grok_schema.GrokEvent:

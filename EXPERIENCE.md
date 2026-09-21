@@ -1,5 +1,9 @@
 # ACP Phase E Experience
 
+## Shared runner cancel-scope cleanup
+
+A successful `CompletedEvent` is emitted while the per-attempt async generator may still own subprocess and AnyIO task-group cancel scopes. Returning or breaking from the retry wrapper at that yield abandons the nested generator, so Python may finalize it in a different task and raise `Attempted to exit a cancel scope that isn't the current task's current cancel scope` after the final Telegram answer was already delivered. Explicit `aclose()` is also unsafe here because injecting `GeneratorExit` through an active AnyIO task group becomes a `BaseExceptionGroup`; the minimal safe fix is to mark the terminal event, drain the attempt generator to natural completion in the same task, ignore any post-terminal events, and only then return or sleep before retrying. The deterministic regression asserts cleanup has run before `run_impl()` returns and in the same task that consumed the generator. Investigation required explicit Windows `HOME`/`USERPROFILE`, focused pytest needed `-o addopts=''`, and two attempted cheap-model routes were unavailable (one unknown alias and one retired upstream), so the default general-purpose route completed the read-only diagnosis.
+
 ## Explicit ACP launcher support
 
 The existing `[acp.engines.<id>]` seam already modeled a fixed command plus argv, but Windows cannot execute npm-generated `.cmd` launchers directly through `asyncio`/AnyIO. The narrow fix is to retain absolute-path validation and translate only Windows `.cmd`/`.bat` entries to fixed `ComSpec /d /c <launcher> <args>` argv; native binaries and executable npm/uv/bun launchers remain direct. A live probe confirmed local `dsh --profile acp` negotiates ACP v1. Investigation was briefly interrupted because the background Explore agent disappeared before its result could be retrieved; direct targeted reads of the known ACP settings, registry, backend, tests, and docs supplied the required evidence.

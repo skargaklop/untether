@@ -1429,10 +1429,18 @@ class JsonlSubprocessRunner(BaseRunner):
             answer_emitted = False
             collected: list[UntetherEvent] = []
             terminal_error: str | None = None
+            terminal_seen = False
+            retry_delay: float | None = None
 
             async for evt in self._run_single_attempt_events(prompt, resume):
                 from .model import StartedEvent
 
+                # A CompletedEvent is terminal for the wrapper, but the attempt
+                # generator still owns subprocess/task-group cancel scopes. Drain
+                # it to natural completion in this task instead of abandoning it
+                # at the terminal yield and leaving cleanup to asyncgen finalizers.
+                if terminal_seen:
+                    continue
                 if isinstance(evt, StartedEvent):
                     started_emitted = True
                 elif isinstance(evt, ActionEvent):
@@ -1440,7 +1448,8 @@ class JsonlSubprocessRunner(BaseRunner):
                 elif isinstance(evt, CompletedEvent):
                     if evt.ok:
                         yield evt
-                        return
+                        terminal_seen = True
+                        continue
                     terminal_error = evt.error
                     if evt.answer.strip():
                         answer_emitted = True
@@ -1464,7 +1473,7 @@ class JsonlSubprocessRunner(BaseRunner):
                         if can_retry:
                             failure = classify_transient_failure(terminal_error or "")
                             assert failure is not None
-                            delay = base_delay * attempt
+                            retry_delay = base_delay * attempt
                             status = (
                                 f" (HTTP {failure.http_status})"
                                 if failure.http_status in (429, 503)
@@ -1473,12 +1482,12 @@ class JsonlSubprocessRunner(BaseRunner):
                             state = self.new_state(prompt, resume)
                             yield self.note_event(
                                 f"{engine} upstream busy{status}; "
-                                f"retrying in {_format_delay(delay)}s "
+                                f"retrying in {_format_delay(retry_delay)}s "
                                 f"(attempt {attempt + 1}/{max_attempts})",
                                 state=state,
                             )
-                            await anyio.sleep(delay)
-                            break
+                            terminal_seen = True
+                            continue
                         # Can't retry — sanitize transient failures, then
                         # flush collected events.
                         failure_cls = classify_transient_failure(terminal_error or "")
@@ -1498,17 +1507,18 @@ class JsonlSubprocessRunner(BaseRunner):
                             ]
                         for buffered in collected:
                             yield buffered
-                        return
-            else:
-                # Attempt completed without a CompletedEvent (shouldn't
-                # normally happen, but flush collected events).
-                for buffered in collected:
-                    yield buffered
-                return
-            # If we broke out of the inner loop (retry), continue to next attempt
-            if not (started_emitted or action_emitted or answer_emitted):
+                        terminal_seen = True
+
+            if retry_delay is not None:
+                await anyio.sleep(retry_delay)
                 continue
-            # Should not reach here — events already yielded
+            if terminal_seen:
+                return
+            # Attempt completed without a CompletedEvent (shouldn't normally
+            # happen, but flush collected events).
+            for buffered in collected:
+                yield buffered
+            return
 
     async def _run_single_attempt_events(
         self, prompt: str, resume: ResumeToken | None
