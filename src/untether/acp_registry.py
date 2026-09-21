@@ -249,6 +249,24 @@ def resolve_explicit_command(command: str, *, base_dir: Path) -> str:
     return str(resolved)
 
 
+def resolve_explicit_argv(
+    command: str,
+    args: list[str],
+    *,
+    platform: str = sys.platform,
+    environ: dict[str, str] | os._Environ[str] = os.environ,
+) -> tuple[str, list[str]]:
+    """Return portable fixed argv for a configured executable or launcher."""
+    resolved = resolve_explicit_command(command, base_dir=Path.cwd())
+    if platform == "win32" and Path(resolved).suffix.lower() in {".cmd", ".bat"}:
+        comspec = resolve_explicit_command(
+            environ.get("ComSpec", r"C:\Windows\System32\cmd.exe"),
+            base_dir=Path.cwd(),
+        )
+        return comspec, ["/d", "/c", resolved, *args]
+    return resolved, args
+
+
 def _valid_args(value: Any) -> tuple[str, ...] | None:
     if not isinstance(value, list) or not all(
         isinstance(arg, str) and arg for arg in value
@@ -383,10 +401,10 @@ def load_registry_agents(cache_path: Path, *, ttl_days: int) -> list[RegistryAge
 def explicit_backend(engine_id: str, settings: Any) -> EngineBackend:
     from .runners.acp.backend import acp_backend
 
-    command = resolve_explicit_command(settings.command, base_dir=Path.cwd())
+    command, args = resolve_explicit_argv(settings.command, list(settings.args))
     config = settings.model_dump()
     config["command"] = command
-    config["args"] = list(settings.args)
+    config["args"] = args
     return acp_backend(engine_id, config)
 
 

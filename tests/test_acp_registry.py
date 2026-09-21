@@ -19,6 +19,7 @@ from untether.acp_registry import (
     normalise_registry_id,
     parse_registry_agents,
     read_stale_cache,
+    resolve_explicit_argv,
     resolve_explicit_command,
 )
 from untether.settings import AcpEngineSettings, AcpRegistrySettings, UntetherSettings
@@ -227,6 +228,41 @@ def test_official_uvx_distribution_requires_explicit_configuration(
 def test_explicit_command_must_be_absolute() -> None:
     with pytest.raises(ValueError, match="absolute"):
         resolve_explicit_command("demo", base_dir=Path.cwd())
+
+
+def test_explicit_windows_batch_launcher_uses_cmd_argv(tmp_path: Path) -> None:
+    launcher = tmp_path / "agent.cmd"
+    launcher.write_text("@echo off\n", encoding="utf-8")
+    command = tmp_path / "cmd.exe"
+    command.write_bytes(b"")
+
+    executable, args = resolve_explicit_argv(
+        str(launcher),
+        ["--profile", "acp"],
+        platform="win32",
+        environ={"ComSpec": str(command)},
+    )
+
+    assert executable == str(command.resolve())
+    assert args == [
+        "/d",
+        "/c",
+        str(launcher.resolve()),
+        "--profile",
+        "acp",
+    ]
+
+
+def test_explicit_binary_launcher_keeps_direct_argv(tmp_path: Path) -> None:
+    launcher = tmp_path / "agent.exe"
+    launcher.write_bytes(b"")
+
+    executable, args = resolve_explicit_argv(
+        str(launcher), ["acp"], platform="win32", environ={}
+    )
+
+    assert executable == str(launcher.resolve())
+    assert args == ["acp"]
 
 
 def test_parse_registry_agents_valid_document() -> None:

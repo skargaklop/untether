@@ -440,7 +440,7 @@ not remove static or explicitly configured engines.
 | `allow_v1` | bool | `true` | Allows `protocol = "auto"` to fall back to a clean ACP v1 initialization when the first connection rejects or closes before selecting a version. |
 | `registry.enabled` | bool | `true` | Enables official-registry refresh and automatic discovery of locally installed binaries and metadata-resolved `npx` agents. Explicit engines remain available when this is `false`. |
 | `registry.cache_ttl_days` | int | `3` | Shared TTL for the registry document and installation-state caches. Must be positive. |
-| `engines.<id>.command` | string | (required) | Explicit ACP command. The production configuration requires an absolute path to an existing executable; it is never resolved through `PATH` at run time. |
+| `engines.<id>.command` | string | (required) | Absolute path to an existing ACP executable or launcher. Native binaries and package launchers (`npx`/`npm`, `uvx`/`uv`, `bunx`/`bun`) are supported; place the package/subcommand in `args`. The command is never resolved through `PATH` at run time. Windows `.cmd`/`.bat` launchers use the absolute `ComSpec` path. |
 | `engines.<id>.args` | string[] | `[]` | Arguments passed as argv entries; no shell command is constructed. |
 | `engines.<id>.protocol` | `"auto"`\|`"1"`\|`"2"` | `"auto"` | Selects ACP negotiation. v1 is stable; v2 is draft. |
 | `engines.<id>.env` | table | `{}` | Static environment overlay. Values are not logged. |

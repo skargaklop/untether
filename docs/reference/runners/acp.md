@@ -78,10 +78,20 @@ elicitation_form = true
 elicitation_url = false
 interaction_timeout_s = 600.0
 
+# Package-manager launchers work too; keep the launcher path absolute.
+[acp.engines.npm_agent]
+command = "C:/Users/me/AppData/Roaming/npm/npx.cmd"
+args = ["--yes", "@vendor/acp-agent"]
+
 Explicit engine IDs must match `[a-z0-9_]{1,32}`. `command` must be an
-absolute path to an existing executable; relative and bare commands are
-rejected. Arguments are passed as an argv list and `env` is an unlogged static
-overlay. Explicit engines may be used when registry discovery is disabled.
+absolute path to an existing executable or launcher; relative and bare commands
+are rejected. Arguments are passed as an argv list and `env` is an unlogged
+static overlay. This supports native binaries and package launchers such as
+`npx`/`npm`, `uvx`/`uv`, and `bunx`/`bun`; point `command` at the launcher's
+absolute path and put the package, subcommand, and flags in `args`. On Windows,
+`.cmd` and `.bat` launchers are invoked through the absolute `ComSpec` path
+without enabling a general shell command. Explicit engines may be used when
+registry discovery is disabled.
 
 `startup_timeout_s` bounds both `initialize` requests and negotiation;
 `request_timeout_s` bounds the v2 prompt acknowledgement. `mcp_servers` entries

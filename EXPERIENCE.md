@@ -1,5 +1,9 @@
 # ACP Phase E Experience
 
+## Explicit ACP launcher support
+
+The existing `[acp.engines.<id>]` seam already modeled a fixed command plus argv, but Windows cannot execute npm-generated `.cmd` launchers directly through `asyncio`/AnyIO. The narrow fix is to retain absolute-path validation and translate only Windows `.cmd`/`.bat` entries to fixed `ComSpec /d /c <launcher> <args>` argv; native binaries and executable npm/uv/bun launchers remain direct. A live probe confirmed local `dsh --profile acp` negotiates ACP v1. Investigation was briefly interrupted because the background Explore agent disappeared before its result could be retrieved; direct targeted reads of the known ACP settings, registry, backend, tests, and docs supplied the required evidence.
+
 ## Compact/handoff lifecycle feedback
 
 `ThreadScheduler.enqueue()` can start a claimable job before returning, so editing an operation card after enqueue may overwrite `claimed`, running, or terminal states. The confirmation callback now writes `creating handoff summary…` before enqueue and leaves all later progress, success, failure, and cancellation edits to the scheduler lifecycle. The scheduler's generic `claimed` observer must not overwrite compact/handoff operation text before the worker starts, and native compact now begins with the direct `compacting <engine> session…` status. Cross-engine wording stays neutral because the source engine creates the summary and the destination only receives it. Focused pytest needs `-o addopts=''` to avoid the repository-wide coverage gate; Windows Python commands still require explicit `HOME` and `USERPROFILE`. The first read-only subagent route was unavailable because its selected model had reached end of life; the replacement verifier completed without modifying files.
