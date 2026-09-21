@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -10,6 +11,7 @@ import anyio
 import pytest
 
 from tests.telegram_fakes import FakeTransport, make_cfg
+from untether.context import RunContext
 from untether.telegram.bridge import TelegramBridgeConfig, run_main_loop
 from untether.telegram.commands.direct_shell import (
     DirectShellError,
@@ -87,11 +89,23 @@ def test_powershell_discovery_prefers_pwsh(monkeypatch: pytest.MonkeyPatch) -> N
 def test_resolve_shell_cwd_prefers_context_then_chat_then_run_base(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    context = object()
-    runtime = SimpleNamespace(
-        resolve_run_cwd=lambda value: tmp_path / "topic" if value is context else None,
-        default_context_for_chat=lambda chat_id: "chat-context" if chat_id == 7 else None,
-    )
+    context = RunContext(project="topic")
+
+    class Runtime:
+        use_chat_context = False
+
+        def default_context_for_chat(
+            self, chat_id: int | str | None
+        ) -> RunContext | None:
+            return RunContext(project="chat") if chat_id == 7 else None
+
+        def resolve_run_cwd(self, context: RunContext | None) -> Path | None:
+            if self.use_chat_context:
+                return tmp_path / "chat" if context else None
+            return tmp_path / "topic" if context is topic_context else None
+
+    topic_context = context
+    runtime = Runtime()
     monkeypatch.setattr(
         "untether.telegram.commands.direct_shell.get_run_base_dir",
         lambda: tmp_path / "base",
@@ -99,7 +113,7 @@ def test_resolve_shell_cwd_prefers_context_then_chat_then_run_base(
 
     assert resolve_shell_cwd(runtime, context, 7) == tmp_path / "topic"
     assert resolve_shell_cwd(runtime, None, 7) == tmp_path / "base"
-    runtime.resolve_run_cwd = lambda value: tmp_path / "chat" if value else None
+    runtime.use_chat_context = True
     assert resolve_shell_cwd(runtime, None, 7) == tmp_path / "chat"
     assert resolve_shell_cwd(runtime, None, 8) == tmp_path / "base"
 
@@ -108,7 +122,7 @@ def test_resolve_shell_cwd_prefers_context_then_chat_then_run_base(
 async def test_execute_shell_foreground_success_failure_empty_and_decoding() -> None:
     success = await execute_shell(
         [
-            os.fspath(Path(os.sys.executable)),
+            os.fspath(Path(sys.executable)),
             "-c",
             "import os; os.write(1, b'out\\n'); os.write(2, b'err\\n')",
         ],
@@ -121,7 +135,7 @@ async def test_execute_shell_foreground_success_failure_empty_and_decoding() -> 
     assert not success.timed_out
 
     failure = await execute_shell(
-        [os.sys.executable, "-c", "import sys; sys.exit(7)"],
+        [sys.executable, "-c", "import sys; sys.exit(7)"],
         cwd=None,
         timeout_s=5,
         max_output_bytes=1024,
@@ -130,7 +144,7 @@ async def test_execute_shell_foreground_success_failure_empty_and_decoding() -> 
     assert failure.output == ""
 
     undecodable = await execute_shell(
-        [os.sys.executable, "-c", "import os; os.write(1, bytes([255]))"],
+        [sys.executable, "-c", "import os; os.write(1, bytes([255]))"],
         cwd=None,
         timeout_s=5,
         max_output_bytes=1024,
@@ -141,7 +155,7 @@ async def test_execute_shell_foreground_success_failure_empty_and_decoding() -> 
 @pytest.mark.anyio
 async def test_execute_shell_truncates_but_drains_and_times_out() -> None:
     truncated = await execute_shell(
-        [os.sys.executable, "-c", "print('x' * 10000)"],
+        [sys.executable, "-c", "print('x' * 10000)"],
         cwd=None,
         timeout_s=5,
         max_output_bytes=64,
@@ -150,7 +164,7 @@ async def test_execute_shell_truncates_but_drains_and_times_out() -> None:
     assert truncated.truncated
 
     timed_out = await execute_shell(
-        [os.sys.executable, "-c", "import time; time.sleep(30)"],
+        [sys.executable, "-c", "import time; time.sleep(30)"],
         cwd=None,
         timeout_s=0.05,
         max_output_bytes=64,
@@ -179,6 +193,7 @@ async def test_execute_shell_reaps_child_after_shell_exits_before_timeout(
 
         async def receive(self, _size: int) -> bytes:
             await anyio.sleep_forever()
+            raise AssertionError("unreachable")
 
     def manager(*_args, **kwargs):
         assert kwargs["reap_orphans"] is True
@@ -197,7 +212,9 @@ async def test_execute_shell_reaps_child_after_shell_exits_before_timeout(
 
 
 @pytest.mark.anyio
-async def test_execute_shell_cancellation_cleans_up(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_execute_shell_cancellation_cleans_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     cleaned = anyio.Event()
 
     class Manager:
@@ -214,9 +231,11 @@ async def test_execute_shell_cancellation_cleans_up(monkeypatch: pytest.MonkeyPa
 
         async def receive(self, _size: int) -> bytes:
             await anyio.sleep_forever()
+            raise AssertionError("unreachable")
 
         async def wait(self) -> int:
             await anyio.sleep_forever()
+            raise AssertionError("unreachable")
 
     monkeypatch.setattr(
         "untether.telegram.commands.direct_shell.manage_subprocess",
@@ -254,7 +273,8 @@ async def test_detached_execution_uses_disconnected_stdio_and_platform_flags(
     assert kwargs["creationflags"] == (
         subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
     )
-    assert "start_new_session" not in kwargs
+    assert kwargs["start_new_session"] is False
+    assert kwargs["text"] is False
 
 
 @pytest.mark.anyio
@@ -273,13 +293,19 @@ async def test_direct_shell_masks_unexpected_execution_errors(
 
     from untether.telegram.commands.direct_shell import handle_direct_shell_command
 
+    class Runtime:
+        def default_context_for_chat(
+            self, chat_id: int | str | None
+        ) -> RunContext | None:
+            return None
+
+        def resolve_run_cwd(self, context: RunContext | None) -> Path | None:
+            return None
+
     await handle_direct_shell_command(
         kind="bash",
         args_text="echo secret",
-        runtime=SimpleNamespace(
-            default_context_for_chat=lambda _chat_id: None,
-            resolve_run_cwd=lambda _context: None,
-        ),
+        runtime=Runtime(),
         context=None,
         chat_id=1,
         timeout_s=1,
@@ -318,17 +344,26 @@ async def test_direct_shell_uses_normal_authorisation_and_dispatch(
     await run_main_loop(cfg, poller)
 
     handler.assert_awaited_once()
-    assert handler.await_args.kwargs["kind"] == "bash"
-    assert handler.await_args.kwargs["args_text"] == "printf ok"
+    await_args = handler.await_args
+    assert await_args is not None
+    assert await_args.kwargs["kind"] == "bash"
+    assert await_args.kwargs["args_text"] == "printf ok"
 
 
 def test_format_shell_results_are_plain_bounded_and_explicit() -> None:
-    assert format_shell_result(ShellResult(output="", exit_code=0)) == "(no output)\nexit: 0"
+    assert (
+        format_shell_result(ShellResult(output="", exit_code=0))
+        == "(no output)\nexit: 0"
+    )
     assert format_shell_result(ShellResult(output="bad", exit_code=2)) == "bad\nexit: 2"
-    assert format_shell_result(
-        ShellResult(output="x", exit_code=0, truncated=True)
-    ) == "x\n[output truncated]\nexit: 0"
-    assert format_shell_result(
-        ShellResult(output="", exit_code=-9, timed_out=True)
-    ) == "(no output)\n[timeout]\nexit: -9"
-    assert format_shell_result(ShellResult(pid=42)) == "started detached process (PID 42)"
+    assert (
+        format_shell_result(ShellResult(output="x", exit_code=0, truncated=True))
+        == "x\n[output truncated]\nexit: 0"
+    )
+    assert (
+        format_shell_result(ShellResult(output="", exit_code=-9, timed_out=True))
+        == "(no output)\n[timeout]\nexit: -9"
+    )
+    assert (
+        format_shell_result(ShellResult(pid=42)) == "started detached process (PID 42)"
+    )

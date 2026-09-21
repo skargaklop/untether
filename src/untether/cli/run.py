@@ -330,7 +330,12 @@ def _run_auto_router(
     if transport_id == "telegram":
         logger.info("restart.relaunching")
         subprocess.Popen(
-            [sys.executable, "-c", "from untether.cli import main; main()", *sys.argv[1:]],
+            [
+                sys.executable,
+                "-c",
+                "from untether.cli import main; main()",
+                *sys.argv[1:],
+            ],
             close_fds=True,
             creationflags=(
                 subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS

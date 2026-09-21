@@ -84,7 +84,9 @@ def test_only_codex_app_server_advertises_native_fork() -> None:
 
 
 @pytest.mark.anyio
-async def test_fork_requires_runner_capability_and_does_not_write(tmp_path: Path) -> None:
+async def test_fork_requires_runner_capability_and_does_not_write(
+    tmp_path: Path,
+) -> None:
     store = ChatSessionStore(tmp_path / "chat.json")
     await store.set_session_resume(7, None, ResumeToken("mock", "source"))
 
@@ -98,11 +100,15 @@ async def test_fork_requires_runner_capability_and_does_not_write(tmp_path: Path
 
     assert not result.ok
     assert "not supported" in result.message.lower()
-    assert await store.get_session_resume(7, None, "mock") == ResumeToken("mock", "source")
+    assert await store.get_session_resume(7, None, "mock") == ResumeToken(
+        "mock", "source"
+    )
 
 
 @pytest.mark.anyio
-async def test_fork_persists_only_after_runner_returns_new_session(tmp_path: Path) -> None:
+async def test_fork_persists_only_after_runner_returns_new_session(
+    tmp_path: Path,
+) -> None:
     class ForkRunner(ScriptRunner):
         async def fork(self, session: ResumeToken) -> ResumeToken:
             assert session == ResumeToken("mock", "source")
@@ -120,7 +126,9 @@ async def test_fork_persists_only_after_runner_returns_new_session(tmp_path: Pat
 
     assert result.ok
     assert result.token == ResumeToken("mock", "forked")
-    assert await store.get_session_resume(7, None, "mock") == ResumeToken("mock", "forked")
+    assert await store.get_session_resume(7, None, "mock") == ResumeToken(
+        "mock", "forked"
+    )
 
 
 @pytest.mark.anyio
@@ -140,7 +148,9 @@ async def test_fork_supports_topic_store_and_explicit_session(tmp_path: Path) ->
     )
 
     assert result.ok
-    assert await store.get_session_resume(7, 3, "mock") == ResumeToken("mock", "chosen-fork")
+    assert await store.get_session_resume(7, 3, "mock") == ResumeToken(
+        "mock", "chosen-fork"
+    )
 
 
 @pytest.mark.anyio

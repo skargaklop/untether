@@ -87,7 +87,9 @@ def _read_windows_resources() -> tuple[int, int, int] | None:
             return None
         total_delta = kernel_after.value - kernel.value + user_after.value - user.value
         idle_delta = idle_after.value - idle.value
-        cpu = round(100 * (total_delta - idle_delta) / total_delta) if total_delta else 0
+        cpu = (
+            round(100 * (total_delta - idle_delta) / total_delta) if total_delta else 0
+        )
 
         memory = MemoryStatus()
         memory.length = ctypes.sizeof(memory)

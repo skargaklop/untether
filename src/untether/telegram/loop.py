@@ -568,7 +568,7 @@ def _dispatch_builtin_command(
             if cfg.topics.enabled and topic_store is not None
             else None
         )
-        if topic_key is not None:
+        if topic_key is not None and topic_store is not None:
             handler = partial(
                 handle_ctx_command,
                 cfg,
@@ -3317,7 +3317,9 @@ async def run_main_loop(
                             )
                             result_message = result.message
                     except Exception:  # Command failures must become user replies.
-                        logger.exception("session.fork.dispatch_failed", engine=fork_engine)
+                        logger.exception(
+                            "session.fork.dispatch_failed", engine=fork_engine
+                        )
                         result_message = f"could not fork {fork_engine} session"
                     await reply(text=result_message)
                     return

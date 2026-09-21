@@ -5,18 +5,26 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Protocol
 
 import anyio
 from anyio import EndOfStream
 
 from ...config import ConfigError
 from ...context import RunContext
-from ...transport_runtime import TransportRuntime
 from ...utils.paths import get_run_base_dir
 from ...utils.subprocess import manage_subprocess
 
 type ShellKind = Literal["bash", "powershell"]
+
+
+class ShellRuntime(Protocol):
+    def default_context_for_chat(
+        self, chat_id: int | str | None
+    ) -> RunContext | None: ...
+
+    def resolve_run_cwd(self, context: RunContext | None) -> Path | None: ...
+
 
 _TELEGRAM_TEXT_LIMIT = 4096
 _RESULT_RESERVE = 64
@@ -77,7 +85,7 @@ def build_shell_argv(kind: ShellKind, executable: str, command: str) -> list[str
 
 
 def resolve_shell_cwd(
-    runtime: TransportRuntime,
+    runtime: ShellRuntime,
     context: RunContext | None,
     chat_id: int,
 ) -> Path | None:
@@ -106,20 +114,25 @@ async def _read_bounded(
 def _detached_process(
     argv: list[str], cwd: Path | None, *, platform: str
 ) -> subprocess.Popen[bytes]:
-    kwargs: dict[str, object] = {
-        "cwd": cwd,
-        "stdin": subprocess.DEVNULL,
-        "stdout": subprocess.DEVNULL,
-        "stderr": subprocess.DEVNULL,
-        "close_fds": True,
-    }
+    creationflags = 0
+    start_new_session = False
     if platform == "win32":
-        kwargs["creationflags"] = (
+        creationflags = (
             subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
         )
     else:
-        kwargs["start_new_session"] = True
-    return subprocess.Popen(argv, **kwargs)
+        start_new_session = True
+    return subprocess.Popen(
+        argv,
+        cwd=cwd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=True,
+        creationflags=creationflags,
+        start_new_session=start_new_session,
+        text=False,
+    )
 
 
 async def execute_shell(
@@ -191,7 +204,7 @@ async def handle_direct_shell_command(
     *,
     kind: ShellKind,
     args_text: str,
-    runtime: TransportRuntime,
+    runtime: ShellRuntime,
     context: RunContext | None,
     chat_id: int,
     timeout_s: float,
