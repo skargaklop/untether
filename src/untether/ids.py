@@ -8,6 +8,7 @@ _ID_RE = re.compile(ID_PATTERN)
 RESERVED_CLI_COMMANDS = frozenset({"doctor", "init", "plugins"})
 RESERVED_CHAT_COMMANDS = frozenset(
     {
+        "bash",
         "cancel",
         "continue",
         "fork",
@@ -20,6 +21,7 @@ RESERVED_CHAT_COMMANDS = frozenset(
         "topic",
         "ctx",
         "plan",
+        "powershell",
         "goal",
         "subagent",
     }

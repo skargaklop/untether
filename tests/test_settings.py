@@ -14,6 +14,39 @@ from untether.settings import (
 )
 
 
+def test_telegram_direct_shell_settings_defaults_and_bounds(tmp_path: Path) -> None:
+    settings = UntetherSettings.model_validate(
+        {
+            "transports": {
+                "telegram": {
+                    "bot_token": "token",
+                    "chat_id": 123,
+                    "allow_any_user": True,
+                }
+            }
+        }
+    )
+    telegram = settings.transports.telegram
+    assert telegram.shell_timeout_s == 30.0
+    assert telegram.shell_max_output_bytes == 64 * 1024
+
+    base = {
+        "bot_token": "token",
+        "chat_id": 123,
+        "allow_any_user": True,
+    }
+    for field, value in [
+        ("shell_timeout_s", 0),
+        ("shell_timeout_s", 301),
+        ("shell_max_output_bytes", 1023),
+        ("shell_max_output_bytes", 1024 * 1024 + 1),
+    ]:
+        with pytest.raises(ValueError, match=field):
+            UntetherSettings.model_validate(
+                {"transports": {"telegram": {**base, field: value}}}
+            )
+
+
 def test_logging_settings_load_from_toml(tmp_path: Path) -> None:
     config_path = tmp_path / "untether.toml"
     config_path.write_text(

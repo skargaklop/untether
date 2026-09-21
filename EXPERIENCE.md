@@ -1,5 +1,20 @@
 # ACP Phase E Experience
 
+## Telegram direct shell command experience
+
+### Difficulties
+
+The foreground process must keep draining its combined pipe after reaching the configured retention limit or a verbose child can deadlock. Timeout and caller cancellation also need to leave the existing process-tree manager in control of cleanup. Focused pytest initially failed because the system Python had neither the editable package metadata nor repository import path.
+
+### Solutions
+
+A single direct-shell module now owns parsing, fixed argv construction, discovery, cwd selection, bounded draining, detached flags, execution, and plain-text formatting. Focused RED/GREEN runs use the repository's existing `uv run` environment. The ordinary Telegram route remains the authorization boundary, and the dispatcher starts the handler only after that check. Final adversarial checks caught that AnyIO's public `open_process` API does not accept `close_fds` and that disabling orphan reaping could leave a descendant alive after its shell exited; detached launching now uses `subprocess.Popen`, foreground teardown keeps process-group orphan reaping enabled, and unexpected launch failures become a generic safe reply.
+
+### Inconveniences
+
+`USERPROFILE` and `HOME` must be set explicitly for every Python command. Existing untracked `.local/` and `.trash/` directories were preserved. No live PowerShell executable is available on non-Windows CI, so platform behavior is covered through discovery and process-launch seams rather than an actual PowerShell invocation.
+
+
 ## Inactivity/stall policy change experience
 
 ### Difficulties

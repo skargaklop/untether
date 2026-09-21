@@ -23,6 +23,7 @@ type PromptBatchSeparator = Literal["newline", "blank_line"]
 # (trigger, compact, handoff) for forward compatibility.
 CONTROL_COMMANDS = frozenset(
     {
+        "bash",
         "cancel",
         "new",
         "continue",
@@ -46,6 +47,7 @@ CONTROL_COMMANDS = frozenset(
         "export",
         "browse",
         "planmode",
+        "powershell",
         "auth",
         "at",
     }

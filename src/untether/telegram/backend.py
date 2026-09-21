@@ -308,6 +308,8 @@ class TelegramBackend(TransportBackend):
             allowed_user_ids=tuple(settings.allowed_user_ids),
             allow_any_user=settings.allow_any_user,
             unknown_model_fallback=settings.unknown_model_fallback,
+            shell_timeout_s=settings.shell_timeout_s,
+            shell_max_output_bytes=int(settings.shell_max_output_bytes),
             topics=settings.topics,
             files=settings.files,
             trigger_config=trigger_config,

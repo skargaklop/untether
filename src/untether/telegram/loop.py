@@ -524,6 +524,24 @@ def _dispatch_builtin_command(
     scope_chat_ids = ctx.scope_chat_ids
     reply = ctx.reply
     task_group = ctx.task_group
+    if command_id in {"bash", "powershell"}:
+        from .commands.direct_shell import handle_direct_shell_command
+
+        task_group.start_soon(
+            partial(
+                handle_direct_shell_command,
+                kind=command_id,
+                args_text=args_text,
+                runtime=cfg.runtime,
+                context=ambient_context,
+                chat_id=msg.chat_id,
+                timeout_s=cfg.shell_timeout_s,
+                max_output_bytes=cfg.shell_max_output_bytes,
+                reply=reply,
+            )
+        )
+        return True
+
     if command_id == "file":
         if not cfg.files.enabled:
             handler = partial(

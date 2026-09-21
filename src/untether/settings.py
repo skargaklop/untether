@@ -210,6 +210,12 @@ class TelegramTransportSettings(BaseModel):
     # its configured/native default, with a visible fallback notice naming the
     # rejected value. TOML: [transports.telegram] unknown_model_fallback.
     unknown_model_fallback: bool = False
+    shell_timeout_s: float = Field(default=30.0, ge=1.0, le=300.0)
+    shell_max_output_bytes: StrictInt = Field(
+        default=64 * 1024,
+        ge=1024,
+        le=1024 * 1024,
+    )
     topics: TelegramTopicsSettings = Field(default_factory=TelegramTopicsSettings)
     files: TelegramFilesSettings = Field(default_factory=TelegramFilesSettings)
 

@@ -222,6 +222,8 @@ class TelegramBridgeConfig:
     # reject after catalog-confirmed miss; True = fall back to engine default
     # with a visible notice. Hot-reloadable via update_from.
     unknown_model_fallback: bool = False
+    shell_timeout_s: float = 30.0
+    shell_max_output_bytes: int = 64 * 1024
     files: TelegramFilesSettings = field(default_factory=TelegramFilesSettings)
     chat_ids: tuple[int, ...] | None = None
     topics: TelegramTopicsSettings = field(default_factory=TelegramTopicsSettings)
@@ -269,6 +271,8 @@ class TelegramBridgeConfig:
         self.prompt_batch_max_messages = int(settings.prompt_batch_max_messages)
         self.prompt_batch_max_chars = int(settings.prompt_batch_max_chars)
         self.unknown_model_fallback = bool(settings.unknown_model_fallback)
+        self.shell_timeout_s = float(settings.shell_timeout_s)
+        self.shell_max_output_bytes = int(settings.shell_max_output_bytes)
         self.prompt_batch_separator = settings.prompt_batch_separator
         self.media_group_debounce_s = float(settings.media_group_debounce_s)
         self.allowed_user_ids = tuple(settings.allowed_user_ids)

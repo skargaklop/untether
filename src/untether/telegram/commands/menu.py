@@ -87,6 +87,8 @@ def build_bot_commands(
         ("plan", "plan mode preference"),
         ("goal", "goal mode help"),
         ("subagent", "subagent preference"),
+        ("bash", "run a Bash command"),
+        ("powershell", "run a PowerShell command"),
     ]:
         if cmd in seen:
             continue

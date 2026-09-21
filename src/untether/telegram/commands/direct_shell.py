@@ -1,0 +1,217 @@
+from __future__ import annotations
+
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal
+
+import anyio
+from anyio import EndOfStream
+
+from ...config import ConfigError
+from ...context import RunContext
+from ...transport_runtime import TransportRuntime
+from ...utils.paths import get_run_base_dir
+from ...utils.subprocess import manage_subprocess
+
+type ShellKind = Literal["bash", "powershell"]
+
+_TELEGRAM_TEXT_LIMIT = 4096
+_RESULT_RESERVE = 64
+
+
+class DirectShellError(ValueError):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ShellResult:
+    output: str = ""
+    exit_code: int | None = None
+    timed_out: bool = False
+    truncated: bool = False
+    pid: int | None = None
+
+
+def parse_shell_command(args_text: str) -> tuple[bool, str]:
+    command = args_text.strip()
+    if not command:
+        raise DirectShellError("command is required")
+    head, separator, tail = command.partition(" ")
+    if head == "nohup":
+        command = tail.strip() if separator else ""
+        if not command:
+            raise DirectShellError("command is required after nohup")
+        return True, command
+    return False, command
+
+
+def discover_shell(kind: ShellKind, *, platform: str | None = None) -> str:
+    platform = sys.platform if platform is None else platform
+    if kind == "powershell":
+        if platform != "win32":
+            raise DirectShellError("/powershell is Windows only")
+        executable = shutil.which("pwsh") or shutil.which("powershell")
+        if executable is None:
+            raise DirectShellError("PowerShell was not found on PATH")
+        return executable
+    executable = shutil.which("bash")
+    if executable is None:
+        raise DirectShellError("bash was not found on PATH")
+    return executable
+
+
+def build_shell_argv(kind: ShellKind, executable: str, command: str) -> list[str]:
+    if kind == "bash":
+        return [executable, "-lc", command]
+    return [
+        executable,
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        command,
+    ]
+
+
+def resolve_shell_cwd(
+    runtime: TransportRuntime,
+    context: RunContext | None,
+    chat_id: int,
+) -> Path | None:
+    effective_context = context or runtime.default_context_for_chat(chat_id)
+    return runtime.resolve_run_cwd(effective_context) or get_run_base_dir()
+
+
+async def _read_bounded(
+    stream,
+    max_output_bytes: int,
+    output: bytearray,
+    truncated: list[bool],
+) -> None:
+    while True:
+        try:
+            chunk = await stream.receive(64 * 1024)
+        except EndOfStream:
+            return
+        remaining = max_output_bytes - len(output)
+        if remaining > 0:
+            output.extend(chunk[:remaining])
+        if len(chunk) > remaining:
+            truncated[0] = True
+
+
+def _detached_process(
+    argv: list[str], cwd: Path | None, *, platform: str
+) -> subprocess.Popen[bytes]:
+    kwargs: dict[str, object] = {
+        "cwd": cwd,
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "close_fds": True,
+    }
+    if platform == "win32":
+        kwargs["creationflags"] = (
+            subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+        )
+    else:
+        kwargs["start_new_session"] = True
+    return subprocess.Popen(argv, **kwargs)
+
+
+async def execute_shell(
+    argv: list[str],
+    *,
+    cwd: Path | None,
+    timeout_s: float,
+    max_output_bytes: int,
+    detached: bool = False,
+    platform: str | None = None,
+) -> ShellResult:
+    platform = sys.platform if platform is None else platform
+    if detached:
+        proc = _detached_process(argv, cwd, platform=platform)
+        return ShellResult(pid=proc.pid)
+
+    output = bytearray()
+    truncated = [False]
+    timed_out = False
+    exit_code: int | None = None
+    async with manage_subprocess(
+        argv,
+        cwd=cwd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        reap_orphans=True,
+    ) as proc:
+        assert proc.stdout is not None
+        with anyio.move_on_after(timeout_s) as timeout_scope:
+            await _read_bounded(
+                proc.stdout,
+                max_output_bytes,
+                output,
+                truncated,
+            )
+            exit_code = await proc.wait()
+        timed_out = timeout_scope.cancel_called
+    if timed_out:
+        exit_code = proc.returncode
+    return ShellResult(
+        output=bytes(output).decode("utf-8", errors="replace"),
+        exit_code=exit_code,
+        timed_out=timed_out,
+        truncated=truncated[0],
+    )
+
+
+def format_shell_result(result: ShellResult) -> str:
+    if result.pid is not None:
+        return f"started detached process (PID {result.pid})"
+    output = result.output or "(no output)"
+    suffix: list[str] = []
+    if result.truncated:
+        suffix.append("[output truncated]")
+    if result.timed_out:
+        suffix.append("[timeout]")
+    suffix.append(f"exit: {result.exit_code}")
+    ending = "\n" + "\n".join(suffix)
+    max_output_chars = _TELEGRAM_TEXT_LIMIT - max(_RESULT_RESERVE, len(ending))
+    if len(output) > max_output_chars:
+        output = output[:max_output_chars]
+        if not result.truncated:
+            ending = "\n[output truncated]" + ending
+    return output + ending
+
+
+async def handle_direct_shell_command(
+    *,
+    kind: ShellKind,
+    args_text: str,
+    runtime: TransportRuntime,
+    context: RunContext | None,
+    chat_id: int,
+    timeout_s: float,
+    max_output_bytes: int,
+    reply,
+) -> None:
+    try:
+        detached, command = parse_shell_command(args_text)
+        executable = discover_shell(kind)
+        argv = build_shell_argv(kind, executable, command)
+        cwd = resolve_shell_cwd(runtime, context, chat_id)
+        result = await execute_shell(
+            argv,
+            cwd=cwd,
+            timeout_s=timeout_s,
+            max_output_bytes=max_output_bytes,
+            detached=detached,
+        )
+        await reply(text=format_shell_result(result))
+    except (ConfigError, DirectShellError, OSError) as exc:
+        await reply(text=f"{kind}: {exc}")
+    except Exception:  # noqa: BLE001 - command failures must not stop the bot loop
+        await reply(text=f"{kind}: execution failed")

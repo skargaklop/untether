@@ -5,6 +5,7 @@ import pytest
 from tests.plugin_fixtures import FakeEntryPoint, install_entrypoints
 from untether import commands, plugins
 from untether.config import ConfigError
+from untether.ids import RESERVED_CHAT_COMMANDS, RESERVED_COMMAND_IDS
 
 
 class DummyCommand:
@@ -52,6 +53,11 @@ def test_command_registry_optional_missing(command_entrypoints) -> None:
 def test_command_registry_rejects_reserved_id() -> None:
     with pytest.raises(ConfigError, match="reserved"):
         commands.get_command("cancel")
+
+
+def test_direct_shell_commands_are_reserved() -> None:
+    assert {"bash", "powershell"} <= RESERVED_CHAT_COMMANDS
+    assert {"bash", "powershell"} <= RESERVED_COMMAND_IDS
 
 
 @pytest.mark.parametrize(

@@ -45,7 +45,7 @@ restart.
 
 | Section | Restart-required fields | Hot-reload |
 |---|---|---|
-| `transports.telegram` | `bot_token`, `chat_id`, `session_mode`, `topics`, `message_overflow` | everything else (`voice_*`, `show_resume_line`, `forward_coalesce_s`, `media_group_debounce_s`, `allowed_user_ids`, `files.*`) |
+| `transports.telegram` | `bot_token`, `chat_id`, `session_mode`, `topics`, `message_overflow` | everything else (`voice_*`, `show_resume_line`, `forward_coalesce_s`, `media_group_debounce_s`, `shell_*`, `allowed_user_ids`, `files.*`) |
 | `transports.telegram.topics` | whole section (treated as one unit) | — |
 | top-level `transport` | changing transport id | — |
 | `triggers` | `enabled` (master switch initialises the cron scheduler + webhook server at startup); `server.host`, `server.port` (socket bind at startup) | cron add/remove/edit, webhook add/remove/edit, `rate_limit`, `max_body_bytes`, `default_timezone`, per-cron `timezone`/`run_once`/`permission_mode` |
@@ -82,6 +82,8 @@ systemctl --user restart untether-dev    # dev
 | `allow_any_user` | bool | `false` | **Dev/demo escape hatch** ([#377](https://github.com/littlebearapps/untether/issues/377)). Set to `true` to keep the prior insecure-default behaviour where any Telegram user who knows the bot username can send commands. Logged at INFO on every boot (`security.allow_any_user`) so the deviation is visible in `journalctl`. Use only for hackathons, demos, or local dev. |
 | `message_overflow` | `"trim"`\|`"split"` | `"split"` | 🔄 How to handle long final responses. Restart-required. |
 | `forward_coalesce_s` | float | `1.0` | Quiet window for combining a prompt with immediately-following forwarded messages; set `0` to disable. |
+| `shell_timeout_s` | float | `30.0` | Foreground `/bash` and `/powershell` timeout in seconds (`1`–`300`). Hot-reloadable. |
+| `shell_max_output_bytes` | int | `65536` | Maximum combined stdout/stderr retained for a foreground direct shell command (`1024`–`1048576`). Hot-reloadable. |
 | `voice_transcription` | bool | `false` | Enable voice note transcription. |
 | `voice_max_bytes` | int | `10485760` | Max voice note size (bytes). |
 | `voice_transcription_providers` | string[] | `["avt", "groq", "local", "openai"]` | Ordered provider chain for voice transcription. Each provider failure advances to the next; exhaustion produces a single "voice transcription is unavailable" reply. Provider IDs: `avt` (external AVT CLI), `groq` (native Groq multipart adapter), `local` (native Whisper/Parakeet), `openai` (OpenAI SDK). Any nonempty subset in any order. Hot-reloadable. |

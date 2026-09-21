@@ -75,6 +75,8 @@ class TestUpdateFrom:
             forward_coalesce_s=3.5,
             media_group_debounce_s=2.5,
             voice_transcription_url_allowlist=["10.0.0.0/8"],
+            shell_timeout_s=45.0,
+            shell_max_output_bytes=32_000,
         )
         cfg.update_from(new_settings)
         assert cfg.allowed_user_ids == (111, 222)
@@ -93,6 +95,8 @@ class TestUpdateFrom:
         assert cfg.show_resume_line is False
         assert cfg.forward_coalesce_s == 3.5
         assert cfg.media_group_debounce_s == 2.5
+        assert cfg.shell_timeout_s == 45.0
+        assert cfg.shell_max_output_bytes == 32_000
 
     def test_update_from_voice_provider_fields(self, cfg: TelegramBridgeConfig):
         cfg.update_from(

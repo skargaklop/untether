@@ -165,6 +165,11 @@ def test_build_bot_commands_includes_cancel_and_engine() -> None:
     commands = build_bot_commands(runtime)
 
     assert {"command": "cancel", "description": "cancel run"} in commands
+    assert {"command": "bash", "description": "run a Bash command"} in commands
+    assert {
+        "command": "powershell",
+        "description": "run a PowerShell command",
+    } in commands
     assert {"command": "file", "description": "upload or fetch files"} in commands
     assert {"command": "new", "description": "start a new thread"} in commands
     assert {"command": "ctx", "description": "show or update context"} in commands
