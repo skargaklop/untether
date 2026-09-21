@@ -438,6 +438,12 @@ async def handle_compact_callback(
         compact_instructions=record.instructions,
         handoff_target=target_engine,
     )
+    if record.progress_ref is not None:
+        with contextlib.suppress(Exception):
+            await cfg.exec_cfg.transport.edit(
+                ref=record.progress_ref,
+                message=_card("creating handoff summary…"),
+            )
     try:
         await scheduler.enqueue(job)
     except Exception as exc:  # noqa: BLE001
@@ -450,10 +456,3 @@ async def handle_compact_callback(
                     ),
                 )
         return
-
-    if record.progress_ref is not None:
-        with contextlib.suppress(Exception):
-            await cfg.exec_cfg.transport.edit(
-                ref=record.progress_ref,
-                message=_card(f"queued — handoff to {target_engine}…"),
-            )

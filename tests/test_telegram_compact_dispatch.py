@@ -249,6 +249,41 @@ class _Scheduler:
 
 
 @pytest.mark.anyio
+async def test_confirm_shows_progress_before_handoff_starts() -> None:
+    from tests.telegram_fakes import FakeTransport, make_cfg
+    from untether.telegram.commands.compact import handle_compact_callback
+    from untether.telegram.types import TelegramCallbackQuery
+
+    transport = FakeTransport()
+    cfg = make_cfg(transport)
+    record = _record()
+    record.progress_ref = MessageRef(channel_id=10, message_id=50)
+    registry = {record.token: record}
+
+    class _AssertingScheduler:
+        status_before_enqueue: str | None = None
+
+        async def enqueue(self, job: object) -> None:
+            if transport.edit_calls:
+                self.status_before_enqueue = transport.edit_calls[-1]["message"].text
+
+    update = TelegramCallbackQuery(
+        transport="telegram",
+        chat_id=10,
+        message_id=50,
+        callback_query_id="query",
+        data="compact:token:confirm",
+        sender_id=30,
+        raw={"message": {"message_thread_id": 20}},
+    )
+
+    scheduler = _AssertingScheduler()
+    await handle_compact_callback(cfg, update, registry, scheduler, object())
+
+    assert scheduler.status_before_enqueue == "creating handoff summary…"
+
+
+@pytest.mark.anyio
 async def test_confirm_queues_once_and_clears_card_keyboard() -> None:
     from tests.telegram_fakes import FakeTransport, make_cfg
     from untether.telegram.commands.compact import handle_compact_callback
@@ -273,7 +308,7 @@ async def test_confirm_queues_once_and_clears_card_keyboard() -> None:
     await handle_compact_callback(cfg, update, registry, scheduler, object())
 
     assert len(scheduler.jobs) == 1
-    assert transport.edit_calls[-1]["message"].text.startswith("queued")
+    assert transport.edit_calls[-1]["message"].text == "creating handoff summary…"
     assert transport.edit_calls[-1]["message"].extra["reply_markup"] == {
         "inline_keyboard": []
     }

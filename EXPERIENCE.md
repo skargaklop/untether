@@ -1,5 +1,9 @@
 # ACP Phase E Experience
 
+## Compact/handoff lifecycle feedback
+
+`ThreadScheduler.enqueue()` can start a claimable job before returning, so editing an operation card after enqueue may overwrite `claimed`, running, or terminal states. The confirmation callback now writes `creating handoff summary…` before enqueue and leaves all later progress, success, failure, and cancellation edits to the scheduler lifecycle. Cross-engine wording stays neutral because the source engine creates the summary and the destination only receives it. Focused pytest needs `-o addopts=''` to avoid the repository-wide coverage gate; Windows Python commands still require explicit `HOME` and `USERPROFILE`. The first read-only subagent route was unavailable because its selected model had reached end of life; the replacement verifier completed without modifying files.
+
 ## Untether Pi compact/handoff investigation
 
 The existing Pi extractor tests covered a bare marker but not the actual Telegram-rendered footer with its leading `↩️` prefix. `AutoRouter.resolve_resume()` already normalized that prefix, but `/compact` and `/handoff` bypassed the router and called runner extractors directly. The fix reuses the router normalization through `TransportRuntime.resolve_resume_from_reply()`, and the compact regression now uses a realistic rendered footer. The failure reproduced entirely in memory; no session files or local state inspection was required.
