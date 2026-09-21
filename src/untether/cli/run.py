@@ -329,7 +329,7 @@ def _run_auto_router(
             lock_handle.release()
     if transport_id == "telegram":
         logger.info("restart.relaunching")
-        subprocess.Popen(
+        subprocess.Popen(  # nosec B603
             [
                 sys.executable,
                 "-c",

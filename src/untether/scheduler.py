@@ -77,9 +77,7 @@ class CancelQueuedResult:
 
 
 class TaskGroup(Protocol):
-    def start_soon(
-        self, func: Callable[..., Awaitable[object]], *args: Any
-    ) -> None: ...
+    def start_soon(self, func: Callable[..., Any], *args: Any) -> object: ...
 
 
 async def _noop_claimed(_job: ThreadJob) -> None:

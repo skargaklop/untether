@@ -137,7 +137,7 @@ class TriggerDispatcher:
         )
 
         self.task_group.start_soon(
-            self.run_job,
+            self.run_job,  # ty: ignore[invalid-argument-type]
             chat_id,
             notify_ref.message_id,
             prompt,

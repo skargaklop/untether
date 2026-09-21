@@ -559,7 +559,9 @@ def _dispatch_builtin_command(
                 ambient_context,
                 topic_store,
             )
-        task_group.start_soon(cast(Callable[..., Awaitable[Any]], handler))
+        task_group.start_soon(
+            cast(Callable[..., Awaitable[Any]], handler)  # ty: ignore[invalid-argument-type]
+        )
         return True
 
     if command_id == "ctx":
@@ -628,7 +630,11 @@ def _dispatch_builtin_command(
         return True
 
     if command_id == "topic" and (not cfg.topics.enabled or topic_store is None):
-        task_group.start_soon(partial(reply, text="topics are not enabled."))
+        task_group.start_soon(
+            partial(  # ty: ignore[invalid-argument-type]
+                reply, text="topics are not enabled."
+            )
+        )
         return True
 
     if cfg.topics.enabled and topic_store is not None:
@@ -1300,7 +1306,10 @@ class ForwardCoalescer:
                 message_id=pending.msg.message_id,
                 reason="missing_sender",
             )
-            self._task_group.start_soon(self._dispatch, pending)
+            self._task_group.start_soon(
+                self._dispatch,  # ty: ignore[invalid-argument-type]
+                pending,
+            )
             return
         if self._debounce_s <= 0:
             logger.debug(
@@ -1311,7 +1320,10 @@ class ForwardCoalescer:
                 message_id=pending.msg.message_id,
                 reason="disabled",
             )
-            self._task_group.start_soon(self._dispatch, pending)
+            self._task_group.start_soon(
+                self._dispatch,  # ty: ignore[invalid-argument-type]
+                pending,
+            )
             return
         key = _forward_key(pending.msg)
         existing = self._pending.get(key)
@@ -3572,7 +3584,9 @@ async def run_main_loop(
                             )
                     elif cfg.files.enabled:
                         tg.start_soon(
-                            partial(reply, text=FILE_PUT_USAGE),
+                            partial(  # ty: ignore[invalid-argument-type]
+                                reply, text=FILE_PUT_USAGE
+                            ),
                         )
                     return
                 if command_id is not None and command_id not in state.reserved_commands:

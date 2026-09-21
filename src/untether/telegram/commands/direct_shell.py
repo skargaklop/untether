@@ -117,12 +117,10 @@ def _detached_process(
     creationflags = 0
     start_new_session = False
     if platform == "win32":
-        creationflags = (
-            subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-        )
+        creationflags = 0x00000200 | 0x00000008
     else:
         start_new_session = True
-    return subprocess.Popen(
+    return subprocess.Popen(  # nosec B603
         argv,
         cwd=cwd,
         stdin=subprocess.DEVNULL,

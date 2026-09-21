@@ -270,9 +270,7 @@ async def test_detached_execution_uses_disconnected_stdio_and_platform_flags(
     assert kwargs["stdout"] is subprocess.DEVNULL
     assert kwargs["stderr"] is subprocess.DEVNULL
     assert kwargs["close_fds"] is True
-    assert kwargs["creationflags"] == (
-        subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-    )
+    assert kwargs["creationflags"] == 0x00000200 | 0x00000008
     assert kwargs["start_new_session"] is False
     assert kwargs["text"] is False
 
