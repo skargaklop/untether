@@ -9,6 +9,13 @@ from ...runner import ForkableRunner, Runner
 
 logger = get_logger(__name__)
 
+FORK_HELP = """Fork a session into a new active session.
+
+Reply `/fork` to an agent response, or use:
+`/fork <engine> <session>`
+
+After a successful fork, send your next message normally; Untether continues the new session."""
+
 if TYPE_CHECKING:
     from ..chat_sessions import ChatSessionStore
     from ..topic_state import TopicStateStore
@@ -53,4 +60,13 @@ async def fork_session(
         await topic_store.set_session_resume(*topic_key, destination)
     if chat_store is not None and chat_key is not None:
         await chat_store.set_session_resume(*chat_key, destination)
-    return ForkResult(True, f"forked {engine} session", destination)
+    resume_line = runner.format_resume(destination)
+    return ForkResult(
+        True,
+        (
+            f"forked {engine} session\n\n"
+            f"session: {resume_line}\n\n"
+            "This fork is now active. Send your next message normally."
+        ),
+        destination,
+    )

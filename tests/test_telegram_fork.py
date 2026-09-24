@@ -130,6 +130,8 @@ async def test_fork_persists_only_after_runner_returns_new_session(
 
     assert result.ok
     assert result.token == ResumeToken("mock", "forked")
+    assert "session: `mock resume forked`" in result.message
+    assert "send your next message normally" in result.message.lower()
     assert await store.get_session_resume(7, None, "mock") == ResumeToken(
         "mock", "forked"
     )
@@ -285,7 +287,7 @@ async def test_main_loop_fork_uses_topic_effective_engine_and_persists(
             transport="telegram",
             chat_id=123,
             message_id=1,
-            text="/fork",
+            text="/fork claude source",
             reply_to_message_id=None,
             reply_to_text=None,
             sender_id=123,
@@ -301,6 +303,45 @@ async def test_main_loop_fork_uses_topic_effective_engine_and_persists(
         "forked claude session" in call["message"].text.lower()
         for call in transport.send_calls
     )
+
+
+@pytest.mark.anyio
+async def test_main_loop_bare_fork_without_reply_shows_help(tmp_path: Path) -> None:
+    runner = ScriptRunner([Return(answer="unused")], engine="pi")
+    transport = FakeTransport()
+    cfg = TelegramBridgeConfig(
+        bot=FakeBot(),
+        runtime=TransportRuntime(
+            router=AutoRouter(
+                entries=[RunnerEntry(engine="pi", runner=runner)],
+                default_engine="pi",
+            ),
+            projects=ProjectsConfig(projects={}),
+            config_path=tmp_path / "untether.toml",
+        ),
+        chat_id=123,
+        startup_msg="",
+        exec_cfg=ExecBridgeConfig(
+            transport=transport, presenter=MarkdownPresenter(), final_notify=True
+        ),
+    )
+
+    async def poller(_cfg: TelegramBridgeConfig):
+        yield TelegramIncomingMessage(
+            transport="telegram",
+            chat_id=123,
+            message_id=1,
+            text="/fork",
+            reply_to_message_id=None,
+            reply_to_text=None,
+            sender_id=123,
+        )
+
+    await run_main_loop(cfg, poller)
+
+    reply = transport.send_calls[-1]["message"].text
+    assert "Reply /fork to an agent response" in reply
+    assert "/fork <engine> <session>" in reply
 
 
 @pytest.mark.anyio

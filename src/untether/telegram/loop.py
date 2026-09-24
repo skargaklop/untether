@@ -3304,7 +3304,7 @@ async def run_main_loop(
                     return
 
                 # --- Compact/handoff: intercept before normal command dispatch ---
-                from .commands.fork import fork_session
+                from .commands.fork import FORK_HELP, fork_session
                 from .commands.parse import (
                     parse_compact_invocation,
                     parse_fork_invocation,
@@ -3319,6 +3319,13 @@ async def run_main_loop(
                     await reply(text=f"error:\n{exc}")
                     return
                 if fork_invocation is not None:
+                    if (
+                        fork_invocation.engine is None
+                        and fork_invocation.session_id is None
+                        and msg.reply_to_message_id is None
+                    ):
+                        await reply(text=FORK_HELP)
+                        return
                     try:
                         reply_resume = cfg.runtime.resolve_resume_from_reply(
                             msg.reply_to_text
