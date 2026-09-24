@@ -100,6 +100,11 @@ async def resolve_engine_selection(
     except DirectiveError as exc:
         await reply(text=f"error:\n{exc}")
         return None
+    # A command sent as a reply belongs to the engine that produced the
+    # replied session.  Do not let the chat/project default (for example
+    # ``omp``) redirect `/model` away from a replied Pi session.
+    if resolved.resume_token is not None:
+        return resolved.resume_token.engine, "directive"
     selection = await resolve_engine_for_message(
         runtime=cfg.runtime,
         context=resolved.context,

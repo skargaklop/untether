@@ -1479,6 +1479,53 @@ async def test_topic_command_recreates_stale_topic(tmp_path: Path) -> None:
 
 
 @pytest.mark.anyio
+async def test_model_command_reply_uses_replied_engine(tmp_path: Path) -> None:
+    transport = FakeTransport()
+
+    class PiRunner(ScriptRunner):
+        def extract_resume(self, text: str | None) -> ResumeToken | None:
+            if text and "pi --session source" in text:
+                return ResumeToken("pi", "source")
+            return None
+
+    pi_runner = PiRunner([Return(answer="unused")], engine="pi")
+    omp_runner = ScriptRunner([Return(answer="unused")], engine="omp")
+    runtime = TransportRuntime(
+        router=AutoRouter(
+            entries=[
+                RunnerEntry(engine="pi", runner=pi_runner),
+                RunnerEntry(engine="omp", runner=omp_runner),
+            ],
+            default_engine="omp",
+        ),
+        projects=ProjectsConfig(projects={}),
+        config_path=tmp_path / "untether.toml",
+    )
+    cfg = replace(make_cfg(transport), runtime=runtime)
+    msg = TelegramIncomingMessage(
+        transport="telegram",
+        chat_id=123,
+        message_id=10,
+        text="/model",
+        reply_to_message_id=9,
+        reply_to_text="done · pi\n↩️ `pi --session source`",
+        sender_id=123,
+    )
+
+    await _handle_model_command(
+        cfg,
+        msg,
+        "",
+        ambient_context=None,
+        topic_store=None,
+        chat_prefs=None,
+    )
+
+    assert "engine: pi" in transport.send_calls[-1]["message"].text
+    assert "engine: omp" not in transport.send_calls[-1]["message"].text
+
+
+@pytest.mark.anyio
 async def test_model_command_show_reports_overrides(tmp_path: Path) -> None:
     transport = FakeTransport()
     cfg = make_cfg(transport)

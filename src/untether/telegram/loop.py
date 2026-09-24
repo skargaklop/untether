@@ -3320,8 +3320,14 @@ async def run_main_loop(
                     return
                 if fork_invocation is not None:
                     try:
+                        reply_resume = cfg.runtime.resolve_resume_from_reply(
+                            msg.reply_to_text
+                        )
                         defaults = await resolve_engine_defaults(
-                            explicit_engine=fork_invocation.engine,
+                            explicit_engine=(
+                                fork_invocation.engine
+                                or (reply_resume.engine if reply_resume else None)
+                            ),
                             context=ambient_context,
                             chat_id=chat_id,
                             topic_key=topic_key,
@@ -3330,7 +3336,7 @@ async def run_main_loop(
                         source = (
                             ResumeToken(fork_engine, fork_invocation.session_id)
                             if fork_invocation.session_id
-                            else None
+                            else reply_resume
                         )
                         resolved = cfg.runtime.resolve_runner(
                             resume_token=source, engine_override=fork_engine

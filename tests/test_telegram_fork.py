@@ -300,6 +300,64 @@ async def test_main_loop_fork_uses_topic_effective_engine_and_persists(
 
 
 @pytest.mark.anyio
+async def test_main_loop_fork_reply_uses_replied_session_engine(
+    tmp_path: Path,
+) -> None:
+    class ForkRunner(ScriptRunner):
+        def extract_resume(self, text: str | None) -> ResumeToken | None:
+            if text and "pi --session source" in text:
+                return ResumeToken("pi", "source")
+            return None
+
+        async def fork(self, session: ResumeToken) -> ResumeToken:
+            assert session == ResumeToken("pi", "source")
+            return ResumeToken("pi", "forked")
+
+    transport = FakeTransport()
+    pi_runner = ForkRunner([Return(answer="unused")], engine="pi")
+    omp_runner = ScriptRunner([Return(answer="unused")], engine="omp")
+    runtime = TransportRuntime(
+        router=AutoRouter(
+            entries=[
+                RunnerEntry(engine="pi", runner=pi_runner),
+                RunnerEntry(engine="omp", runner=omp_runner),
+            ],
+            default_engine="omp",
+        ),
+        projects=ProjectsConfig(projects={}),
+        config_path=tmp_path / "untether.toml",
+    )
+    cfg = TelegramBridgeConfig(
+        bot=FakeBot(),
+        runtime=runtime,
+        chat_id=123,
+        startup_msg="",
+        exec_cfg=ExecBridgeConfig(
+            transport=transport, presenter=MarkdownPresenter(), final_notify=True
+        ),
+    )
+
+    async def poller(_cfg: TelegramBridgeConfig):
+        yield TelegramIncomingMessage(
+            transport="telegram",
+            chat_id=123,
+            message_id=1,
+            text="/fork",
+            reply_to_message_id=99,
+            reply_to_text="done · pi\n↩️ `pi --session source`",
+            sender_id=123,
+        )
+
+    await run_main_loop(cfg, poller)
+
+    assert any(
+        "forked pi session" in call["message"].text.lower()
+        for call in transport.send_calls
+    )
+    assert omp_runner.calls == []
+
+
+@pytest.mark.anyio
 async def test_main_loop_fork_parse_error_is_a_reply_not_a_loop_crash(
     tmp_path: Path,
 ) -> None:
