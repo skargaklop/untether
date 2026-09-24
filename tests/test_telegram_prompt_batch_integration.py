@@ -254,6 +254,31 @@ async def test_different_senders_not_batched() -> None:
 
 
 @pytest.mark.anyio
+async def test_reply_and_followup_without_reply_share_a_batch() -> None:
+    """A queued task may start with a reply and continue as plain messages."""
+    runner = ScriptRunner([Return(answer="ok")], engine=CODEX_ENGINE)
+    cfg = replace(
+        make_cfg(FakeTransport(), runner),
+        allowed_user_ids=(123,),
+        prompt_batch_debounce_s=0.05,
+    )
+
+    await run_main_loop(
+        cfg,
+        _poller_factory(
+            [
+                _msg(1, "first queued chunk", reply_to=10),
+                _msg(2, "second queued chunk"),
+            ]
+        ),
+    )
+
+    assert len(runner.calls) == 1
+    assert "first queued chunk" in runner.calls[0][0]
+    assert "second queued chunk" in runner.calls[0][0]
+
+
+@pytest.mark.anyio
 async def test_different_reply_targets_do_not_share_a_batch() -> None:
     """Reply-scoped prompts retain distinct resume targets."""
     runner = ScriptRunner(

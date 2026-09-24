@@ -1194,6 +1194,27 @@ class PromptInputBatcher:
 
         part = PromptBatchPart(message_id=pending.msg.message_id, text=text)
         state = self._pending.get(key)
+        if state is None and pending.msg.reply_to_message_id is None:
+            # Telegram clients commonly split a long pasted prompt into a
+            # reply to the active progress message followed by plain text
+            # messages.  Keep the reply as the batch's routing anchor while
+            # allowing those continuation chunks to join it.  A replied
+            # message still starts its own batch, so distinct reply targets
+            # remain isolated.
+            candidates = [
+                (existing_key, existing_state)
+                for existing_key, existing_state in self._pending.items()
+                if (
+                    existing_key.chat_id == key.chat_id
+                    and existing_key.thread_id == key.thread_id
+                    and existing_key.sender_id == key.sender_id
+                    and existing_key.topic_key == key.topic_key
+                    and existing_key.chat_session_key == key.chat_session_key
+                    and existing_key.reply_id is not None
+                )
+            ]
+            if len(candidates) == 1:
+                key, state = candidates[0]
         if state is None:
             state = PromptBatchState(pending=pending, parts=[part])
             self._pending[key] = state
