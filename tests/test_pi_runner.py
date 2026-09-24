@@ -465,6 +465,64 @@ def test_stream_end_appends_stderr_excerpt_when_present() -> None:
     assert "RuntimeError: kaboom" in events[0].error
 
 
+@pytest.mark.anyio
+async def test_fork_uses_pi_native_fork_and_returns_new_session(monkeypatch) -> None:
+    runner = _pi_runner()
+    commands: list[list[str]] = []
+
+    class FakeProcess:
+        pid = 123
+        returncode = 0
+
+        def __init__(self) -> None:
+            send, self.stdout = anyio.create_memory_object_stream[bytes](4)
+            stderr_send, self.stderr = anyio.create_memory_object_stream[bytes](1)
+            self.stdin = None
+            self._send = send
+            self._stderr_send = stderr_send
+
+        async def wait(self) -> int:
+            return 0
+
+    process = FakeProcess()
+
+    class FakeManager:
+        async def __aenter__(self):
+            return process
+
+        async def __aexit__(self, *args):
+            await process.stdout.aclose()
+            await process.stderr.aclose()
+
+    def fake_manage(cmd, **kwargs):
+        commands.append(list(cmd))
+        return FakeManager()
+
+    async def feed() -> None:
+        await process._send.send(
+            b'{"type":"session","id":"forked-session","version":1}\n'
+        )
+        await process._send.aclose()
+        await process._stderr_send.aclose()
+
+    monkeypatch.setattr("untether.runners.pi.manage_subprocess", fake_manage)
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(feed)
+        result = await runner.fork(ResumeToken(ENGINE, "source-session"))
+
+    assert result == ResumeToken(ENGINE, "forked-session")
+    assert commands == [
+        [
+            "pi",
+            "--mode",
+            "json",
+            "--print",
+            "--fork",
+            "source-session",
+        ]
+    ]
+
+
 def test_build_args_resume_uses_session_path_verbatim() -> None:
     """#565 regression guard: the resume value passed to --session must be the
     session *path* Untether owns, NOT a mangled short id (the rejected fix A).

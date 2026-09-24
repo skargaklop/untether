@@ -13,7 +13,7 @@ from untether.runners.acp.runner import AcpRunner
 from untether.runners.agy import AgyRunner
 from untether.runners.amp import AmpRunner
 from untether.runners.claude import ClaudeRunner
-from untether.runners.codex import AppServerCodexRunner, CodexRunner
+from untether.runners.codex import AppServerCodexRunner
 from untether.runners.gemini import GeminiRunner
 from untether.runners.grok import GrokRunner
 from untether.runners.mock import Return, ScriptRunner
@@ -63,22 +63,26 @@ def test_parse_fork_rejects_unapproved_forms(text: str, message: str) -> None:
         parse_fork_invocation(text, engine_ids=("claude", "codex"))
 
 
-def test_only_codex_app_server_advertises_native_fork() -> None:
+def test_native_fork_capabilities() -> None:
     unsupported = [
-        CodexRunner(codex_cmd="codex", extra_args=[]),
         ClaudeRunner(claude_cmd="claude"),
-        PiRunner(pi_cmd="pi", extra_args=[], model=None, provider=None),
         GrokRunner(grok_cmd="grok", extra_args=[]),
         GeminiRunner(gemini_cmd="gemini"),
         OpenCodeRunner(opencode_cmd="opencode"),
         AmpRunner(amp_cmd="amp"),
-        OmpRunner(extra_args=[], model=None, provider=None),
         AgyRunner(agy_cmd="agy", extra_args=[]),
         AcpRunner(engine="acp-test", command="agent"),
     ]
 
     assert isinstance(
         AppServerCodexRunner(codex_cmd="codex", extra_args=[]), ForkableRunner
+    )
+    assert isinstance(
+        PiRunner(pi_cmd="pi", extra_args=[], model=None, provider=None),
+        ForkableRunner,
+    )
+    assert isinstance(
+        OmpRunner(extra_args=[], model=None, provider=None), ForkableRunner
     )
     assert all(not isinstance(runner, ForkableRunner) for runner in unsupported)
 

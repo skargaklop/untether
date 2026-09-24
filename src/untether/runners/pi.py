@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import os
 import re
+import subprocess
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -10,6 +11,7 @@ from pathlib import Path, PurePath
 from typing import Any, cast
 from uuid import uuid4
 
+import anyio
 import msgspec
 
 from ..backends import EngineBackend, EngineConfig
@@ -37,6 +39,8 @@ from ..runner import (
 )
 from ..schemas import pi as pi_schema
 from ..utils.paths import get_run_base_dir
+from ..utils.streams import iter_bytes_lines
+from ..utils.subprocess import manage_subprocess
 from .modes import apply_soft_plan_prompt, run_modes
 from .run_options import get_run_options
 from .tool_actions import tool_kind_and_title
@@ -525,6 +529,62 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         self, prompt: str, resume: ResumeToken | None
     ) -> AsyncIterator[UntetherEvent]:
         return super().run(prompt, resume)
+
+    async def fork(self, resume: ResumeToken) -> ResumeToken:
+        """Fork a Pi session without sending a model turn."""
+        if resume.engine != self.engine:
+            raise RuntimeError(f"resume token is for engine {resume.engine!r}")
+        cmd = [
+            *self.command_args(),
+            *self.extra_args,
+            "--mode",
+            "json",
+            "--print",
+            "--fork",
+            resume.value,
+        ]
+        env = self.env(state=PiStreamState(resume=resume))
+        async with manage_subprocess(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            cwd=get_run_base_dir(),
+            shutdown_timeout_s=self.shutdown_timeout_s,
+            kill_tree_on_cancel=self.kill_tree_on_cancel,
+        ) as proc:
+            if proc.stdout is None or proc.stderr is None:
+                raise RuntimeError("pi fork subprocess missing output pipes")
+            if proc.stdin is not None:
+                await proc.stdin.aclose()
+            stderr_lines: list[str] = []
+            forked_id: str | None = None
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(self._drain_fork_stderr, proc.stderr, stderr_lines)
+                async for raw_line in iter_bytes_lines(proc.stdout):
+                    try:
+                        event = pi_schema.decode_event(
+                            raw_line.decode("utf-8", errors="replace")
+                        )
+                    except (ValueError, msgspec.DecodeError):
+                        continue
+                    if isinstance(event, pi_schema.SessionHeader) and event.id:
+                        forked_id = event.id
+                        break
+                tg.cancel_scope.cancel()
+            rc = await proc.wait()
+        if forked_id:
+            return ResumeToken(self.engine, forked_id)
+        detail = "; ".join(stderr_lines[-3:])
+        suffix = f": {detail}" if detail else ""
+        raise RuntimeError(f"pi fork failed (rc={rc}){suffix}")
+
+    @staticmethod
+    async def _drain_fork_stderr(stream: Any, capture: list[str]) -> None:
+        async for raw_line in iter_bytes_lines(stream):
+            if len(capture) < 20:
+                capture.append(raw_line.decode("utf-8", errors="replace"))
 
     def extract_resume(self, text: str | None) -> ResumeToken | None:
         if not text:
