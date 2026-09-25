@@ -466,9 +466,22 @@ def test_stream_end_appends_stderr_excerpt_when_present() -> None:
 
 
 @pytest.mark.anyio
-async def test_fork_uses_pi_native_fork_and_returns_new_session(monkeypatch) -> None:
+async def test_fork_uses_pi_native_fork_and_returns_new_session(
+    monkeypatch, tmp_path: Path
+) -> None:
     runner = _pi_runner()
     commands: list[list[str]] = []
+    process_options: list[dict[str, Any]] = []
+    source_cwd = tmp_path / "source-project"
+    source_cwd.mkdir()
+    session_dir = tmp_path / "agent" / "sessions" / "--source-project--"
+    session_dir.mkdir(parents=True)
+    (session_dir / "source.jsonl").write_text(
+        '{"type":"session","id":"source-session","version":1,'
+        f'"cwd":{source_cwd.as_posix()!r}}}\n'.replace("'", '"'),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "agent"))
 
     class FakeProcess:
         pid = 123
@@ -496,6 +509,7 @@ async def test_fork_uses_pi_native_fork_and_returns_new_session(monkeypatch) -> 
 
     def fake_manage(cmd, **kwargs):
         commands.append(list(cmd))
+        process_options.append(kwargs)
         return FakeManager()
 
     async def feed() -> None:
@@ -521,6 +535,7 @@ async def test_fork_uses_pi_native_fork_and_returns_new_session(monkeypatch) -> 
             "source-session",
         ]
     ]
+    assert process_options[0]["cwd"] == source_cwd
 
 
 def test_build_args_resume_uses_session_path_verbatim() -> None:

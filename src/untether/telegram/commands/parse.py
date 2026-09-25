@@ -72,6 +72,7 @@ def parse_dot_typo(text: str, known_commands: Container[str]) -> str | None:
 class ForkInvocation:
     engine: EngineId | None = None
     session_id: str | None = None
+    destination_cwd: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,16 +195,28 @@ def parse_fork_invocation(
     command, args_text = _parse_slash_command(text)
     if command != "fork":
         return None
+    usage = "usage: /fork [engine] [session-id] [--cwd <destination-folder>]"
     if "\n" in text or "\r" in text:
-        raise ValueError("usage: /fork [engine] [session-id]")
+        raise ValueError(usage)
     args = args_text.split()
+    destination_cwd: str | None = None
+    if "--cwd" in args:
+        index = args.index("--cwd")
+        if index == len(args) - 1:
+            raise ValueError(usage)
+        destination_cwd = " ".join(args[index + 1 :])
+        args = args[:index]
     if len(args) > 2:
-        raise ValueError("usage: /fork [engine] [session-id]")
+        raise ValueError(usage)
     engine_map = {item.lower(): item for item in engine_ids}
     engine = engine_map.get(args[0].lower()) if args else None
     if args and engine is None:
         raise ValueError(f"unknown engine: {args[0]}")
-    return ForkInvocation(engine=engine, session_id=args[1] if len(args) == 2 else None)
+    return ForkInvocation(
+        engine=engine,
+        session_id=args[1] if len(args) == 2 else None,
+        destination_cwd=destination_cwd,
+    )
 
 
 def parse_compact_invocation(

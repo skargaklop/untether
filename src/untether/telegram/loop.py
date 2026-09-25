@@ -43,6 +43,7 @@ from .commands.cancel import (
 )
 from .commands.compact import CompactConfirmRecord, handle_compact_command
 from .commands.file_transfer import FILE_PUT_USAGE
+from .commands.fork import ForkRequest
 from .commands.handlers import (
     dispatch_callback,
     dispatch_command,
@@ -1014,6 +1015,7 @@ class TelegramLoopState:
     seen_message_keys: set[MessageKey]
     seen_messages_order: deque[MessageKey]
     pending_confirms: dict[str, CompactConfirmRecord]
+    pending_forks: dict[str, ForkRequest]
 
 
 if TYPE_CHECKING:
@@ -1926,6 +1928,7 @@ async def run_main_loop(
         seen_message_keys=set(),
         seen_messages_order=deque(),
         pending_confirms={},
+        pending_forks={},
     )
 
     def refresh_topics_scope() -> None:
@@ -3304,7 +3307,13 @@ async def run_main_loop(
                     return
 
                 # --- Compact/handoff: intercept before normal command dispatch ---
-                from .commands.fork import FORK_HELP, fork_session
+                from .commands.fork import (
+                    FORK_HELP,
+                    ForkRequest,
+                    fork_confirmation_markup,
+                    new_fork_token,
+                    resolve_fork_cwd,
+                )
                 from .commands.parse import (
                     parse_compact_invocation,
                     parse_fork_invocation,
@@ -3349,24 +3358,68 @@ async def run_main_loop(
                             resume_token=source, engine_override=fork_engine
                         )
                         if not resolved.available:
-                            result_message = f"fork is not supported by {fork_engine}"
-                        else:
-                            result = await fork_session(
-                                runner=resolved.runner,
-                                engine=fork_engine,
-                                explicit_session=source,
-                                chat_store=state.chat_session_store,
-                                chat_key=chat_session_key,
-                                topic_store=state.topic_store,
-                                topic_key=topic_key,
+                            await reply(text=f"fork is not supported by {fork_engine}")
+                            return
+                        if source is None:
+                            await reply(text=f"no stored {fork_engine} session to fork")
+                            return
+                        destination = resolve_fork_cwd(
+                            resolved.runner,
+                            source,
+                            fork_invocation.destination_cwd,
+                        )
+                        if destination is None:
+                            await reply(
+                                text="could not determine source session folder"
                             )
-                            result_message = result.message
+                            return
+                        token = new_fork_token()
+                        card = await cfg.exec_cfg.transport.send(
+                            channel_id=chat_id,
+                            message=RenderedMessage(
+                                text=(
+                                    f"You're going to fork {fork_engine} session "
+                                    f"`{source.value}` to `{destination}`.\n\n"
+                                    "By default this is the source session's project "
+                                    "folder. Choose another destination with:\n"
+                                    "`/fork <engine> <session> --cwd "
+                                    "<destination-folder>`\n\n"
+                                    f"Confirm forking into `{destination}`?"
+                                ),
+                                extra={
+                                    "parse_mode": "Markdown",
+                                    "reply_markup": fork_confirmation_markup(token),
+                                },
+                            ),
+                            options=SendOptions(
+                                reply_to=MessageRef(chat_id, msg.message_id),
+                                notify=True,
+                                thread_id=msg.thread_id,
+                            ),
+                        )
+                        if card is None:
+                            await reply(text="failed to send fork confirmation")
+                            return
+                        state.pending_forks[token] = ForkRequest(
+                            runner=resolved.runner,
+                            engine=fork_engine,
+                            source=source,
+                            destination_cwd=destination,
+                            chat_id=chat_id,
+                            thread_id=msg.thread_id,
+                            sender_id=msg.sender_id,
+                            progress_ref=card,
+                            chat_store=state.chat_session_store,
+                            chat_key=chat_session_key,
+                            topic_store=state.topic_store,
+                            topic_key=topic_key,
+                            expires_at=anyio.current_time() + 300,
+                        )
                     except Exception:  # Command failures must become user replies.
                         logger.exception(
                             "session.fork.dispatch_failed", engine=fork_engine
                         )
-                        result_message = f"could not fork {fork_engine} session"
-                    await reply(text=result_message)
+                        await reply(text=f"could not prepare {fork_engine} fork")
                     return
 
                 compact_invocation = parse_compact_invocation(
@@ -3890,6 +3943,15 @@ async def run_main_loop(
                             state.pending_confirms,
                             scheduler,
                             state,
+                        )
+                    elif update.data and update.data.startswith("fork:"):
+                        from .commands.fork import handle_fork_callback
+
+                        tg.start_soon(
+                            handle_fork_callback,
+                            cfg,
+                            update,
+                            state.pending_forks,
                         )
                     elif update.data and update.data.startswith("menu:"):
                         from .commands.menu_panel import menu_command_text

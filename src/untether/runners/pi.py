@@ -531,7 +531,12 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         return super().run(prompt, resume)
 
     async def fork(self, resume: ResumeToken) -> ResumeToken:
-        """Fork a Pi session without sending a model turn."""
+        return await self.fork_to(resume)
+
+    async def fork_to(
+        self, resume: ResumeToken, destination_cwd: Path | None = None
+    ) -> ResumeToken:
+        """Fork a Pi session in its source project or an explicit destination."""
         if resume.engine != self.engine:
             raise RuntimeError(f"resume token is for engine {resume.engine!r}")
         cmd = [
@@ -544,13 +549,17 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
             resume.value,
         ]
         env = self.env(state=PiStreamState(resume=resume))
+        source_cwd = self.session_cwd(resume.value)
+        cwd = destination_cwd or source_cwd
+        if cwd is None:
+            raise RuntimeError("could not determine source session folder")
         async with manage_subprocess(
             cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=env,
-            cwd=get_run_base_dir(),
+            cwd=cwd,
             shutdown_timeout_s=self.shutdown_timeout_s,
             kill_tree_on_cancel=self.kill_tree_on_cancel,
         ) as proc:
@@ -579,6 +588,35 @@ class PiRunner(ResumeTokenMixin, JsonlSubprocessRunner):
         detail = "; ".join(stderr_lines[-3:])
         suffix = f": {detail}" if detail else ""
         raise RuntimeError(f"pi fork failed (rc={rc}){suffix}")
+
+    @staticmethod
+    def session_cwd(session: str) -> Path | None:
+        """Read the source session header so Pi forks in its original project."""
+        path = Path(session).expanduser()
+        candidates = [path] if path.is_file() else []
+        if not candidates:
+            agent_dir = os.environ.get("PI_CODING_AGENT_DIR")
+            base = (
+                Path(agent_dir).expanduser()
+                if agent_dir
+                else Path.home() / ".pi" / "agent"
+            )
+            sessions = base / "sessions"
+            if sessions.is_dir():
+                candidates = list(sessions.glob("*/*.jsonl"))
+        for candidate in candidates:
+            try:
+                with candidate.open(encoding="utf-8") as handle:
+                    header = msgspec.json.decode(handle.readline())
+            except (OSError, msgspec.DecodeError):
+                continue
+            if not isinstance(header, dict):
+                continue
+            if path.is_file() or header.get("id") == session:
+                cwd = header.get("cwd")
+                if isinstance(cwd, str) and cwd:
+                    return Path(cwd)
+        return None
 
     @staticmethod
     async def _drain_fork_stderr(stream: Any, capture: list[str]) -> None:

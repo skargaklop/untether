@@ -26,7 +26,7 @@ from untether.telegram.chat_sessions import ChatSessionStore
 from untether.telegram.commands.fork import fork_session
 from untether.telegram.commands.parse import ForkInvocation, parse_fork_invocation
 from untether.telegram.topic_state import TopicStateStore, resolve_state_path
-from untether.telegram.types import TelegramIncomingMessage
+from untether.telegram.types import TelegramCallbackQuery, TelegramIncomingMessage
 from untether.transport_runtime import TransportRuntime
 
 from .telegram_fakes import FakeBot, FakeTransport
@@ -38,6 +38,14 @@ from .telegram_fakes import FakeBot, FakeTransport
         ("/fork", ForkInvocation()),
         ("/fork CODEX", ForkInvocation(engine="codex")),
         (
+            "/fork pi source --cwd D:\\Projects\\target folder",
+            ForkInvocation(
+                engine="pi",
+                session_id="source",
+                destination_cwd="D:\\Projects\\target folder",
+            ),
+        ),
+        (
             "/fork@untether_bot codex source-thread",
             ForkInvocation(engine="codex", session_id="source-thread"),
         ),
@@ -46,7 +54,7 @@ from .telegram_fakes import FakeBot, FakeTransport
 def test_parse_fork_accepts_only_approved_forms(
     text: str, expected: ForkInvocation
 ) -> None:
-    assert parse_fork_invocation(text, engine_ids=("claude", "codex")) == expected
+    assert parse_fork_invocation(text, engine_ids=("claude", "codex", "pi")) == expected
 
 
 @pytest.mark.parametrize(
@@ -54,6 +62,7 @@ def test_parse_fork_accepts_only_approved_forms(
     [
         ("/fork source-thread", "unknown engine"),
         ("/fork codex source-thread extra", "usage"),
+        ("/fork codex source --cwd", "usage"),
         ("/fork codex\nsource-thread", "usage"),
         ("/fork codex source-thread\nextra", "usage"),
     ],
@@ -241,6 +250,10 @@ async def test_main_loop_fork_uses_topic_effective_engine_and_persists(
             assert session == ResumeToken("claude", "source")
             return ResumeToken("claude", "forked")
 
+        def session_cwd(self, session: str) -> Path:
+            assert session == "source"
+            return tmp_path
+
     state_path = tmp_path / "untether.toml"
     store = TopicStateStore(resolve_state_path(state_path))
     await store.set_default_engine(123, 77, "claude")
@@ -298,9 +311,10 @@ async def test_main_loop_fork_uses_topic_effective_engine_and_persists(
 
     assert await TopicStateStore(resolve_state_path(state_path)).get_session_resume(
         123, 77, "claude"
-    ) == ResumeToken("claude", "forked")
+    ) == ResumeToken("claude", "source")
     assert any(
-        "forked claude session" in call["message"].text.lower()
+        "confirm forking" in call["message"].text.lower()
+        and str(tmp_path) in call["message"].text
         for call in transport.send_calls
     )
 
@@ -358,6 +372,10 @@ async def test_main_loop_fork_reply_uses_replied_session_engine(
             assert session == ResumeToken("pi", "source")
             return ResumeToken("pi", "forked")
 
+        def session_cwd(self, session: str) -> Path:
+            assert session == "source"
+            return tmp_path
+
     transport = FakeTransport()
     pi_runner = ForkRunner([Return(answer="unused")], engine="pi")
     omp_runner = ScriptRunner([Return(answer="unused")], engine="omp")
@@ -396,10 +414,71 @@ async def test_main_loop_fork_reply_uses_replied_session_engine(
     await run_main_loop(cfg, poller)
 
     assert any(
-        "forked pi session" in call["message"].text.lower()
+        "confirm forking" in call["message"].text.lower()
+        and str(tmp_path) in call["message"].text
         for call in transport.send_calls
     )
     assert omp_runner.calls == []
+
+
+@pytest.mark.anyio
+async def test_fork_confirmation_callback_runs_fork_and_persists(
+    tmp_path: Path,
+) -> None:
+    class ForkRunner(ScriptRunner):
+        def session_cwd(self, session: str) -> Path:
+            return tmp_path
+
+        async def fork(self, session: ResumeToken) -> ResumeToken:
+            return ResumeToken("pi", "forked")
+
+    transport = FakeTransport()
+    runtime = TransportRuntime(
+        router=AutoRouter(
+            entries=[RunnerEntry(engine="pi", runner=ForkRunner([], engine="pi"))],
+            default_engine="pi",
+        ),
+        projects=ProjectsConfig(projects={}),
+        config_path=tmp_path / "untether.toml",
+    )
+    cfg = TelegramBridgeConfig(
+        bot=FakeBot(),
+        runtime=runtime,
+        chat_id=123,
+        startup_msg="",
+        exec_cfg=ExecBridgeConfig(
+            transport=transport, presenter=MarkdownPresenter(), final_notify=True
+        ),
+    )
+
+    async def poller(_cfg: TelegramBridgeConfig):
+        yield TelegramIncomingMessage(
+            transport="telegram",
+            chat_id=123,
+            message_id=1,
+            text="/fork pi source",
+            reply_to_message_id=None,
+            reply_to_text=None,
+            sender_id=7,
+        )
+        card = transport.send_calls[-1]["message"]
+        data = card.extra["reply_markup"]["inline_keyboard"][0][0]["callback_data"]
+        yield TelegramCallbackQuery(
+            transport="telegram",
+            chat_id=123,
+            message_id=transport.send_calls[-1]["ref"].message_id,
+            callback_query_id="cb-1",
+            data=data,
+            sender_id=7,
+            raw={"message": {}},
+        )
+
+    await run_main_loop(cfg, poller)
+
+    assert any(
+        "forked pi session" in call["message"].text.lower()
+        for call in transport.edit_calls
+    )
 
 
 @pytest.mark.anyio
