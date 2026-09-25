@@ -1,7 +1,9 @@
+import contextlib
 import sys
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import patch
 
 import anyio
 import pytest
@@ -1072,8 +1074,95 @@ async def test_base_iter_jsonl_breaks_on_did_emit_completed() -> None:
 
 
 # ---------------------------------------------------------------------------
-# #633 (W4) — one-owner-per-session serialisation.
+# Post-completion proc.wait() bound — the "sleep 900" wedge (#WEDGE).
 #
+# Log evidence (d:\untether.log, msg 4604): pi.completed fires, then NO
+# subprocess.exit ever logs — `rc = await proc.wait()` waits forever on a
+# pi.cmd whose tool child (`sleep 900`) keeps the process/pipe alive. The
+# run stays "in flight" with stall warnings until the user cancels.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_post_completion_proc_wait_is_bounded() -> None:
+    """After the terminal event is emitted, ``proc.wait()`` must be bounded.
+
+    Simulates pi.cmd finishing its stream (agent_end) while an orphaned
+    tool child keeps the process alive. Without the bound, this test would
+    hang forever; with it, the attempt finishes and the completed answer
+    is delivered.
+    """
+    import anyio
+
+    runner = CodexRunner(codex_cmd="codex", extra_args=[])
+    runner._POST_COMPLETION_WAIT_SECONDS = 0.2
+    state = runner.new_state("hi", ResumeToken(engine=CODEX_ENGINE, value="sid"))
+
+    completed_line = (
+        b'{"type":"turn.completed","turn_id":"t1","usage":{"input_tokens":1,'
+        b'"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0,'
+        b'"total_tokens":2}}'
+    )
+
+    async def fake_iter_json_lines(_stream):
+        yield completed_line
+        await anyio.Event().wait()  # pipe held open by orphan, like sleep 900
+
+    runner.iter_json_lines = cast(Any, fake_iter_json_lines)
+
+    stderr_send, stderr_recv = anyio.create_memory_object_stream[bytes](1)
+
+    class _NeverExitingProc:
+        pid = 4321
+
+        class _Pipe:
+            async def aclose(self) -> None:
+                return None
+
+            async def send(self, _data: bytes) -> None:
+                return None
+
+        stdout = _Pipe()
+        stderr = stderr_recv
+        stdin = _Pipe()
+
+        async def wait(self) -> int:
+            await anyio.Event().wait()
+            return 0
+
+    proc = _NeverExitingProc()
+
+    class _FakeManager:
+        def __init__(self, on_exit) -> None:
+            self._on_exit = on_exit
+
+        async def __aenter__(self):
+            return proc
+
+        async def __aexit__(self, *args):
+            await self._on_exit()
+
+    def fake_manage(*_args, **_kwargs):
+        async def _close_stderr():
+            with contextlib.suppress(anyio.ClosedResourceError):
+                await stderr_send.aclose()
+
+        return _FakeManager(_close_stderr)
+
+    with (
+        patch.object(runner, "new_state", lambda *_a, **_k: state),
+        patch.object(runner, "_check_prespawn_ram_guard", lambda *_a, **_k: None),
+        patch("untether.runner.manage_subprocess", fake_manage),
+    ):
+        events = []
+        with anyio.fail_after(3.0):
+            events.extend(
+                [evt async for evt in runner._run_single_attempt_events("hi", None)]
+            )
+
+    assert any(isinstance(e, CompletedEvent) and e.ok for e in events)
+
+
 # rc7's quarantine-and-fresh recovers AFTER a session is poisoned. W4 prevents
 # the poisoning: never spawn `--resume <sid>` while a subprocess for that same
 # sid is still alive. Two concurrent owners of one session id is what leaves

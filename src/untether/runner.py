@@ -1520,6 +1520,30 @@ class JsonlSubprocessRunner(BaseRunner):
                 yield buffered
             return
 
+    _POST_COMPLETION_WAIT_SECONDS: float = 90.0
+
+    async def _wait_after_completion(self, proc: Any, logger: Any) -> int:
+        """Bounded ``proc.wait()`` once the terminal event was delivered.
+
+        pi.cmd regularly lingers ~60s after agent_end, and a tool child
+        (e.g. ``sleep 900``) can keep the process alive indefinitely. The
+        answer is already delivered at this point, so after the grace
+        period we log, stop waiting, and let ``manage_subprocess`` teardown
+        (SIGTERM → SIGKILL, orphan sweep) clean the tree.
+        """
+        if not getattr(
+            getattr(self, "current_stream", None), "did_emit_completed", False
+        ):
+            return await proc.wait()
+        with anyio.move_on_after(self._POST_COMPLETION_WAIT_SECONDS):
+            return await proc.wait()
+        logger.warning(
+            "subprocess.post_completion_linger",
+            pid=proc.pid,
+            timeout_s=self._POST_COMPLETION_WAIT_SECONDS,
+        )
+        return -1
+
     async def _run_single_attempt_events(
         self, prompt: str, resume: ResumeToken | None
     ) -> AsyncIterator[UntetherEvent]:
@@ -1633,7 +1657,7 @@ class JsonlSubprocessRunner(BaseRunner):
                 with contextlib.suppress(Exception):
                     await proc.stderr.aclose()
 
-            rc = await proc.wait()
+            rc = await self._wait_after_completion(proc, logger)
             stream.proc_returncode = rc
             logger.info("subprocess.exit", pid=proc.pid, rc=rc)
             if stream.did_emit_completed:
