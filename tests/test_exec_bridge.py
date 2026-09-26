@@ -2340,10 +2340,16 @@ async def test_stall_does_not_auto_cancel_running_tool_at_max_warnings() -> None
     )
     clock.set(101.0)
 
-    async with anyio.create_task_group() as tg:
-        tg.start_soon(edits.run)
-        await anyio.sleep(0.05)
-        edits.signal_send.close()
+    # Simulate platforms without /proc diagnostics (Windows): collect_proc_diag
+    # returns None, so liveness fields collapse and the tool state is the only
+    # signal distinguishing "working silently" from "hung".
+    from unittest.mock import patch
+
+    with patch("untether.utils.proc_diag.collect_proc_diag", return_value=None):
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(edits.run)
+            await anyio.sleep(0.05)
+            edits.signal_send.close()
 
     assert edits.cancel_event is None or not edits.cancel_event.is_set()
     assert not any(
@@ -3068,8 +3074,9 @@ async def test_stall_mcp_not_hung_when_ring_buffer_advances() -> None:
     presenter = _KeyboardPresenter()
     clock = _FakeClock(start=100.0)
     edits = _make_edits(transport, presenter, clock=clock)
-    edits._stall_check_interval = 0.01
+    edits._stall_check_interval = 0.05  # slower than the drive loop appends below
     edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._STALL_MAX_WARNINGS = 100  # don't hit auto-cancel on slow runners
     edits._STALL_THRESHOLD_TOOL = 0.05
     edits._STALL_THRESHOLD_MCP_TOOL = 0.05
     edits._stall_repeat_seconds = 0.0
