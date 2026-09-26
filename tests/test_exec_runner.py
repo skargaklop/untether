@@ -767,6 +767,58 @@ async def test_liveness_stall_increments_counter(tmp_path) -> None:
         )
 
 
+@pytest.mark.anyio
+async def test_liveness_auto_kill_without_platform_diagnostics(
+    tmp_path, monkeypatch
+) -> None:
+    """Opt-in stall recovery must work where /proc diagnostics are unavailable.
+
+    Windows always returns ``None`` from ``collect_proc_diag``.  The watchdog
+    must still terminate the full process tree after the configured liveness
+    timeout instead of warning forever.
+    """
+    thread_id = "019b73c4-0c3f-7701-a0bb-aac6b4d8a3bc"
+    codex_path = tmp_path / "codex"
+    codex_path.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json\n"
+        "import sys\n"
+        "import time\n"
+        "sys.stdin.read()\n"
+        f"print(json.dumps({{'type': 'thread.started', 'thread_id': '{thread_id}'}}), flush=True)\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    codex_path = _portable_fixture_command(codex_path)
+
+    killed_pids: list[int] = []
+
+    async def fake_kill_tree(proc) -> None:
+        killed_pids.append(proc.pid)
+        proc.kill()
+
+    monkeypatch.setattr("untether.utils.proc_diag.collect_proc_diag", lambda _pid: None)
+    monkeypatch.setattr("untether.utils.subprocess.kill_process_tree", fake_kill_tree)
+
+    runner = _FixtureCodexRunner(script=codex_path)
+    runner.retry_max_attempts = 1
+    runner._stall_auto_kill = True
+    runner._LIVENESS_TIMEOUT_SECONDS = 0.2
+    runner._WATCHDOG_POLL_SECONDS = 0.05
+    runner._WATCHDOG_GRACE_SECONDS = 0.5
+
+    from structlog.testing import capture_logs
+
+    with capture_logs() as logs, anyio.fail_after(5):
+        _ = [evt async for evt in runner.run("hi", None)]
+
+    assert len(killed_pids) == 1
+    kill_record = next(
+        record for record in logs if record.get("event") == "subprocess.liveness_kill"
+    )
+    assert kill_record["reason"] == "diagnostics_unavailable"
+
+
 def test_jsonl_stream_state_defaults() -> None:
     """JsonlStreamState initialises with correct defaults."""
     from untether.runner import JsonlStreamState

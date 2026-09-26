@@ -1363,27 +1363,33 @@ class JsonlSubprocessRunner(BaseRunner):
                             recent_events=[(round(t, 1), lbl) for t, lbl in recent],
                             approval_pending=False,
                         )
-                        # Auto-kill: config enabled + zero TCP + CPU NOT active
-                        if (
-                            self._stall_auto_kill
-                            and diag is not None
-                            and diag.tcp_established == 0
-                            and diag.alive
-                            and cpu_active is not True
-                        ):
+                        # Auto-kill is opt-in. Linux diagnostics let us require
+                        # zero TCP and no CPU activity; on platforms without
+                        # /proc (notably Windows), the liveness timeout itself
+                        # is the only available signal. Previously ``diag is
+                        # not None`` made this setting a silent no-op there.
+                        kill_reason: str | None = None
+                        if self._stall_auto_kill:
+                            if diag is None and _process_is_running(pid):
+                                kill_reason = "diagnostics_unavailable"
+                            elif (
+                                diag is not None
+                                and diag.tcp_established == 0
+                                and diag.alive
+                                and cpu_active is not True
+                            ):
+                                kill_reason = "zero_tcp_zero_cpu"
+                        if kill_reason is not None:
                             logger.warning(
                                 "subprocess.liveness_kill",
                                 pid=pid,
-                                reason="zero_tcp_zero_cpu",
+                                reason=kill_reason,
                             )
-                            # #590: descendant-aware — bare killpg missed
-                            # grandchildren in separate sessions/pgroups.
-                            from .utils.subprocess import (
-                                forced_termination_signal,
-                                signal_pid_group,
-                            )
+                            # Use the process handle so Windows gets
+                            # taskkill /T /F instead of a bare wrapper-PID kill.
+                            from .utils.subprocess import kill_process_tree
 
-                            signal_pid_group(pid, forced_termination_signal())
+                            await kill_process_tree(proc)
                         prev_diag = diag
 
             await anyio.sleep(self._WATCHDOG_POLL_SECONDS)
