@@ -32,7 +32,7 @@ class JsonStateStore[T: _VersionedState]:
         self._path = path
         self._lock = anyio.Lock()
         self._loaded = False
-        self._mtime_ns: int | None = None
+        self._identity: tuple[int | None, int | None, int | None] | None = None
         self._state_type = state_type
         self._state_factory = state_factory
         self._version = version
@@ -40,22 +40,32 @@ class JsonStateStore[T: _VersionedState]:
         self._logger = logger
         self._state = state_factory()
 
-    def _stat_mtime_ns(self) -> int | None:
+    def _stat_signature(self) -> tuple[int | None, int | None, int | None]:
+        """File identity for staleness checks: (mtime_ns, ino, size).
+
+        mtime alone is insufficient on filesystems whose timestamp
+        granularity can collide for rapid successive writes (observed on
+        GitHub's windows-latest runners, where two writes in the same test
+        can share ``st_mtime_ns``). ``atomic_write_json`` replaces the file
+        via ``os.replace``, which yields a new file id (``st_ino``) on every
+        write — including NTFS — so the tuple is stable yet collision-free.
+        """
         try:
-            return self._path.stat().st_mtime_ns
+            st = self._path.stat()
         except FileNotFoundError:
-            return None
+            return None, None, None
+        return st.st_mtime_ns, st.st_ino, st.st_size
 
     def _reload_locked_if_needed(self) -> None:
-        current = self._stat_mtime_ns()
-        if self._loaded and current == self._mtime_ns:
+        current = self._stat_signature()
+        if self._loaded and current == self._identity:
             return
         self._load_locked()
 
     def _load_locked(self) -> None:
         self._loaded = True
-        self._mtime_ns = self._stat_mtime_ns()
-        if self._mtime_ns is None:
+        self._identity = self._stat_signature()
+        if self._identity[0] is None:
             self._state = self._state_factory()
             return
         try:
@@ -85,4 +95,4 @@ class JsonStateStore[T: _VersionedState]:
     def _save_locked(self) -> None:
         payload = msgspec.to_builtins(self._state)
         atomic_write_json(self._path, payload)
-        self._mtime_ns = self._stat_mtime_ns()
+        self._identity = self._stat_signature()
