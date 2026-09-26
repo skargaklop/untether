@@ -1622,6 +1622,19 @@ class ProgressEdits:
                     bash_grace=_bash_grace,
                     bash_fresh=_bash_fresh,
                 )
+            elif self._has_running_tool():
+                # A warning counter is not proof that a live tool is hung.
+                # This is especially important on Windows, where /proc
+                # diagnostics are unavailable: a silent but legitimate tool
+                # (for example sleep or a long build) otherwise reaches the
+                # absolute cap and is killed solely because time passed.
+                self._bump_stall_suppression("running_tool")
+                logger.info(
+                    "progress_edits.stall_auto_cancel_suppressed_running_tool",
+                    channel_id=self.channel_id,
+                    stall_warn_count=self._stall_warn_count,
+                    pid=self.pid,
+                )
             elif self._stall_warn_count >= self._STALL_MAX_WARNINGS:
                 # Suppress auto-cancel when process is actively working
                 # (CPU ticks incrementing between diagnostic snapshots).

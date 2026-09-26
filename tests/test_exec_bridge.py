@@ -2297,6 +2297,61 @@ async def test_stall_auto_cancel_no_pid_no_events() -> None:
 
 
 @pytest.mark.anyio
+async def test_stall_does_not_auto_cancel_running_tool_at_max_warnings() -> None:
+    """A running tool is not a dead process and must not be killed by warnings.
+
+    On Windows process diagnostics are unavailable, so a legitimate silent
+    tool (for example ``sleep 900``) otherwise reaches the warning cap and is
+    cancelled solely because time passed.
+    """
+    transport = FakeTransport()
+    presenter = _KeyboardPresenter()
+    clock = _FakeClock(start=100.0)
+    edits = _make_edits(transport, presenter, clock=clock)
+    edits._stall_check_interval = 0.01
+    edits._STALL_THRESHOLD_SECONDS = 0.05
+    edits._STALL_THRESHOLD_TOOL = 0.05
+    edits._stall_repeat_seconds = 0.0
+    edits._STALL_MAX_WARNINGS = 1
+
+    from collections import deque
+    from types import SimpleNamespace
+
+    from untether.model import Action, ActionEvent
+
+    await edits.on_event(
+        ActionEvent(
+            engine="pi",
+            action=Action(
+                id="tool-1",
+                kind="tool",
+                title="command:python -c 'import time; time.sleep(900)'",
+                detail={"name": "command"},
+            ),
+            phase="started",
+        )
+    )
+    edits.pid = 4242
+    edits.stream = SimpleNamespace(
+        recent_events=deque([(1.0, "tool_execution_update")], maxlen=10),
+        last_event_type="tool_execution_update",
+        stderr_capture=[],
+        proc_returncode=None,
+    )
+    clock.set(101.0)
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(edits.run)
+        await anyio.sleep(0.05)
+        edits.signal_send.close()
+
+    assert edits.cancel_event is None or not edits.cancel_event.is_set()
+    assert not any(
+        "Auto-cancelled" in call["message"].text for call in transport.send_calls
+    )
+
+
+@pytest.mark.anyio
 async def test_stall_auto_cancel_max_warnings() -> None:
     """Stall monitor auto-cancels after _STALL_MAX_WARNINGS absolute cap."""
     from unittest.mock import patch
