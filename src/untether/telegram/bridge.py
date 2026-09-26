@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from pydantic import SecretStr
 
@@ -526,11 +526,32 @@ async def send_plain(
     notify: bool = True,
     thread_id: int | None = None,
 ) -> None:
+    """Send a plain reply, splitting long text into followups like answers.
+
+    Used by direct-reply command paths (/bash, /powershell, ...). Long
+    output follows the same chunking as engine answers
+    (``prepare_telegram_multi``) instead of being hard-truncated by the
+    Telegram 4096-char limit.
+    """
+    from .render import MAX_BODY_CHARS, prepare_telegram_multi
+
     reply_to = MessageRef(channel_id=chat_id, message_id=user_msg_id)
-    rendered_text, entities = prepare_telegram(MarkdownParts(header=text))
+    payloads = prepare_telegram_multi(
+        MarkdownParts(header="", body=text), max_body_chars=MAX_BODY_CHARS
+    )
+    rendered, entities = payloads[0]
+    extra: dict[str, Any] = {"entities": entities}
+    if len(payloads) > 1:
+        extra["followups"] = [
+            RenderedMessage(
+                text=followup_text,
+                extra={"entities": followup_entities},
+            )
+            for followup_text, followup_entities in payloads[1:]
+        ]
     await transport.send(
         channel_id=chat_id,
-        message=RenderedMessage(text=rendered_text, extra={"entities": entities}),
+        message=RenderedMessage(text=rendered, extra=extra),
         options=SendOptions(reply_to=reply_to, notify=notify, thread_id=thread_id),
     )
 
