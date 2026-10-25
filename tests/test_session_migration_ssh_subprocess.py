@@ -2,11 +2,9 @@
 from __future__ import annotations
 
 import json
-import os
 import stat
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -14,13 +12,15 @@ from untether.session_migration.settings import MigrationPeer
 from untether.session_migration.ssh_transport import PreflightError, inspect_peer
 
 PIN = "SHA256:" + "A" * 43
-BASE_CHECKS = (
-    "installed_receiver runtime_ready agent_installed agent_version_compatible "
-    "adapter_capable provider_auth provider_connectivity staging_writable "
-    "disk_headroom inodes_available workspace_git_parity quiescent "
-    "telegram_enrolled distinct_bot destination_binding resume_probe_available "
-    "container_ready container_uid mount_mapping"
-).split()
+BASE_CHECKS = [
+    "installed_receiver", "runtime_ready", "agent_installed",
+    "agent_version_compatible", "adapter_capable", "provider_auth",
+    "provider_connectivity", "staging_writable", "disk_headroom",
+    "inodes_available", "workspace_git_parity", "quiescent",
+    "telegram_enrolled", "distinct_bot", "destination_binding",
+    "resume_probe_available", "container_ready", "container_uid",
+    "mount_mapping",
+]
 
 
 @pytest.fixture
