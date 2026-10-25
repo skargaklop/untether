@@ -34,7 +34,7 @@ def subprocess_endpoints(tmp_path, monkeypatch):
             "import json, os, sys\n"
             "from pathlib import Path\n"
             "Path(os.environ['MIGRATION_ARGV_LOG']).open('a').write("
-            "json.dumps([os.path.basename(sys.argv[0]), *sys.argv[1:]])+'\\\\n')\n"
+            "json.dumps([os.path.basename(sys.argv[0]), *sys.argv[1:]])+'\\n')\n"
             "if os.path.basename(sys.argv[0]) == 'ssh-keygen':\n"
             " print(os.environ['MIGRATION_FAKE_PIN'])\n"
             "else:\n"
