@@ -6,8 +6,8 @@ from uuid import uuid4
 
 import pytest
 
-from untether.session_migration.package import pack_context
 from untether.session_migration.intent import OperationConflict
+from untether.session_migration.package import pack_context
 from untether.session_migration.receiver import ReceiverRefusal, StagingReceiver
 
 
