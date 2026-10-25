@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 
 from untether.session_migration.package import pack_context
+from untether.session_migration.intent import OperationConflict
 from untether.session_migration.receiver import ReceiverRefusal, StagingReceiver
 
 
@@ -69,3 +70,28 @@ def test_failure_of_resume_probe_has_no_success_receipt(tmp_path):
     assert not list((receiver.root / "receipts").glob("*.json")) if (
         receiver.root / "receipts"
     ).exists() else True
+
+
+def test_lost_receipt_retry_never_imports_twice(tmp_path):
+    receiver = StagingReceiver(
+        tmp_path / 'dest', max_archive=4096, max_expanded=8192, min_free_bytes=1,
+    )
+    archive = pack_context(engine='acp', project='demo', content=b'abc', max_bytes=4096)
+    operation_id = str(uuid4())
+    calls = []
+
+    def crash_after_import(_package):
+        calls.append('imported')
+        raise RuntimeError('simulated power loss before receipt')
+
+    with pytest.raises(RuntimeError, match='simulated power loss'):
+        receiver.receive(
+            operation_id, archive, expected_project='demo',
+            import_and_probe=crash_after_import,
+        )
+    with pytest.raises(OperationConflict, match='NEEDS_RECONCILE'):
+        receiver.receive(
+            operation_id, archive, expected_project='demo',
+            import_and_probe=crash_after_import,
+        )
+    assert calls == ['imported']
