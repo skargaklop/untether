@@ -138,13 +138,12 @@ def receiver_request(
         raise PreflightError("RECEIVER_ENDPOINT_MISMATCH")
     if reply.get("package_sha256") != digest:
         raise PreflightError("RECEIVER_PACKAGE_MISMATCH")
-    if action == "receive":
-        if (
-            reply.get("status") != "verified"
-            or not isinstance(reply.get("native_id"), str)
-            or not reply["native_id"]
-            or not isinstance(reply.get("importer_version"), str)
-            or not reply["importer_version"]
-        ):
-            raise PreflightError("RECEIVER_NOT_VERIFIED")
+    if action == "receive" and (
+        reply.get("status") != "verified"
+        or not isinstance(reply.get("native_id"), str)
+        or not reply["native_id"]
+        or not isinstance(reply.get("importer_version"), str)
+        or not reply["importer_version"]
+    ):
+        raise PreflightError("RECEIVER_NOT_VERIFIED")
     return reply
