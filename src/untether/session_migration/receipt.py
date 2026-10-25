@@ -84,11 +84,12 @@ class ReceiptStore:
                     raise ReceiptError("OPERATION_CONFLICT") from None
             finally:
                 tmp.unlink(missing_ok=True)
-            dirfd = os.open(self.root, os.O_RDONLY)
-            try:
-                os.fsync(dirfd)
-            finally:
-                os.close(dirfd)
+            if os.name == "posix":
+                dirfd = os.open(self.root, os.O_RDONLY)
+                try:
+                    os.fsync(dirfd)
+                finally:
+                    os.close(dirfd)
         finally:
             if tmp:
                 tmp.unlink(missing_ok=True)
