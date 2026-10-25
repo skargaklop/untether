@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import typer
 
-from ..settings import load_settings
 from ..session_migration.ssh_transport import PreflightError, inspect_peer
+from ..settings import load_settings
 
 
 def build_migrate_app() -> typer.Typer:
