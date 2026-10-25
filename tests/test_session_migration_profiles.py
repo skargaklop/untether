@@ -1,8 +1,6 @@
 """Schema contracts for SSH migration profiles (no real home or network access)."""
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 from pydantic import ValidationError
 
