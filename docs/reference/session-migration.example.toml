@@ -25,8 +25,10 @@ identity_file = "REQUIRED_SELECTED_KEY_FILENAME"
 known_hosts_file = "~/.ssh/known_hosts"
 host_key_fingerprint = "REQUIRED_OUT_OF_BAND_VERIFIED_SHA256"
 # Fixed operator-installed wrapper, not a chat-provided shell command.
-receiver_path = "/usr/local/bin/untether-migration-receiver"
-execution_mode = "container-wrapper"
+receiver_path = "/path/to/installed/untether-migration-receiver"
+# Use "native" for a direct Linux installation; "container-wrapper" for
+# Docker/Podman with or without Coolify. Coolify is never required.
+execution_mode = "native"
 expected_endpoint_id = "REQUIRED_ENROLLED_ENDPOINT_ID"
 # Wrapper resolves fixed container/UID/mount mappings; never expose generic docker exec.
 projects = { projects = "/srv" }
