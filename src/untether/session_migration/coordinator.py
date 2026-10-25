@@ -1,4 +1,5 @@
 """Guarded non-destructive context-copy coordinator; NEVER native migration."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -49,11 +50,16 @@ def copy_observed_context(
         raise CoordinatorRefusal("PROJECT_UNMAPPED")
     if direction not in ("to", "from"):
         raise CoordinatorRefusal("DIRECTION_INVALID")
-    if source_quiescent_and_complete is None or source_quiescent_and_complete() is not True:
+    if (
+        source_quiescent_and_complete is None
+        or source_quiescent_and_complete() is not True
+    ):
         raise CoordinatorRefusal("SOURCE_NOT_QUIESCENT_OR_COMPLETE")
     payload, _digest = journal.snapshot(source_session_id)
     archive = pack_context(
-        engine="acp", project=project, content=payload,
+        engine="acp",
+        project=project,
+        content=payload,
         max_bytes=settings.max_archive_bytes,
     )
     operation_id = str(uuid4())
@@ -72,9 +78,11 @@ def copy_observed_context(
             max_package_bytes=settings.max_archive_bytes,
             timeout_s=settings.transfer_timeout_s,
         )
-        if reply.get("status") != "verified" or not isinstance(
-            reply.get("native_id"), str
-        ) or not reply["native_id"]:
+        if (
+            reply.get("status") != "verified"
+            or not isinstance(reply.get("native_id"), str)
+            or not reply["native_id"]
+        ):
             raise CoordinatorRefusal("RECEIVER_UNVERIFIED")
         from hashlib import sha256
 
@@ -83,8 +91,10 @@ def copy_observed_context(
             raise CoordinatorRefusal("PACKAGE_HASH_MISMATCH")
         operations.transition(operation_id, "imported")
         operations.transition(
-            operation_id, "verified",
-            destination_id=reply["native_id"], package_hash=digest,
+            operation_id,
+            "verified",
+            destination_id=reply["native_id"],
+            package_hash=digest,
         )
         return CopyResult(operation_id, reply["native_id"], "verified")
     except Exception:
