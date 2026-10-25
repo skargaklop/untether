@@ -68,7 +68,9 @@ def test_context_copy_only_after_verified_receipt(tmp_path, direction):
     assert result.source_unchanged
     assert result.mode == "context"
     assert calls[0]["direction"] == direction
-    assert ops.read(result.operation_id).state == "verified"
+    current = ops.read(result.operation_id)
+    assert current is not None
+    assert current.state == "verified"
     assert not ops.source_blocked(result.operation_id)
 
 
