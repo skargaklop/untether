@@ -3,6 +3,7 @@
 Actual runner admission and Telegram chat binding MUST call these guards,
 which are not yet connected in the published runtime.
 """
+
 from __future__ import annotations
 
 import json
@@ -77,7 +78,10 @@ class OperationStore:
         if path.is_symlink():
             raise OperationError("OPERATION_SYMLINK")
         with tempfile.NamedTemporaryFile(
-            dir=self.root, mode="w", encoding="utf-8", delete=False,
+            dir=self.root,
+            mode="w",
+            encoding="utf-8",
+            delete=False,
             prefix=".operation-",
         ) as out:
             tmp = Path(out.name)
@@ -96,9 +100,12 @@ class OperationStore:
             tmp.unlink(missing_ok=True)
 
     def create(self, operation: MigrationOperation) -> MigrationOperation:
-        if (operation.mode not in ("context", "native")
+        if (
+            operation.mode not in ("context", "native")
             or operation.state != "prepared"
-            or not operation.source_id or not operation.project):
+            or not operation.source_id
+            or not operation.project
+        ):
             raise OperationError("OPERATION_INVALID")
         self._write(operation, create=True)
         return operation
@@ -127,7 +134,10 @@ class OperationStore:
             lock.unlink(missing_ok=True)
 
     def transition(
-        self, operation_id: str, state: str, *,
+        self,
+        operation_id: str,
+        state: str,
+        *,
         package_hash: str | None = None,
         destination_id: str | None = None,
         destination_binding: str | None = None,
@@ -143,10 +153,13 @@ class OperationStore:
                     raise OperationError("RECEIPT_REQUIRED")
                 if not (package_hash or previous.package_hash):
                     raise OperationError("PACKAGE_HASH_REQUIRED")
-            if state == "activated" and not (destination_binding or previous.destination_binding):
+            if state == "activated" and not (
+                destination_binding or previous.destination_binding
+            ):
                 raise OperationError("DESTINATION_ENROLMENT_REQUIRED")
             updated = replace(
-                previous, state=state,
+                previous,
+                state=state,
                 package_hash=package_hash or previous.package_hash,
                 destination_id=destination_id or previous.destination_id,
                 destination_binding=destination_binding or previous.destination_binding,
