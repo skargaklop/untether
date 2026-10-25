@@ -5,7 +5,7 @@
 | Project / branch | Tool | Thread | Scope |
 |---|---|---|---|
 | skargaklop/untether / docs/ssh-session-migration-handoff | Gemini Argon | https://gemini.google.com/app/80a6f229328ab915 | Sanitised design review; no endpoint credentials |
-| skargaklop/untether / implementation branch requested | ChatGPT | Pending dispatch | GitHub implementation PR; no live infrastructure |
+| skargaklop/untether / implementation branch requested | ChatGPT | https://chatgpt.com/c/6ade1bb1-1774-83ea-8dca-0e88272093db | Assignment submitted and visible; GitHub write capability awaiting verification; no live infrastructure |
 
 ## Advisor review disposition
 
