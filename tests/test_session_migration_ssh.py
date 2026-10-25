@@ -16,7 +16,7 @@ CHECKS = (
     "provider_connectivity", "staging_writable", "disk_headroom",
     "inodes_available", "workspace_git_parity", "quiescent",
     "telegram_enrolled", "distinct_bot", "destination_binding",
-    "resume_probe_available",
+    "resume_probe_available", "container_ready", "container_uid", "mount_mapping",
 )
 
 
