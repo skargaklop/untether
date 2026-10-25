@@ -6,6 +6,9 @@
 - Pinned known-host SSH identity and fixed `inspect` receiver command with redacted refusal codes and strict health attestations.
 - Bounded opaque ACP context archive (not a native agent archive), exact allowlist and hash validation.
 - Private on-disk staging, write-once verified receipts, idempotent operation lookup, and a durable ambiguous-import intent that refuses retries until reconciliation.
+- A strict endpoint-bound destination Telegram enrollment store (explicit distinct bot/chat/topic proof; not yet wired into live transport).
+- An isolated migration-suite HOME/USERPROFILE/XDG_CONFIG_HOME/UNTETHER_CONFIG_PATH fixture that never reads or edits the operator's live settings.
+- A strict framed SSH receiver client/dispatcher, plus a context-copy coordinator requiring source quiescence and a matching verified receipt. These lack production authorization and full runner/Telegram integration.
 - A scoped, append-only observed-message journal with fsync and conservative refusal on partial records. It is a building block only; it is not yet integrated into scheduler/session capture and it is not a complete archive.
 - An ACP **context-copy** importer capable of seeding a fresh native ID and independently loading it through an ACP protocol subprocess; exercised only with a disposable persistent fake agent. Tool-isolation attestation is mandatory.
 - Fixed Typer command grouping and Windows-safe symlink fixture verification (without changing the production host-key checks).
