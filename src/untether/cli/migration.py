@@ -3,6 +3,7 @@
 The actual transfer verbs remain disabled until complete source journal,
 destination receiver, and owner fencing contracts are implemented.
 """
+
 from __future__ import annotations
 
 import typer
