@@ -11,9 +11,9 @@ from pathlib import Path
 
 import anyio
 
-from ...runners.acp.peer import AcpPeer
-from ...runners.acp.protocol import V2Adapter, negotiate
-from ..package import ContextPackage
+from ..runners.acp.peer import AcpPeer
+from ..runners.acp.protocol import V2Adapter, negotiate
+from .package import ContextPackage
 
 
 class ContextImportError(RuntimeError):
