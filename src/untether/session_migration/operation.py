@@ -8,6 +8,8 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from contextlib import contextmanager
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from uuid import UUID
@@ -101,32 +103,56 @@ class OperationStore:
         self._write(operation, create=True)
         return operation
 
+    @contextmanager
+    def _exclusive(self, operation_id: str) -> Iterator[None]:
+        if self.root.is_symlink() or not self.root.is_dir():
+            raise OperationError("OPERATION_DIR_UNSAFE")
+        lock = self._path(operation_id).with_suffix(".lock")
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            fd = os.open(lock, flags, 0o600)
+        except FileExistsError as exc:
+            raise OperationError("NEEDS_RECONCILE: operation lock exists") from exc
+        try:
+            with os.fdopen(fd, "wb") as out:
+                out.write(b"locked\\n")
+                out.flush()
+                os.fsync(out.fileno())
+            yield
+        finally:
+            # An abrupt process crash leaves the lock in place: do not
+            # automatically clear it on retry without explicit reconciliation.
+            lock.unlink(missing_ok=True)
+
     def transition(
         self, operation_id: str, state: str, *,
         package_hash: str | None = None,
         destination_id: str | None = None,
         destination_binding: str | None = None,
     ) -> MigrationOperation:
-        previous = self.read(operation_id)
-        if previous is None:
-            raise OperationError("OPERATION_MISSING")
-        if state not in _ALLOWED[previous.state]:
-            raise OperationError("ILLEGAL_TRANSITION")
-        if state in ("verified", "activated"):
-            if not (destination_id or previous.destination_id):
-                raise OperationError("RECEIPT_REQUIRED")
-            if not (package_hash or previous.package_hash):
-                raise OperationError("PACKAGE_HASH_REQUIRED")
-        if state == "activated" and not (destination_binding or previous.destination_binding):
-            raise OperationError("DESTINATION_ENROLMENT_REQUIRED")
-        updated = replace(
-            previous, state=state,
-            package_hash=package_hash or previous.package_hash,
-            destination_id=destination_id or previous.destination_id,
-            destination_binding=destination_binding or previous.destination_binding,
-        )
-        self._write(updated, create=False)
-        return updated
+        with self._exclusive(operation_id):
+            previous = self.read(operation_id)
+            if previous is None:
+                raise OperationError("OPERATION_MISSING")
+            if state not in _ALLOWED[previous.state]:
+                raise OperationError("ILLEGAL_TRANSITION")
+            if state in ("verified", "activated"):
+                if not (destination_id or previous.destination_id):
+                    raise OperationError("RECEIPT_REQUIRED")
+                if not (package_hash or previous.package_hash):
+                    raise OperationError("PACKAGE_HASH_REQUIRED")
+            if state == "activated" and not (destination_binding or previous.destination_binding):
+                raise OperationError("DESTINATION_ENROLMENT_REQUIRED")
+            updated = replace(
+                previous, state=state,
+                package_hash=package_hash or previous.package_hash,
+                destination_id=destination_id or previous.destination_id,
+                destination_binding=destination_binding or previous.destination_binding,
+            )
+            self._write(updated, create=False)
+            return updated
 
     def source_blocked(self, operation_id: str) -> bool:
         current = self.read(operation_id)
