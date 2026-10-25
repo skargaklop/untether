@@ -4,6 +4,7 @@ Operators bind this library to an installed forced-command SSH account or a
 container wrapper that exposes the same three fixed verbs. Without fresh
 verified health and a real importer, it refuses; no static green responses.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -85,7 +86,12 @@ def handle_receiver(
         except (UnicodeError, ValueError) as exc:
             raise ReceiverProtocolError("FRAME_INVALID") from exc
         if not isinstance(info, dict) or set(info) != {
-            "protocol", "action", "operation_id", "project", "size", "sha256"
+            "protocol",
+            "action",
+            "operation_id",
+            "project",
+            "size",
+            "sha256",
         }:
             raise ReceiverProtocolError("FRAME_SCHEMA_INVALID")
         op = info["operation_id"]
@@ -94,12 +100,18 @@ def handle_receiver(
                 raise ValueError
         except ValueError as exc:
             raise ReceiverProtocolError("OPERATION_ID_INVALID") from exc
-        if (info["protocol"] != 1 or info["action"] != verb
-            or info["project"] != endpoint.project):
+        if (
+            info["protocol"] != 1
+            or info["action"] != verb
+            or info["project"] != endpoint.project
+        ):
             raise ReceiverProtocolError("FRAME_METADATA_MISMATCH")
-        if (type(info["size"]) is not int or len(data) != info["size"]
+        if (
+            type(info["size"]) is not int
+            or len(data) != info["size"]
             or len(data) > endpoint.receiver.max_archive
-            or hashlib.sha256(data).hexdigest() != info["sha256"]):
+            or hashlib.sha256(data).hexdigest() != info["sha256"]
+        ):
             raise ReceiverProtocolError("FRAME_HASH_OR_SIZE_MISMATCH")
         if verb == "status":
             if data:
@@ -111,7 +123,9 @@ def handle_receiver(
             if endpoint.import_and_probe is None:
                 raise ReceiverProtocolError("ADAPTER_UNAVAILABLE")
             receipt = endpoint.receiver.receive(
-                op, data, expected_project=endpoint.project,
+                op,
+                data,
+                expected_project=endpoint.project,
                 import_and_probe=endpoint.import_and_probe,
             )
         result = {
