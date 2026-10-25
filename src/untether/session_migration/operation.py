@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from contextlib import contextmanager
 from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from uuid import UUID
