@@ -1,4 +1,5 @@
 """Versioned fixed-verb SSH receiver RPC; never accepts shell commands from chat."""
+
 from __future__ import annotations
 
 import hashlib
@@ -54,36 +55,70 @@ def receiver_request(
     )
     identity, known = _identity(peer)
     digest = hashlib.sha256(package).hexdigest()
-    header = json.dumps(
-        {
-            "protocol": 1,
-            "action": action,
-            "operation_id": operation_id,
-            "project": project,
-            "size": len(package),
-            "sha256": digest,
-        },
-        separators=(",", ":"),
-    ).encode("ascii") + b"\n"
+    header = (
+        json.dumps(
+            {
+                "protocol": 1,
+                "action": action,
+                "operation_id": operation_id,
+                "project": project,
+                "size": len(package),
+                "sha256": digest,
+            },
+            separators=(",", ":"),
+        ).encode("ascii")
+        + b"\n"
+    )
     if len(header) > 4096:
         raise PreflightError("FRAME_TOO_LARGE")
     target = f"{peer.user}@{peer.host}"
     command = peer.receiver_path + " " + action
     argv = [
-        "ssh", "-T", "-F", os.devnull, "-p", str(peer.port),
-        "-i", str(identity), "-o", "BatchMode=yes",
-        "-o", "NumberOfPasswordPrompts=0", "-o", "StrictHostKeyChecking=yes",
-        "-o", "UpdateHostKeys=no", "-o", f"UserKnownHostsFile={known}",
-        "-o", "GlobalKnownHostsFile=none", "-o", "IdentitiesOnly=yes",
-        "-o", "ForwardAgent=no", "-o", "ForwardX11=no",
-        "-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no",
-        "-o", "ControlMaster=no", "-o", f"ConnectTimeout={max(1, int(timeout_s))}",
-        "--", target, command,
+        "ssh",
+        "-T",
+        "-F",
+        os.devnull,
+        "-p",
+        str(peer.port),
+        "-i",
+        str(identity),
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "NumberOfPasswordPrompts=0",
+        "-o",
+        "StrictHostKeyChecking=yes",
+        "-o",
+        "UpdateHostKeys=no",
+        "-o",
+        f"UserKnownHostsFile={known}",
+        "-o",
+        "GlobalKnownHostsFile=none",
+        "-o",
+        "IdentitiesOnly=yes",
+        "-o",
+        "ForwardAgent=no",
+        "-o",
+        "ForwardX11=no",
+        "-o",
+        "ClearAllForwardings=yes",
+        "-o",
+        "PermitLocalCommand=no",
+        "-o",
+        "ControlMaster=no",
+        "-o",
+        f"ConnectTimeout={max(1, int(timeout_s))}",
+        "--",
+        target,
+        command,
     ]
     try:
         result = run(
-            argv, input=header + package,
-            capture_output=True, timeout=timeout_s + 5, check=False,
+            argv,
+            input=header + package,
+            capture_output=True,
+            timeout=timeout_s + 5,
+            check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise PreflightError("RECEIVER_UNREACHABLE") from exc
