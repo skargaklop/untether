@@ -59,7 +59,11 @@ def subprocess_endpoints(tmp_path, monkeypatch):
         destination_binding="pre-enrolled",
         projects={"project": "/srv/project"},
     )
-    def run_fake(argv, **kwargs):\n        executable = bin_dir / argv[0]\n        return subprocess.run([sys.executable, str(executable), *argv[1:]], **kwargs)\n\n    return peer, tmp_path / "argv.jsonl", run_fake
+    def run_fake(argv, **kwargs):
+        executable = bin_dir / argv[0]
+        return subprocess.run([sys.executable, str(executable), *argv[1:]], **kwargs)
+
+    return peer, tmp_path / "argv.jsonl", run_fake
 
 
 @pytest.mark.parametrize(
