@@ -1,4 +1,5 @@
 """Strict bounded package codec; session histories are untrusted bytes."""
+
 from __future__ import annotations
 
 import hashlib
@@ -49,7 +50,9 @@ def pack_context(*, engine: str, project: str, content: bytes, max_bytes: int) -
     return result
 
 
-def unpack_context(data: bytes, *, max_archive: int, max_expanded: int) -> ContextPackage:
+def unpack_context(
+    data: bytes, *, max_archive: int, max_expanded: int
+) -> ContextPackage:
     if len(data) > max_archive:
         raise PackageError("ARCHIVE_TOO_LARGE")
     try:
@@ -60,22 +63,46 @@ def unpack_context(data: bytes, *, max_archive: int, max_expanded: int) -> Conte
             total = 0
             for entry in archive.infolist():
                 total += entry.file_size
-                if entry.is_dir() or entry.flag_bits & 1 or entry.compress_type != zipfile.ZIP_STORED:
+                if (
+                    entry.is_dir()
+                    or entry.flag_bits & 1
+                    or entry.compress_type != zipfile.ZIP_STORED
+                ):
                     raise PackageError("UNSAFE_MEMBER")
                 if entry.external_attr >> 16 & 0o170000 not in (0, 0o100000):
                     raise PackageError("UNSAFE_MEMBER")
-            if total > max_expanded or archive.getinfo("manifest.json").file_size > MAX_MANIFEST:
+            if (
+                total > max_expanded
+                or archive.getinfo("manifest.json").file_size > MAX_MANIFEST
+            ):
                 raise PackageError("EXPANDED_LIMIT")
             metadata = json.loads(archive.read("manifest.json"))
-            if (not isinstance(metadata, dict) or metadata.get("protocol") != PROTOCOL
-                    or metadata.get("mode") != "context"):
+            if (
+                not isinstance(metadata, dict)
+                or metadata.get("protocol") != PROTOCOL
+                or metadata.get("mode") != "context"
+            ):
                 raise PackageError("PROTOCOL_INVALID")
             content = archive.read(MEMBER)
-            if (type(metadata.get("size")) is not int or metadata["size"] != len(content)
-                    or hashlib.sha256(content).hexdigest() != metadata.get("sha256")):
+            if (
+                type(metadata.get("size")) is not int
+                or metadata["size"] != len(content)
+                or hashlib.sha256(content).hexdigest() != metadata.get("sha256")
+            ):
                 raise PackageError("HASH_MISMATCH")
-            if any(not isinstance(metadata.get(k), str) or not metadata[k] for k in ("engine", "project")):
+            if any(
+                not isinstance(metadata.get(k), str) or not metadata[k]
+                for k in ("engine", "project")
+            ):
                 raise PackageError("METADATA_INVALID")
-            return ContextPackage(metadata["engine"], metadata["project"], content, metadata["sha256"])
-    except (zipfile.BadZipFile, OSError, UnicodeError, json.JSONDecodeError, KeyError) as exc:
+            return ContextPackage(
+                metadata["engine"], metadata["project"], content, metadata["sha256"]
+            )
+    except (
+        zipfile.BadZipFile,
+        OSError,
+        UnicodeError,
+        json.JSONDecodeError,
+        KeyError,
+    ) as exc:
         raise PackageError("PACKAGE_MALFORMED") from exc

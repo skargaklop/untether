@@ -1,4 +1,5 @@
 """Write-once operation intent guards against lost receipts and duplicate imports."""
+
 from __future__ import annotations
 
 import json
@@ -20,7 +21,9 @@ class OperationIntentStore:
     def begin(self, operation_id: str, package_sha256: str) -> None:
         """Atomically reserve before irreversible import. Never override ambiguous state."""
         safe_id = self._receipts._path(operation_id).stem
-        if len(package_sha256) != 64 or any(c not in "0123456789abcdef" for c in package_sha256):
+        if len(package_sha256) != 64 or any(
+            c not in "0123456789abcdef" for c in package_sha256
+        ):
             raise OperationConflict("PACKAGE_HASH_INVALID")
         self.root.mkdir(parents=True, mode=0o700, exist_ok=True)
         if self.root.is_symlink():
@@ -39,7 +42,9 @@ class OperationIntentStore:
             existing = self.inspect(operation_id)
             if existing and existing.get("sha256") != package_sha256:
                 raise OperationConflict("OPERATION_CONFLICT") from exc
-            raise OperationConflict("NEEDS_RECONCILE: previous import may have completed") from exc
+            raise OperationConflict(
+                "NEEDS_RECONCILE: previous import may have completed"
+            ) from exc
         with os.fdopen(fd, "wb") as out:
             out.write(payload)
             out.flush()

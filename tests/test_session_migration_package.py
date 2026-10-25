@@ -8,7 +8,11 @@ from uuid import uuid4
 
 import pytest
 
-from untether.session_migration.package import PackageError, pack_context, unpack_context
+from untether.session_migration.package import (
+    PackageError,
+    pack_context,
+    unpack_context,
+)
 from untether.session_migration.receipt import Receipt, ReceiptError, ReceiptStore
 
 
@@ -37,10 +41,19 @@ def test_refuse_oversized_source_before_archive():
 def test_refuse_tampered_digest():
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w") as z:
-        z.writestr("manifest.json", json.dumps({
-            "protocol": 1, "mode": "context", "engine": "acp",
-            "project": "demo", "size": 3, "sha256": "0" * 64,
-        }))
+        z.writestr(
+            "manifest.json",
+            json.dumps(
+                {
+                    "protocol": 1,
+                    "mode": "context",
+                    "engine": "acp",
+                    "project": "demo",
+                    "size": 3,
+                    "sha256": "0" * 64,
+                }
+            ),
+        )
         z.writestr("context.json", b"abc")
     with pytest.raises(PackageError, match="HASH_MISMATCH"):
         unpack_context(out.getvalue(), max_archive=4096, max_expanded=4096)

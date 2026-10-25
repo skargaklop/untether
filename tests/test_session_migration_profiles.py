@@ -1,4 +1,5 @@
 """Schema contracts for SSH migration profiles (no real home or network access)."""
+
 from __future__ import annotations
 
 import pytest
@@ -62,7 +63,9 @@ def test_rejects_unsafe_peer_fields(key, value):
 
 def test_unknown_fields_not_silently_ignored():
     with pytest.raises(ValidationError):
-        MigrationPeer.model_validate(peer_data(extra_ssh_options="-oStrictHostKeyChecking=no"))
+        MigrationPeer.model_validate(
+            peer_data(extra_ssh_options="-oStrictHostKeyChecking=no")
+        )
 
 
 def test_bounds_enforced():

@@ -3,6 +3,7 @@
 The receiver is a single restricted endpoint, not an arbitrary remote shell.
 No migration is enabled by this module; it refuses all missing health signals.
 """
+
 from __future__ import annotations
 
 import json
@@ -16,11 +17,21 @@ from typing import Any
 from .settings import MigrationPeer
 
 _REQUIRED_CHECKS = (
-    "installed_receiver", "runtime_ready", "agent_installed",
-    "agent_version_compatible", "adapter_capable", "provider_auth",
-    "provider_connectivity", "staging_writable", "disk_headroom",
-    "inodes_available", "workspace_git_parity", "quiescent",
-    "telegram_enrolled", "distinct_bot", "destination_binding",
+    "installed_receiver",
+    "runtime_ready",
+    "agent_installed",
+    "agent_version_compatible",
+    "adapter_capable",
+    "provider_auth",
+    "provider_connectivity",
+    "staging_writable",
+    "disk_headroom",
+    "inodes_available",
+    "workspace_git_parity",
+    "quiescent",
+    "telegram_enrolled",
+    "distinct_bot",
+    "destination_binding",
     "resume_probe_available",
 )
 
@@ -40,9 +51,13 @@ def _identity(peer: MigrationPeer) -> tuple[Path, Path]:
         or not filename.is_file()
         or not filename.resolve().is_relative_to(folder.resolve())
     ):
-        raise PreflightError("IDENTITY_UNSAFE: select an existing regular key inside identity_dir")
+        raise PreflightError(
+            "IDENTITY_UNSAFE: select an existing regular key inside identity_dir"
+        )
     if known.is_symlink() or not known.is_file():
-        raise PreflightError("KNOWN_HOSTS_MISSING: verify and pin the host key out of band")
+        raise PreflightError(
+            "KNOWN_HOSTS_MISSING: verify and pin the host key out of band"
+        )
     return filename, known
 
 
@@ -65,15 +80,21 @@ def inspect_peer(
     try:
         key_info = run(
             ["ssh-keygen", "-F", host_spec, "-f", str(known), "-l", "-E", "sha256"],
-            capture_output=True, text=True, timeout=timeout_s, check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise PreflightError("HOST_KEY_VERIFY_UNAVAILABLE") from exc
     if key_info.returncode != 0 or not re.search(
-        r"(?<![A-Za-z0-9+/])" + re.escape(peer.host_key_fingerprint) + r"(?![A-Za-z0-9+/])",
+        r"(?<![A-Za-z0-9+/])"
+        + re.escape(peer.host_key_fingerprint)
+        + r"(?![A-Za-z0-9+/])",
         key_info.stdout,
     ):
-        raise PreflightError("HOST_KEY_PIN_MISMATCH: confirm the known_hosts entry out of band")
+        raise PreflightError(
+            "HOST_KEY_PIN_MISMATCH: confirm the known_hosts entry out of band"
     argv = [
         "ssh", "-T", "-F", os.devnull,
         "-p", str(peer.port),
@@ -117,9 +138,17 @@ def inspect_peer(
     if data.get("execution_mode") != peer.execution_mode:
         raise PreflightError("EXECUTION_MODE_MISMATCH: verify installation profile")
     if data.get("destination_binding") != peer.destination_binding:
-        raise PreflightError("TELEGRAM_BINDING_MISMATCH: enrol destination bot/chat/topic")
-    if data.get("os") != "linux" or not isinstance(data.get("arch"), str) or not data["arch"]:
-        raise PreflightError("PLATFORM_MISMATCH: Linux endpoint and architecture required")
+        raise PreflightError(
+            "TELEGRAM_BINDING_MISMATCH: enrol destination bot/chat/topic"
+        )
+    if (
+        data.get("os") != "linux"
+        or not isinstance(data.get("arch"), str)
+        or not data["arch"]
+    ):
+        raise PreflightError(
+            "PLATFORM_MISMATCH: Linux endpoint and architecture required"
+        )
     if data.get("project") != project:
         raise PreflightError("PROJECT_MISMATCH: verify destination project root")
     checks = data.get("checks")
@@ -127,9 +156,13 @@ def inspect_peer(
         raise PreflightError("HEALTH_MISSING: receiver must attest fresh health checks")
     for required in _REQUIRED_CHECKS:
         if checks.get(required) is not True:
-            raise PreflightError(f"HEALTH_FAILED: {required}; inspect receiver prerequisites")
+            raise PreflightError(
+                f"HEALTH_FAILED: {required}; inspect receiver prerequisites"
+            )
     if peer.execution_mode == "container-wrapper":
         for required in ("container_ready", "container_uid", "mount_mapping"):
             if checks.get(required) is not True:
-                raise PreflightError(f"HEALTH_FAILED: {required}; inspect wrapper installation")
+                raise PreflightError(
+                    f"HEALTH_FAILED: {required}; inspect wrapper installation"
+                )
     return data

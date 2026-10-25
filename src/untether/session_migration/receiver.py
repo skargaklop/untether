@@ -1,4 +1,5 @@
 """Bounded receive contract, same for direct Linux and container deployments."""
+
 from __future__ import annotations
 
 import hashlib
@@ -22,8 +23,13 @@ class StagingReceiver:
     """No native overwrite; publish only after a proven restart/resume probe."""
 
     def __init__(
-        self, root: Path, *, max_archive: int, max_expanded: int,
-        min_free_bytes: int, importer_version: str = "1",
+        self,
+        root: Path,
+        *,
+        max_archive: int,
+        max_expanded: int,
+        min_free_bytes: int,
+        importer_version: str = "1",
     ):
         self.root = root
         self.max_archive = max_archive
@@ -34,7 +40,10 @@ class StagingReceiver:
         self.intents = OperationIntentStore(root / "intents")
 
     def receive(
-        self, operation_id: str, archive: bytes, *,
+        self,
+        operation_id: str,
+        archive: bytes,
+        *,
         expected_project: str,
         import_and_probe: Callable[[ContextPackage], str] | None = None,
     ) -> Receipt:
@@ -55,7 +64,8 @@ class StagingReceiver:
             raise ReceiverRefusal("ADAPTER_UNAVAILABLE")
         try:
             package = unpack_context(
-                archive, max_archive=self.max_archive,
+                archive,
+                max_archive=self.max_archive,
                 max_expanded=self.max_expanded,
             )
         except PackageError as exc:
@@ -74,7 +84,10 @@ class StagingReceiver:
         if stage.is_symlink():
             raise ReceiverRefusal("STAGING_SYMLINK")
         with tempfile.NamedTemporaryFile(
-            mode="wb", dir=stage, prefix=".stage-", delete=False,
+            mode="wb",
+            dir=stage,
+            prefix=".stage-",
+            delete=False,
         ) as out:
             staged = Path(out.name)
             os.chmod(staged, 0o600)
@@ -88,7 +101,9 @@ class StagingReceiver:
             if not isinstance(native_id, str) or not native_id:
                 raise ReceiverRefusal("RESUME_PROBE_FAILED")
             return self.receipts.record(
-                Receipt(operation_id, digest, self.importer_version, native_id, "verified")
+                Receipt(
+                    operation_id, digest, self.importer_version, native_id, "verified"
+                )
             )
         finally:
             staged.unlink(missing_ok=True)

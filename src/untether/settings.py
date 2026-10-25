@@ -873,7 +873,9 @@ class UntetherSettings(BaseSettings):
     runners: RunnerSettings = Field(default_factory=RunnerSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     acp: AcpSettings = Field(default_factory=AcpSettings)
-    session_migration: SessionMigrationSettings = Field(default_factory=SessionMigrationSettings)
+    session_migration: SessionMigrationSettings = Field(
+        default_factory=SessionMigrationSettings
+    )
 
     @model_validator(mode="before")
     @classmethod

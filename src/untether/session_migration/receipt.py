@@ -1,4 +1,5 @@
 """Crash-safe durable receipts for imported operations, independent of deployment mode."""
+
 from __future__ import annotations
 
 import json
@@ -33,7 +34,9 @@ class ReceiptStore:
 
     def _path(self, operation_id: str) -> Path:
         try:
-            if str(UUID(operation_id)) != operation_id or not OP_ID.fullmatch(operation_id):
+            if str(UUID(operation_id)) != operation_id or not OP_ID.fullmatch(
+                operation_id
+            ):
                 raise ValueError
         except ValueError as exc:
             raise ReceiptError("OPERATION_ID_INVALID") from exc

@@ -1,4 +1,5 @@
 """Typed, fail-closed SSH migration configuration shared by both execution modes."""
+
 from __future__ import annotations
 
 import re

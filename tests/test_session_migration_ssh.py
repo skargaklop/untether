@@ -1,4 +1,5 @@
 """Isolated fake SSH endpoint tests; NO live SSH connection is made."""
+
 from __future__ import annotations
 
 import json
@@ -11,12 +12,25 @@ from untether.session_migration.ssh_transport import PreflightError, inspect_pee
 
 FINGERPRINT = "SHA256:" + "A" * 43
 CHECKS = (
-    "installed_receiver", "runtime_ready", "agent_installed",
-    "agent_version_compatible", "adapter_capable", "provider_auth",
-    "provider_connectivity", "staging_writable", "disk_headroom",
-    "inodes_available", "workspace_git_parity", "quiescent",
-    "telegram_enrolled", "distinct_bot", "destination_binding",
-    "resume_probe_available", "container_ready", "container_uid", "mount_mapping",
+    "installed_receiver",
+    "runtime_ready",
+    "agent_installed",
+    "agent_version_compatible",
+    "adapter_capable",
+    "provider_auth",
+    "provider_connectivity",
+    "staging_writable",
+    "disk_headroom",
+    "inodes_available",
+    "workspace_git_parity",
+    "quiescent",
+    "telegram_enrolled",
+    "distinct_bot",
+    "destination_binding",
+    "resume_probe_available",
+    "container_ready",
+    "container_uid",
+    "mount_mapping",
 )
 
 
@@ -110,7 +124,12 @@ def test_symlinked_private_identity_refused(tmp_path, monkeypatch):
     key.unlink()
     key.symlink_to(tmp_path / "known_hosts")
     with pytest.raises(PreflightError, match="IDENTITY_UNSAFE"):
-        inspect_peer(p, project="demo", direction="to", run=lambda argv, **_kwargs: subprocess.CompletedProcess(argv, 0, "", ""))
+        inspect_peer(
+            p,
+            project="demo",
+            direction="to",
+            run=lambda argv, **_kwargs: subprocess.CompletedProcess(argv, 0, "", ""),
+        )
 
 
 def test_missing_capability_fails_closed(tmp_path):
@@ -119,8 +138,12 @@ def test_missing_capability_fails_closed(tmp_path):
     checks["provider_auth"] = False
 
     def fake_run(argv, **kwargs):
-        stdout = FINGERPRINT if argv[0] == "ssh-keygen" else json.dumps(
-            response("native", deployment="direct-linux", checks=checks)
+        stdout = (
+            FINGERPRINT
+            if argv[0] == "ssh-keygen"
+            else json.dumps(
+                response("native", deployment="direct-linux", checks=checks)
+            )
         )
         return subprocess.CompletedProcess(argv, 0, stdout, "")
 
@@ -158,4 +181,9 @@ def test_receiver_transport_error_redacts_output(tmp_path):
 def test_unrecognised_project_cannot_reach_ssh(tmp_path):
     p = peer(tmp_path)
     with pytest.raises(PreflightError, match="PROJECT_UNMAPPED"):
-        inspect_peer(p, project="unknown", direction="to", run=lambda argv, **_kwargs: subprocess.CompletedProcess(argv, 0, "", ""))
+        inspect_peer(
+            p,
+            project="unknown",
+            direction="to",
+            run=lambda argv, **_kwargs: subprocess.CompletedProcess(argv, 0, "", ""),
+        )
