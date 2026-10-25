@@ -9,6 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from uuid import UUID
 
+from .intent import OperationIntentStore
 from .package import ContextPackage, PackageError, unpack_context
 from .receipt import Receipt, ReceiptStore
 
@@ -30,6 +31,7 @@ class StagingReceiver:
         self.min_free_bytes = min_free_bytes
         self.importer_version = importer_version
         self.receipts = ReceiptStore(root / "receipts")
+        self.intents = OperationIntentStore(root / "intents")
 
     def receive(
         self, operation_id: str, archive: bytes, *,
@@ -80,6 +82,8 @@ class StagingReceiver:
             out.flush()
             os.fsync(out.fileno())
         try:
+            # Persist ambiguous state BEFORE calling a potentially irreversible adapter.
+            self.intents.begin(operation_id, digest)
             native_id = import_and_probe(package)
             if not isinstance(native_id, str) or not native_id:
                 raise ReceiverRefusal("RESUME_PROBE_FAILED")
