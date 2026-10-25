@@ -1,4 +1,5 @@
 """Conservative source-ownership FSM; no runtime admission integration claimed."""
+
 from __future__ import annotations
 
 from uuid import uuid4
