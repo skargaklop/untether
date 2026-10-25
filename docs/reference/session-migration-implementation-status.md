@@ -6,7 +6,9 @@
 - Pinned known-host SSH identity and fixed `inspect` receiver command with redacted refusal codes and strict health attestations.
 - Bounded opaque ACP context archive (not a native agent archive), exact allowlist and hash validation.
 - Private on-disk staging, write-once verified receipts, idempotent operation lookup, and a durable ambiguous-import intent that refuses retries until reconciliation.
+- A scoped, append-only observed-message journal with fsync and conservative refusal on partial records. It is a building block only; it is not yet integrated into scheduler/session capture and it is not a complete archive.
 - An ACP **context-copy** importer capable of seeding a fresh native ID and independently loading it through an ACP protocol subprocess; exercised only with a disposable persistent fake agent. Tool-isolation attestation is mandatory.
+- Fixed Typer command grouping and Windows-safe symlink fixture verification (without changing the production host-key checks).
 - A guarded operator CLI command `untether migrate inspect <peer> --project <alias>`, which is read-only and refuses disabled/unconfigured peers.
 - Isolated subprocess, archive and Windows-safe fixture tests. No SSH host was contacted and no service or provider was restarted.
 
