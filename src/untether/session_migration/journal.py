@@ -3,6 +3,7 @@
 A journal records only explicitly supplied user/assistant messages. It is NOT
 evidence of full native session persistence and cannot migrate hidden state.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -40,7 +41,9 @@ class ObservedJournal:
         path = self._path(session_id)
         if path.is_symlink():
             raise JournalError("JOURNAL_SYMLINK")
-        payload = json.dumps({"role": role, "text": text}, ensure_ascii=False).encode("utf-8")
+        payload = json.dumps({"role": role, "text": text}, ensure_ascii=False).encode(
+            "utf-8"
+        )
         line = payload + b"\n"
         current = path.stat().st_size if path.exists() else 0
         if current + len(line) > self.max_bytes:
@@ -74,12 +77,16 @@ class ObservedJournal:
                     raise JournalError("JOURNAL_CORRUPT") from exc
                 if not isinstance(item, dict) or set(item) != {"role", "text"}:
                     raise JournalError("JOURNAL_SCHEMA_INVALID")
-                if item["role"] not in ("user", "assistant") or not isinstance(item["text"], str):
+                if item["role"] not in ("user", "assistant") or not isinstance(
+                    item["text"], str
+                ):
                     raise JournalError("JOURNAL_SCHEMA_INVALID")
                 items.append(item)
                 if len(items) > 500:
                     raise JournalError("JOURNAL_MESSAGE_LIMIT")
         if not items:
             raise JournalError("JOURNAL_EMPTY")
-        payload = json.dumps({"messages": items}, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        payload = json.dumps(
+            {"messages": items}, ensure_ascii=False, separators=(",", ":")
+        ).encode("utf-8")
         return payload, hashlib.sha256(payload).hexdigest()
