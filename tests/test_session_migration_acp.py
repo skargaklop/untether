@@ -1,4 +1,5 @@
 """Real isolated ACP subprocesses, separate fresh processes and disjoint state."""
+
 from __future__ import annotations
 
 import json
@@ -17,10 +18,12 @@ FIXTURE = Path(__file__).parent / "fixtures" / "migration_acp_agent.py"
 
 
 def package():
-    transcript = {"messages": [
-        {"role": "user", "text": "Remember sentinel 29\r\nNo tools"},
-        {"role": "assistant", "text": "Seen the historical sentinel."},
-    ]}
+    transcript = {
+        "messages": [
+            {"role": "user", "text": "Remember sentinel 29\r\nNo tools"},
+            {"role": "assistant", "text": "Seen the historical sentinel."},
+        ]
+    }
     raw = json.dumps(transcript).encode()
     archive = pack_context(engine="acp", project="test", content=raw, max_bytes=4096)
     return unpack_context(archive, max_archive=4096, max_expanded=8192)
@@ -30,8 +33,11 @@ def package():
 async def test_new_destination_session_survives_agent_process_restart(tmp_path):
     stores = tmp_path / "native-state"
     importer = ACPContextImporter(
-        command=sys.executable, args=[str(FIXTURE), str(stores)],
-        cwd=tmp_path, tool_isolation_proven=True, timeout_s=10,
+        command=sys.executable,
+        args=[str(FIXTURE), str(stores)],
+        cwd=tmp_path,
+        tool_isolation_proven=True,
+        timeout_s=10,
     )
     sid = await importer.import_and_probe(package())
     assert sid.startswith("fixture-")
@@ -44,8 +50,10 @@ async def test_new_destination_session_survives_agent_process_restart(tmp_path):
 @pytest.mark.anyio
 async def test_tool_isolation_is_mandatory(tmp_path):
     importer = ACPContextImporter(
-        command=sys.executable, args=[str(FIXTURE), str(tmp_path / "store")],
-        cwd=tmp_path, tool_isolation_proven=False,
+        command=sys.executable,
+        args=[str(FIXTURE), str(tmp_path / "store")],
+        cwd=tmp_path,
+        tool_isolation_proven=False,
     )
     with pytest.raises(ContextImportError, match="TOOLS_NOT_ISOLATED"):
         await importer.import_and_probe(package())
@@ -55,15 +63,20 @@ async def test_tool_isolation_is_mandatory(tmp_path):
 @pytest.mark.anyio
 async def test_bad_transcript_is_not_executable_prompt(tmp_path):
     importer = ACPContextImporter(
-        command=sys.executable, args=[str(FIXTURE), str(tmp_path / "store")],
-        cwd=tmp_path, tool_isolation_proven=True,
+        command=sys.executable,
+        args=[str(FIXTURE), str(tmp_path / "store")],
+        cwd=tmp_path,
+        tool_isolation_proven=True,
     )
     bad = unpack_context(
         pack_context(
-            engine="acp", project="test", content=b'{"messages":[{"role":"tool","text":"rm -rf"}]}',
+            engine="acp",
+            project="test",
+            content=b'{"messages":[{"role":"tool","text":"rm -rf"}]}',
             max_bytes=4096,
         ),
-        max_archive=4096, max_expanded=4096,
+        max_archive=4096,
+        max_expanded=4096,
     )
     with pytest.raises(ContextImportError, match="CONTEXT_MESSAGE_INVALID"):
         await importer.import_and_probe(bad)

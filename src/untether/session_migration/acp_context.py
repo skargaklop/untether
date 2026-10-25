@@ -3,6 +3,7 @@
 This is CONTEXT COPY, never native migration. The destination must attest a
 tool-isolated runtime before this adapter is enabled by a receiver.
 """
+
 from __future__ import annotations
 
 import json
@@ -60,8 +61,13 @@ def _seed_prompt(package: ContextPackage) -> str:
 
 class ACPContextImporter:
     def __init__(
-        self, *, command: str, args: Sequence[str], cwd: Path,
-        timeout_s: float = 60, tool_isolation_proven: bool = False,
+        self,
+        *,
+        command: str,
+        args: Sequence[str],
+        cwd: Path,
+        timeout_s: float = 60,
+        tool_isolation_proven: bool = False,
     ):
         if not command or not cwd.is_absolute():
             raise ContextImportError("AGENT_COMMAND_OR_CWD_INVALID")
@@ -73,13 +79,16 @@ class ACPContextImporter:
 
     def _peer(self) -> AcpPeer:
         return AcpPeer(
-            self.command, self.args, cwd=str(self.cwd),
+            self.command,
+            self.args,
+            cwd=str(self.cwd),
             request_timeout_s=self.timeout_s,
         )
 
     async def _initialize(self, peer: AcpPeer):
         init = await peer.request(
-            "initialize", V2Adapter().initialize_params({}),
+            "initialize",
+            V2Adapter().initialize_params({}),
             timeout_s=self.timeout_s,
         )
         adapter = negotiate("auto", init)
@@ -101,14 +110,16 @@ class ACPContextImporter:
                     lambda _params: {"outcome": "cancelled"},
                 )
                 created = await peer.request(
-                    "session/new", {"cwd": str(self.cwd)},
+                    "session/new",
+                    {"cwd": str(self.cwd)},
                     timeout_s=self.timeout_s,
                 )
                 sid = created.get("sessionId")
                 if not isinstance(sid, str) or not sid:
                     raise ContextImportError("NATIVE_ID_MISSING")
                 response = await peer.request(
-                    "session/prompt", adapter.prompt_params(sid, prompt),
+                    "session/prompt",
+                    adapter.prompt_params(sid, prompt),
                     timeout_s=self.timeout_s,
                 )
                 stop = response.get("stopReason")
@@ -126,14 +137,19 @@ class ACPContextImporter:
                         if kind in ("tool_call", "terminal_update"):
                             raise ContextImportError("UNEXPECTED_TOOL_ACTIVITY")
                         if params.get("state") == "idle":
-                            if params.get("stopReason") not in ("end_turn", "end_turn_success"):
+                            if params.get("stopReason") not in (
+                                "end_turn",
+                                "end_turn_success",
+                            ):
                                 raise ContextImportError("CONTEXT_SEED_FAILED")
                             break
             # Independent process: native session ID MUST be reloadable.
             async with self._peer() as fresh:
                 _adapter, method = await self._initialize(fresh)
                 loaded = await fresh.request(
-                    method, {"sessionId": sid}, timeout_s=self.timeout_s,
+                    method,
+                    {"sessionId": sid},
+                    timeout_s=self.timeout_s,
                 )
                 if not isinstance(loaded, dict) or loaded.get("sessionId") != sid:
                     raise ContextImportError("RESTART_RESUME_FAILED")

@@ -97,35 +97,62 @@ def inspect_peer(
             "HOST_KEY_PIN_MISMATCH: confirm the known_hosts entry out of band"
         )
     argv = [
-        "ssh", "-T", "-F", os.devnull,
-        "-p", str(peer.port),
-        "-i", str(identity),
-        "-o", "BatchMode=yes",
-        "-o", "NumberOfPasswordPrompts=0",
-        "-o", "StrictHostKeyChecking=yes",
-        "-o", "UpdateHostKeys=no",
-        "-o", f"UserKnownHostsFile={known}",
-        "-o", "GlobalKnownHostsFile=/dev/null",
-        "-o", "IdentitiesOnly=yes",
-        "-o", "ForwardAgent=no",
-        "-o", "ForwardX11=no",
-        "-o", "ClearAllForwardings=yes",
-        "-o", "PermitLocalCommand=no",
-        "-o", "ControlMaster=no",
-        "-o", f"ConnectTimeout={max(1, int(timeout_s))}",
-        "--", target, f"{peer.receiver_path} inspect",
+        "ssh",
+        "-T",
+        "-F",
+        os.devnull,
+        "-p",
+        str(peer.port),
+        "-i",
+        str(identity),
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "NumberOfPasswordPrompts=0",
+        "-o",
+        "StrictHostKeyChecking=yes",
+        "-o",
+        "UpdateHostKeys=no",
+        "-o",
+        f"UserKnownHostsFile={known}",
+        "-o",
+        "GlobalKnownHostsFile=/dev/null",
+        "-o",
+        "IdentitiesOnly=yes",
+        "-o",
+        "ForwardAgent=no",
+        "-o",
+        "ForwardX11=no",
+        "-o",
+        "ClearAllForwardings=yes",
+        "-o",
+        "PermitLocalCommand=no",
+        "-o",
+        "ControlMaster=no",
+        "-o",
+        f"ConnectTimeout={max(1, int(timeout_s))}",
+        "--",
+        target,
+        f"{peer.receiver_path} inspect",
     ]
     try:
         outcome = run(
-            argv, capture_output=True, text=True, timeout=timeout_s + 5,
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s + 5,
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
-        raise PreflightError("SSH_TIMEOUT: check reachability and authentication") from exc
+        raise PreflightError(
+            "SSH_TIMEOUT: check reachability and authentication"
+        ) from exc
     except OSError as exc:
         raise PreflightError("SSH_UNAVAILABLE: install OpenSSH client locally") from exc
     if outcome.returncode != 0:
-        raise PreflightError("SSH_FAILED: check connectivity, host identity and receiver permissions")
+        raise PreflightError(
+            "SSH_FAILED: check connectivity, host identity and receiver permissions"
+        )
     if len(outcome.stdout) > 65536:
         raise PreflightError("PROTOCOL_OVERSIZE")
     try:

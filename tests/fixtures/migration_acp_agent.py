@@ -1,4 +1,5 @@
 """Persistent fake ACP agent for independent-process restart tests (no real provider)."""
+
 from __future__ import annotations
 
 import json
@@ -36,11 +37,19 @@ for line in sys.stdin:
         sid = params["sessionId"]
         path = root / (sid + ".json")
         if not path.is_file():
-            sys.stdout.write(json.dumps({
-                "jsonrpc": "2.0", "id": rid, "error": {
-                    "code": -32000, "message": "no persisted session",
-                },
-            }) + "\n")
+            sys.stdout.write(
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": rid,
+                        "error": {
+                            "code": -32000,
+                            "message": "no persisted session",
+                        },
+                    }
+                )
+                + "\n"
+            )
             sys.stdout.flush()
             continue
         with (root / "resume.log").open("a", encoding="utf-8") as out:
