@@ -134,7 +134,7 @@ def test_symlinked_private_identity_refused(tmp_path, monkeypatch):
 
 def test_missing_capability_fails_closed(tmp_path):
     p = peer(tmp_path)
-    checks = {k: True for k in CHECKS}
+    checks = dict.fromkeys(CHECKS, True)
     checks["provider_auth"] = False
 
     def fake_run(argv, **kwargs):
