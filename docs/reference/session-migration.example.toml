@@ -1,0 +1,35 @@
+# Proposed schema: implement typed validation before merging into live untether.toml.
+# No credentials/key contents belong here. Copy and populate locally after support exists.
+[session_migration]
+enabled = false
+connect_timeout_s = 10
+probe_timeout_s = 30
+drain_timeout_s = 15
+transfer_timeout_s = 300
+import_timeout_s = 180
+reconcile_timeout_s = 30
+max_retries = 2
+retry_backoff_s = 2
+health_ttl_s = 15
+max_archive_bytes = 67108864
+max_expanded_bytes = 134217728
+min_free_bytes = 536870912
+staging_ttl_s = 86400
+
+[session_migration.peers.vps]
+host = "REQUIRED_LOCAL_VALUE"
+port = 22
+user = "REQUIRED_LOCAL_VALUE"
+identity_dir = "~/.ssh"
+identity_file = "REQUIRED_SELECTED_KEY_FILENAME"
+known_hosts_file = "~/.ssh/known_hosts"
+host_key_fingerprint = "REQUIRED_OUT_OF_BAND_VERIFIED_SHA256"
+# Fixed operator-installed wrapper, not a chat-provided shell command.
+receiver_path = "/usr/local/bin/untether-migration-receiver"
+execution_mode = "container-wrapper"
+expected_endpoint_id = "REQUIRED_ENROLLED_ENDPOINT_ID"
+# Wrapper resolves fixed container/UID/mount mappings; never expose generic docker exec.
+projects = { projects = "/srv" }
+# Destination must enrol its own bot/chat/topic before activation.
+destination_binding = "REQUIRED_PRE_ENROLLED_BINDING_ID"
+# Agent credentials remain in destination secret store. No private keys/tokens copied.
