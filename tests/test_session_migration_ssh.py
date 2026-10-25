@@ -104,7 +104,7 @@ def test_changed_host_fingerprint_refused_before_ssh(tmp_path):
     assert len(calls) == 1
 
 
-def test_symlinked_private_identity_refused(tmp_path):
+def test_symlinked_private_identity_refused(tmp_path, monkeypatch):
     p = peer(tmp_path)
     key = tmp_path / "keys" / "selected"
     key.unlink()
