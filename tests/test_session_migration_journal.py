@@ -1,4 +1,5 @@
 """Only fixture-scoped journals; no home-directory scans."""
+
 from __future__ import annotations
 
 import json
