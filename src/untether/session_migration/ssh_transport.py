@@ -116,7 +116,7 @@ def inspect_peer(
         "-o",
         f"UserKnownHostsFile={known}",
         "-o",
-        "GlobalKnownHostsFile=/dev/null",
+        "GlobalKnownHostsFile=none",
         "-o",
         "IdentitiesOnly=yes",
         "-o",
