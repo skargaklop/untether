@@ -72,3 +72,21 @@ def _clear_cancel_dedup():
     _RECENT_CANCELS.clear()
     yield
     _RECENT_CANCELS.clear()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_session_migration_test_config(request, tmp_path, monkeypatch):
+    """Migration tests must never read or rewrite the developer's live config.
+
+    This targets the migration suite only; tests intentionally exercising
+    user-home semantics elsewhere retain their own test-specific setup.
+    """
+    if not request.node.path.name.startswith("test_session_migration_"):
+        return
+    private_home = tmp_path / "private-home"
+    private_home.mkdir()
+    private_config = tmp_path / "missing-untether-config.toml"
+    monkeypatch.setenv("HOME", str(private_home))
+    monkeypatch.setenv("USERPROFILE", str(private_home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(private_home / ".config"))
+    monkeypatch.setenv("UNTETHER_CONFIG_PATH", str(private_config))
