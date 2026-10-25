@@ -17,6 +17,10 @@ def build_migrate_app() -> typer.Typer:
         help="Inspect SSH session-migration prerequisites (no transfer).",
     )
 
+    @app.callback()
+    def migrate_group() -> None:
+        """Keep 'inspect' as an explicit subcommand, even if it is the only one."""
+
     @app.command("inspect")
     def inspect(
         peer: str = typer.Argument(..., help="Configured peer name"),
