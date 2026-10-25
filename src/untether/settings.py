@@ -28,6 +28,7 @@ from .config import (
 )
 from .config_migrations import migrate_config_file
 from .logging import get_logger
+from .session_migration.settings import SessionMigrationSettings
 
 logger = get_logger(__name__)
 
@@ -872,6 +873,7 @@ class UntetherSettings(BaseSettings):
     runners: RunnerSettings = Field(default_factory=RunnerSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     acp: AcpSettings = Field(default_factory=AcpSettings)
+    session_migration: SessionMigrationSettings = Field(default_factory=SessionMigrationSettings)
 
     @model_validator(mode="before")
     @classmethod
