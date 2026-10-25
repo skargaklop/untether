@@ -95,6 +95,7 @@ def inspect_peer(
     ):
         raise PreflightError(
             "HOST_KEY_PIN_MISMATCH: confirm the known_hosts entry out of band"
+        )
     argv = [
         "ssh", "-T", "-F", os.devnull,
         "-p", str(peer.port),
