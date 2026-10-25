@@ -121,8 +121,15 @@ def test_changed_host_fingerprint_refused_before_ssh(tmp_path):
 def test_symlinked_private_identity_refused(tmp_path, monkeypatch):
     p = peer(tmp_path)
     key = tmp_path / "keys" / "selected"
-    key.unlink()
-    key.symlink_to(tmp_path / "known_hosts")
+    # Simulate symlink metadata without requiring Windows symlink privileges.
+    # The production identity check must still reject symlinks.
+    path_type = type(key)
+    original = path_type.is_symlink
+    monkeypatch.setattr(
+        path_type,
+        "is_symlink",
+        lambda path: path == key or original(path),
+    )
     with pytest.raises(PreflightError, match="IDENTITY_UNSAFE"):
         inspect_peer(
             p,
