@@ -136,8 +136,15 @@ def receiver_request(
         raise PreflightError("RECEIVER_OPERATION_MISMATCH")
     if reply.get("endpoint_id") != peer.expected_endpoint_id:
         raise PreflightError("RECEIVER_ENDPOINT_MISMATCH")
-    if reply.get("package_sha256") != digest:
+    receipt_hash = reply.get("package_sha256")
+    if action == "receive" and receipt_hash != digest:
         raise PreflightError("RECEIVER_PACKAGE_MISMATCH")
+    if action == "status" and (
+        not isinstance(receipt_hash, str)
+        or len(receipt_hash) != 64
+        or any(c not in "0123456789abcdef" for c in receipt_hash)
+    ):
+        raise PreflightError("RECEIVER_RECEIPT_HASH_INVALID")
     if action == "receive" and (
         reply.get("status") != "verified"
         or not isinstance(reply.get("native_id"), str)
