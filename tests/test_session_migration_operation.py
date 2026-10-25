@@ -50,3 +50,14 @@ def test_path_traversal_refused(tmp_path):
     store = OperationStore(tmp_path)
     with pytest.raises(OperationError, match="OPERATION_ID_INVALID"):
         store.create(MigrationOperation("../../fake", "src", "demo", "native"))
+
+
+def test_orphaned_lock_requires_manual_reconciliation(tmp_path):
+    store = OperationStore(tmp_path)
+    op = str(uuid4())
+    store.create(MigrationOperation(op, "source", "demo", "native"))
+    (tmp_path / (op + ".lock")).write_bytes(b"interrupted transaction")
+    with pytest.raises(OperationError, match="NEEDS_RECONCILE"):
+        store.transition(op, "uploaded")
+    assert store.read(op).state == "prepared"
+    assert store.source_blocked(op)
