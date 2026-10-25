@@ -50,7 +50,7 @@ def response(mode, *, deployment, checks=None):
         "deployment": deployment,
         "os": "linux",
         "arch": "x86_64",
-        "checks": {key: True for key in CHECKS} if checks is None else checks,
+        "checks": dict.fromkeys(CHECKS, True) if checks is None else checks,
         "destination_binding": "enrolled-one",
         "project": "demo",
     }
@@ -88,7 +88,7 @@ def test_same_ssh_protocol_both_directions_and_deployment_labels(
     ssh_argv = calls[-1][0]
     assert "-T" in ssh_argv
     assert any("StrictHostKeyChecking=yes" in arg for arg in ssh_argv)
-    assert "inspect" == ssh_argv[-1].split()[-1]
+    assert ssh_argv[-1].split()[-1] == "inspect"
 
 
 def test_changed_host_fingerprint_refused_before_ssh(tmp_path):
@@ -110,7 +110,7 @@ def test_symlinked_private_identity_refused(tmp_path, monkeypatch):
     key.unlink()
     key.symlink_to(tmp_path / "known_hosts")
     with pytest.raises(PreflightError, match="IDENTITY_UNSAFE"):
-        inspect_peer(p, project="demo", direction="to", run=lambda *_a, **_k: None)
+        inspect_peer(p, project="demo", direction="to", run=lambda argv, **_kwargs: subprocess.CompletedProcess(argv, 0, "", ""))
 
 
 def test_missing_capability_fails_closed(tmp_path):
@@ -158,4 +158,4 @@ def test_receiver_transport_error_redacts_output(tmp_path):
 def test_unrecognised_project_cannot_reach_ssh(tmp_path):
     p = peer(tmp_path)
     with pytest.raises(PreflightError, match="PROJECT_UNMAPPED"):
-        inspect_peer(p, project="unknown", direction="to", run=lambda *_a, **_k: None)
+        inspect_peer(p, project="unknown", direction="to", run=lambda argv, **_kwargs: subprocess.CompletedProcess(argv, 0, "", ""))
