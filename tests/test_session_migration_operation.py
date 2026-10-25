@@ -26,7 +26,9 @@ def test_native_move_requires_receipt_and_enrolled_binding(tmp_path):
     with pytest.raises(OperationError, match="DESTINATION_ENROLMENT_REQUIRED"):
         store.transition(op, "activated")
     store.transition(op, "activated", destination_binding="enrolled")
-    assert store.read(op).state == "activated"
+    current = store.read(op)
+    assert current is not None
+    assert current.state == "activated"
     assert store.source_blocked(op)
 
 
@@ -60,5 +62,7 @@ def test_orphaned_lock_requires_manual_reconciliation(tmp_path):
     (tmp_path / (op + ".lock")).write_bytes(b"interrupted transaction")
     with pytest.raises(OperationError, match="NEEDS_RECONCILE"):
         store.transition(op, "uploaded")
-    assert store.read(op).state == "prepared"
+    current = store.read(op)
+    assert current is not None
+    assert current.state == "prepared"
     assert store.source_blocked(op)
