@@ -5,6 +5,7 @@ import json
 import os
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -41,7 +42,7 @@ def subprocess_endpoints(tmp_path, monkeypatch):
             " print(os.environ['MIGRATION_FAKE_RESPONSE'])\n"
         )
         script.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
-    monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
+    # Windows does not invoke extensionless shebang scripts through subprocess.\n    # Execute each fake under the current Python interpreter on all platforms.
     monkeypatch.setenv("MIGRATION_FAKE_PIN", PIN)
     monkeypatch.setenv("MIGRATION_ARGV_LOG", str(tmp_path / "argv.jsonl"))
     keys = tmp_path / "keys"
@@ -58,7 +59,7 @@ def subprocess_endpoints(tmp_path, monkeypatch):
         destination_binding="pre-enrolled",
         projects={"project": "/srv/project"},
     )
-    return peer, tmp_path / "argv.jsonl"
+    def run_fake(argv, **kwargs):\n        executable = bin_dir / argv[0]\n        return subprocess.run([sys.executable, str(executable), *argv[1:]], **kwargs)\n\n    return peer, tmp_path / "argv.jsonl", run_fake
 
 
 @pytest.mark.parametrize(
@@ -70,7 +71,7 @@ def subprocess_endpoints(tmp_path, monkeypatch):
 def test_real_subprocess_fixture(
     subprocess_endpoints, monkeypatch, execution_mode, deployment, direction
 ):
-    peer, log = subprocess_endpoints
+    peer, log, run_fake = subprocess_endpoints
     peer = peer.model_copy(update={"execution_mode": execution_mode})
     reply = {
         "protocol": 1, "os": "linux", "arch": "x86_64",
@@ -79,7 +80,7 @@ def test_real_subprocess_fixture(
         "deployment": deployment, "checks": dict.fromkeys(BASE_CHECKS, True),
     }
     monkeypatch.setenv("MIGRATION_FAKE_RESPONSE", json.dumps(reply))
-    result = inspect_peer(peer, project="project", direction=direction, run=subprocess.run)
+    result = inspect_peer(peer, project="project", direction=direction, run=run_fake)
     assert result["deployment"] == deployment
     calls = [json.loads(s) for s in log.read_text().splitlines()]
     assert [c[0] for c in calls] == ["ssh-keygen", "ssh"]
@@ -91,7 +92,7 @@ def test_real_subprocess_fixture(
 def test_receiver_refuses_unauthenticated_provider(
     subprocess_endpoints, monkeypatch
 ):
-    peer, _ = subprocess_endpoints
+    peer, _, run_fake = subprocess_endpoints
     checks = dict.fromkeys(BASE_CHECKS, True)
     checks["provider_auth"] = False
     monkeypatch.setenv("MIGRATION_FAKE_RESPONSE", json.dumps({
@@ -100,4 +101,4 @@ def test_receiver_refuses_unauthenticated_provider(
         "project": "project", "execution_mode": "native", "checks": checks,
     }))
     with pytest.raises(PreflightError, match="provider_auth"):
-        inspect_peer(peer, project="project", direction="to", run=subprocess.run)
+        inspect_peer(peer, project="project", direction="to", run=run_fake)
