@@ -1,4 +1,5 @@
 """Engine persistence adapters must prove exact restore; ACP alone is insufficient."""
+
 from __future__ import annotations
 
 import hashlib
@@ -35,7 +36,9 @@ class PersistenceAdapter(Protocol):
 _ADAPTERS: dict[str, Callable[[], PersistenceAdapter]] = {}
 
 
-def register_persistence_adapter(engine: str, factory: Callable[[], PersistenceAdapter]) -> None:
+def register_persistence_adapter(
+    engine: str, factory: Callable[[], PersistenceAdapter]
+) -> None:
     if not engine or engine in _ADAPTERS:
         raise CapabilityUnavailable("DUPLICATE_OR_INVALID_ENGINE")
     _ADAPTERS[engine] = factory
@@ -46,14 +49,17 @@ def require_persistence_adapter(engine: str) -> PersistenceAdapter:
     if factory is None:
         # Installed metadata, not source-tree guesses, is authoritative.
         matches = [
-            ep for ep in entry_points(group="untether.session_persistence")
+            ep
+            for ep in entry_points(group="untether.session_persistence")
             if ep.name == engine
         ]
         if len(matches) == 1:
             try:
                 factory = matches[0].load()
             except Exception as exc:
-                raise CapabilityUnavailable("ENGINE_ADAPTER_PLUGIN_LOAD_FAILED") from exc
+                raise CapabilityUnavailable(
+                    "ENGINE_ADAPTER_PLUGIN_LOAD_FAILED"
+                ) from exc
     if factory is None:
         raise CapabilityUnavailable(
             "ENGINE_NATIVE_PERSISTENCE_UNAVAILABLE: ACP session/load does not import state"
@@ -69,12 +75,14 @@ def assert_exact_restore(archive: NativeArchive, proof: RestoreProof) -> str:
         name: hashlib.sha256(content).hexdigest()
         for name, content in archive.records.items()
     }
-    if (proof.logical_id != archive.logical_id
+    if (
+        proof.logical_id != archive.logical_id
         or proof.lineage != archive.lineage
         or proof.generation != archive.generation
         or proof.record_hashes != hashes
         or not proof.native_id
         or not proof.restarted
-        or not proof.resumed):
+        or not proof.resumed
+    ):
         raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
     return proof.native_id
