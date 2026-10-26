@@ -3,6 +3,7 @@
 Never installs packages, opens a public listener, executes a shell or scans home.
 Missing provider, Telegram, quiescence, or container attestations are FALSE.
 """
+
 from __future__ import annotations
 
 import os
@@ -47,6 +48,7 @@ class ProbeCallbacks:
 
 def probe_endpoint(spec: ProbeSpec, hooks: ProbeCallbacks) -> dict[str, bool]:
     """Evaluate every check fresh, retaining only boolean diagnostics."""
+
     def check(callback: Callable[[], bool] | None) -> bool:
         if callback is None:
             return False
@@ -61,9 +63,15 @@ def probe_endpoint(spec: ProbeSpec, hooks: ProbeCallbacks) -> dict[str, bool]:
         try:
             outcome = subprocess.run(
                 ["git", "-C", str(spec.project), "rev-parse", "--verify", "HEAD"],
-                capture_output=True, text=True, timeout=5, check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
             )
-            return outcome.returncode == 0 and outcome.stdout.strip() == spec.expected_git_head
+            return (
+                outcome.returncode == 0
+                and outcome.stdout.strip() == spec.expected_git_head
+            )
         except (OSError, subprocess.TimeoutExpired):
             return False
 
@@ -129,9 +137,11 @@ def probe_endpoint(spec: ProbeSpec, hooks: ProbeCallbacks) -> dict[str, bool]:
         "resume_probe_available": check(hooks.resume_probe_available),
     }
     if spec.execution_mode == "container-wrapper":
-        result.update({
-            "container_ready": check(hooks.container_ready),
-            "container_uid": check(hooks.container_uid),
-            "mount_mapping": check(hooks.mount_mapping),
-        })
+        result.update(
+            {
+                "container_ready": check(hooks.container_ready),
+                "container_uid": check(hooks.container_uid),
+                "mount_mapping": check(hooks.mount_mapping),
+            }
+        )
     return result
