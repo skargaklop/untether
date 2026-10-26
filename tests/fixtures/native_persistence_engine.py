@@ -1,4 +1,5 @@
 """Disposable engine adapter script: each invocation is a fresh process."""
+
 import base64
 import hashlib
 import json
@@ -19,14 +20,17 @@ elif req["action"] == "import_and_restart_verify":
         sys.exit(3)
     target.write_text(json.dumps({"engine": req["engine"], **p}))
     out = {
-        "engine": req["engine"], "logical_id": p["logical_id"],
-        "native_id": p["native_id"], "generation": p["generation"],
+        "engine": req["engine"],
+        "logical_id": p["logical_id"],
+        "native_id": p["native_id"],
+        "generation": p["generation"],
         "lineage": p["lineage"],
         "record_hashes": {
             k: hashlib.sha256(base64.b64decode(v)).hexdigest()
             for k, v in p["records"].items()
         },
-        "restarted": True, "resumed": True,
+        "restarted": True,
+        "resumed": True,
     }
 else:
     sys.exit(4)
