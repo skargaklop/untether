@@ -3,6 +3,7 @@
 Enrollment is scoped to the destination chat/topic; it cannot transfer
 messages or silently bind a different Telegram bot to an existing private chat.
 """
+
 from __future__ import annotations
 
 import json
@@ -45,20 +46,35 @@ class EnrollmentStore:
         return enrollment
 
     def enroll(
-        self, *,
-        bot_id: int, chat_id: int, topic_id: int | None,
-        peer_name: str, endpoint_id: str, confirmed: bool,
+        self,
+        *,
+        bot_id: int,
+        chat_id: int,
+        topic_id: int | None,
+        peer_name: str,
+        endpoint_id: str,
+        confirmed: bool,
         source_bot_id: int,
     ) -> DestinationEnrollment:
         if (
-            not confirmed or bot_id <= 0 or not chat_id or bot_id == source_bot_id
-            or topic_id is not None and topic_id <= 0
-            or not peer_name or not endpoint_id
+            not confirmed
+            or bot_id <= 0
+            or not chat_id
+            or bot_id == source_bot_id
+            or topic_id is not None
+            and topic_id <= 0
+            or not peer_name
+            or not endpoint_id
         ):
             raise EnrollmentError("ENROLLMENT_INVALID_OR_SAME_BOT")
         previous = self.read()
         desired = DestinationEnrollment(
-            bot_id, chat_id, topic_id, peer_name, endpoint_id, True,
+            bot_id,
+            chat_id,
+            topic_id,
+            peer_name,
+            endpoint_id,
+            True,
         )
         if previous is not None and previous != desired:
             raise EnrollmentError("DESTINATION_ALREADY_ENROLLED")
@@ -68,8 +84,11 @@ class EnrollmentStore:
             raise EnrollmentError("ENROLLMENT_PARENT_SYMLINK")
         self.file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(
-            dir=self.file.parent, prefix=".enroll-",
-            mode="w", encoding="utf-8", delete=False,
+            dir=self.file.parent,
+            prefix=".enroll-",
+            mode="w",
+            encoding="utf-8",
+            delete=False,
         ) as stream:
             tmp = Path(stream.name)
             os.chmod(tmp, 0o600)
@@ -85,13 +104,21 @@ class EnrollmentStore:
         return desired
 
     def require_binding(
-        self, *, bot_id: int, chat_id: int, topic_id: int | None,
-        peer_name: str, endpoint_id: str,
+        self,
+        *,
+        bot_id: int,
+        chat_id: int,
+        topic_id: int | None,
+        peer_name: str,
+        endpoint_id: str,
     ) -> DestinationEnrollment:
         current = self.read()
         if current is None or (
-            current.bot_id, current.chat_id, current.topic_id,
-            current.peer_name, current.endpoint_id,
+            current.bot_id,
+            current.chat_id,
+            current.topic_id,
+            current.peer_name,
+            current.endpoint_id,
         ) != (bot_id, chat_id, topic_id, peer_name, endpoint_id):
             raise EnrollmentError("DESTINATION_NOT_ENROLLED")
         return current
