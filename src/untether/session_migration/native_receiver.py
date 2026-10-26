@@ -1,4 +1,5 @@
 """Fail-closed receiver of exact native snapshots (no ACP transcript seeding)."""
+
 from __future__ import annotations
 
 import hashlib
@@ -16,7 +17,11 @@ class NativeReceiverError(RuntimeError):
 
 class NativeReceiver:
     def __init__(
-        self, root: Path, *, max_archive: int, max_expanded: int,
+        self,
+        root: Path,
+        *,
+        max_archive: int,
+        max_expanded: int,
         importer_version: str = "native-v1",
     ):
         self.root = root
@@ -39,7 +44,8 @@ class NativeReceiver:
             return previous
         try:
             archive = decode_native(
-                content, max_archive=self.max_archive,
+                content,
+                max_archive=self.max_archive,
                 max_expanded=self.max_expanded,
             )
         except FidelityError as exc:
