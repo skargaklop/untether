@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from importlib.metadata import entry_points
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -42,6 +43,17 @@ def register_persistence_adapter(engine: str, factory: Callable[[], PersistenceA
 
 def require_persistence_adapter(engine: str) -> PersistenceAdapter:
     factory = _ADAPTERS.get(engine)
+    if factory is None:
+        # Installed metadata, not source-tree guesses, is authoritative.
+        matches = [
+            ep for ep in entry_points(group="untether.session_persistence")
+            if ep.name == engine
+        ]
+        if len(matches) == 1:
+            try:
+                factory = matches[0].load()
+            except Exception as exc:
+                raise CapabilityUnavailable("ENGINE_ADAPTER_PLUGIN_LOAD_FAILED") from exc
     if factory is None:
         raise CapabilityUnavailable(
             "ENGINE_NATIVE_PERSISTENCE_UNAVAILABLE: ACP session/load does not import state"
