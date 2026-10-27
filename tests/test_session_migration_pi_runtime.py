@@ -10,7 +10,8 @@ historical user text through ``get_state`` / ``get_messages``.
 No network, no API keys, no model calls: the child is started offline
 (``--offline``, ``PI_OFFLINE=1``) with a temp ``PI_CODING_AGENT_DIR`` and
 temp ``HOME``/``USERPROFILE``, extensions/skills/themes/templates/context
-discovery disabled. The coldload is the adapter's restart probe
+discovery disabled. The roundtrip is file-adapter evidence only, not SSH or
+coordinator proof. The coldload is the adapter's restart probe
 (``restart_runner``), bounded to a hard kill/reap budget; a concrete runtime
 failure fails the test with the child's stderr — it is never skipped while
 the installed Pi command exists.
@@ -18,7 +19,6 @@ the installed Pi command exists.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import queue
@@ -32,7 +32,6 @@ import pytest
 from untether.session_migration.file_bundle_adapter import (
     FileBundlePersistenceAdapter,
 )
-from untether.session_migration.native_adapter import NativeArchive
 from untether.session_migration.settings import EnginePersistenceProfile
 
 PI_CMD = Path(
@@ -214,7 +213,7 @@ def test_pi_rpc_coldload_after_file_bundle_restore(tmp_path: Path, monkeypatch) 
 
     # -- source store: real v3 fixture, exported through the declared layout --
     src_dir = tmp_path / "src-sessions"
-    src_dir.mkdir()
+    src_dir.mkdir(mode=0o700)
     data = _write_v3_session(src_dir, native_id, tmp_path)
 
     # export_exact refuses without an explicit gate root: configure one
@@ -251,7 +250,7 @@ def test_pi_rpc_coldload_after_file_bundle_restore(tmp_path: Path, monkeypatch) 
     # -- restore into a second disposable store; the adapter's own restart
     #    probe IS the bounded installed-Pi RPC coldload --
     child_dir = tmp_path / "child-sessions"
-    child_dir.mkdir()
+    child_dir.mkdir(mode=0o700)
 
     def restart_runner(argv: tuple[str, ...]) -> None:
         pi_cmd = Path(argv[0])
@@ -273,9 +272,14 @@ def test_pi_rpc_coldload_after_file_bundle_restore(tmp_path: Path, monkeypatch) 
         assert _NATIVE_USER_TEXT in user_texts, (
             f"historical user text missing from get_messages: {user_texts!r}"
         )
-        assert state.get("messageCount", 0) >= 2, (
-            f"messageCount {state.get('messageCount')} shows cold load was empty"
-        )
+        assert messages == [
+            entry["message"]
+            for line in data.splitlines()
+            if (entry := json.loads(line)).get("type") == "message"
+        ]
+        assert state.get("messageCount") == 2
+        expected_store = Path(rest[rest.index("--session-dir") + 1])
+        assert Path(session_file) == expected_store / f"{native_id}.jsonl"
 
     importer = FileBundlePersistenceAdapter(
         engine="pi",
@@ -283,18 +287,40 @@ def test_pi_rpc_coldload_after_file_bundle_restore(tmp_path: Path, monkeypatch) 
         sessions_dir=child_dir,
         restart_runner=restart_runner,
     )
-    proof = importer.import_exact(
-        NativeArchive(
-            engine="pi",
-            logical_id=native_id,
-            native_id=native_id,
-            generation=0,
-            lineage="file-bundle:pi:test",
-            records={"session.jsonl": data},
-            digest=hashlib.sha256(data).hexdigest(),
-        )
-    )
+    proof = importer.import_exact(archive)
     assert proof.native_id == native_id
     assert proof.restarted is True and proof.resumed is True
     # restored record byte-exact on disk, untouched by the coldload probe
     assert (child_dir / f"{native_id}.jsonl").read_bytes() == data
+
+    # Two distinct records share A and B; return to a fresh A, never overwrite A.
+    # This proves file-adapter roundtrip only, not SSH/coordinator migration.
+    second_id = str(uuid.uuid4())
+    second_data = _write_v3_session(src_dir, second_id, tmp_path)
+    originals = {native_id: data, second_id: second_data}
+    return_dir = tmp_path / "a-return-sessions"
+    return_dir.mkdir(mode=0o700)
+    returner = FileBundlePersistenceAdapter(
+        engine="pi",
+        profile=profile,
+        sessions_dir=return_dir,
+        restart_runner=restart_runner,
+    )
+    for native_id, data in originals.items():
+        source_archive = exporter.export_exact(native_id)
+        assert source_archive.records == {"session.jsonl": data}
+        if native_id == second_id:
+            proof = importer.import_exact(source_archive)
+            assert proof.native_id == native_id
+            assert proof.restarted is True and proof.resumed is True
+        at_b = importer.export_exact(native_id)
+        assert at_b == source_archive
+        proof = returner.import_exact(at_b)
+        assert proof.native_id == native_id
+        assert proof.restarted is True and proof.resumed is True
+        assert returner.export_exact(native_id) == source_archive
+        for store in (src_dir, child_dir, return_dir):
+            assert (store / f"{native_id}.jsonl").read_bytes() == data
+    assert set(return_dir.glob("*.jsonl")) == {
+        return_dir / f"{session_id}.jsonl" for session_id in originals
+    }
