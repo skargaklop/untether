@@ -75,18 +75,26 @@ def _clear_cancel_dedup():
 
 
 @pytest.fixture(autouse=True)
-def _isolate_session_migration_test_config(request, tmp_path, monkeypatch):
-    """Migration tests must never read or rewrite the developer's live config.
+def _isolate_user_config(tmp_path_factory, monkeypatch):
+    """Keep each test off live config without overriding explicit test paths."""
+    import importlib
 
-    This targets the migration suite only; tests intentionally exercising
-    user-home semantics elsewhere retain their own test-specific setup.
-    """
-    if not request.node.path.name.startswith("test_session_migration_"):
-        return
-    private_home = tmp_path / "private-home"
-    private_home.mkdir()
-    private_config = tmp_path / "missing-untether-config.toml"
+    private_home = tmp_path_factory.mktemp("isolated-home")
+    private_config = private_home / ".untether" / "untether.toml"
     monkeypatch.setenv("HOME", str(private_home))
     monkeypatch.setenv("USERPROFILE", str(private_home))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(private_home / ".config"))
-    monkeypatch.setenv("UNTETHER_CONFIG_PATH", str(private_config))
+    monkeypatch.delenv("UNTETHER_CONFIG_PATH", raising=False)
+    # Imported aliases are frozen before fixtures run; patch them as well.
+    for name in (
+        "untether.config",
+        "untether.settings",
+        "untether.telegram.onboarding",
+        "untether.cli",
+        "untether.cli.config",
+        "untether.api",
+        "tests.test_config_path_env",
+    ):
+        module = importlib.import_module(name)
+        if hasattr(module, "HOME_CONFIG_PATH"):
+            monkeypatch.setattr(module, "HOME_CONFIG_PATH", private_config)
