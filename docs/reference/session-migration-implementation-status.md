@@ -100,7 +100,7 @@ access, or modification of local unpublished work has occurred.
 Run from the review checkout with the Untether venv interpreter, `PYTHONPATH=src`, `PYTHONUTF8=1`. Final local checkpoints (not live-deployment or full product approval):
 
 ```sh
-python -m pytest tests/test_session_migration_*.py tests/test_acp_migration_gate.py -q --no-cov   # 463 passed, 10 skipped
+python -m pytest tests/test_session_migration_*.py tests/test_acp_migration_gate.py -q --no-cov   # 464 passed, 10 skipped
 python -m pytest tests -q --no-cov --tb=short                                                    # 4,260 passed, 47 skipped, 9 warnings
 python -m ruff check src tests                                                                  # All checks passed!
 python -m ruff format --check src tests                                                         # 425 files already formatted
