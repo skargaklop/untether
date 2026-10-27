@@ -13,6 +13,7 @@ import json
 import os
 import re
 import stat
+from dataclasses import dataclass
 from pathlib import Path
 
 from .native_archive import FidelityError
@@ -104,7 +105,13 @@ def _journal(data: bytes) -> tuple[str, set[str]]:
         raise FidelityError("OMP_JOURNAL_INVALID") from exc
 
 
-def collect_omp_records(
+@dataclass(frozen=True)
+class OmpCollectedBundle:
+    journal_name: str
+    records: dict[str, bytes]
+
+
+def collect_omp_bundle(
     *,
     sessions_dir: Path,
     blobs_dir: Path,
@@ -112,8 +119,8 @@ def collect_omp_records(
     max_expanded: int,
     max_file_bytes: int,
     max_files: int = 10_000,
-) -> dict[str, bytes]:
-    """Collect exact journal, recursive artifacts and verified referenced blobs.
+) -> OmpCollectedBundle:
+    """Collect the source journal name, exact journal, recursive artifacts and verified referenced blobs.
 
     Limits also bound discovery (files, directories and bytes read), not just
     the returned mapping. Unrelated malformed journals fail closed. Repeated
@@ -200,6 +207,26 @@ def collect_omp_records(
             if hashlib.sha256(data).hexdigest() != digest:
                 raise FidelityError("OMP_BLOB_CORRUPT")
             records["blobs/" + digest] = data
-        return records
+        return OmpCollectedBundle(journal_name=root.name, records=records)
     except OSError as exc:
         raise FidelityError("OMP_FILESYSTEM_INVALID") from exc
+
+
+def collect_omp_records(
+    *,
+    sessions_dir: Path,
+    blobs_dir: Path,
+    native_id: str,
+    max_expanded: int,
+    max_file_bytes: int,
+    max_files: int = 10_000,
+) -> dict[str, bytes]:
+    """Collect exact records with the same discovery and byte limits."""
+    return collect_omp_bundle(
+        sessions_dir=sessions_dir,
+        blobs_dir=blobs_dir,
+        native_id=native_id,
+        max_expanded=max_expanded,
+        max_file_bytes=max_file_bytes,
+        max_files=max_files,
+    ).records

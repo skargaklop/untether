@@ -9,7 +9,10 @@ from pathlib import Path
 import pytest
 
 from untether.session_migration.native_archive import FidelityError
-from untether.session_migration.omp_bundle import collect_omp_records
+from untether.session_migration.omp_bundle import (
+    collect_omp_bundle,
+    collect_omp_records,
+)
 
 
 def journal(identity: str, *entries: dict) -> bytes:
@@ -38,6 +41,66 @@ def collect(roots, **limits):
         native_id="wanted",
         **({"max_expanded": 100_000, "max_file_bytes": 10_000} | limits),
     )
+
+
+def test_bundle_preserves_source_filename_and_records(roots, monkeypatch):
+    sessions, blobs = roots
+    name = "2026-10-27T12-00-00_wanted.jsonl"
+    (sessions / "random-name.jsonl").rename(sessions / name)
+    nested = sessions / Path(name).stem / "nested"
+    nested.mkdir(parents=True)
+    artifact = b"\x00\xffexact artifact\r\n"
+    (nested / "binary.dat").write_bytes(artifact)
+    expected = {
+        "session.jsonl": journal("wanted"),
+        "artifacts/nested/binary.dat": artifact,
+    }
+
+    def collect(collector):
+        return collector(
+            sessions_dir=sessions,
+            blobs_dir=blobs,
+            native_id="wanted",
+            max_expanded=100_000,
+            max_file_bytes=10_000,
+        )
+
+    from untether.session_migration import omp_bundle
+
+    scandir = omp_bundle.os.scandir
+    scanned = []
+
+    def scan(path):
+        scanned.append(path)
+        return scandir(path)
+
+    monkeypatch.setattr(omp_bundle.os, "scandir", scan)
+    bundle = collect(collect_omp_bundle)
+    assert bundle.journal_name == name
+    assert bundle.records == expected
+    assert len(scanned) == len(set(scanned)) == 3
+    assert collect(collect_omp_records) == expected
+
+
+@pytest.mark.parametrize(
+    "limits, error",
+    [
+        ({"max_expanded": 1}, "OMP_SIZE_LIMIT"),
+        ({"max_file_bytes": 1}, "OMP_SIZE_LIMIT"),
+        ({"max_files": 0}, "OMP_ARGUMENT_INVALID"),
+        ({"max_files": 1}, "OMP_COUNT_LIMIT"),
+    ],
+)
+def test_bundle_and_wrapper_limits_match(roots, limits, error):
+    (roots[0] / "extra.dat").write_bytes(b"extra")
+    for collector in (collect_omp_bundle, collect_omp_records):
+        with pytest.raises(FidelityError, match=error):
+            collector(
+                sessions_dir=roots[0],
+                blobs_dir=roots[1],
+                native_id="wanted",
+                **({"max_expanded": 100_000, "max_file_bytes": 10_000} | limits),
+            )
 
 
 def test_exact_bytes_title_children_and_blobs(roots):
