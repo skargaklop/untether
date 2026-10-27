@@ -214,12 +214,15 @@ def test_silent_child_times_out_bounded(tmp_path):
 def test_nonpositive_limits_rejected(tmp_path):
     store = tmp_path / "store"
     store.mkdir()
-    for kwargs in (
-        {"max_response_bytes": 0},
-        {"max_request_bytes": -1},
-    ):
+    for response_limit, request_limit in ((0, 1024), (1024, -1)):
         with pytest.raises(CapabilityUnavailable):
-            ExecutablePersistenceAdapter("fixture", "unused", store, **kwargs)
+            ExecutablePersistenceAdapter(
+                "fixture",
+                tmp_path / "unused",
+                store,
+                max_response_bytes=response_limit,
+                max_request_bytes=request_limit,
+            )
 
 
 def test_valid_adapter_within_small_cap(tmp_path):

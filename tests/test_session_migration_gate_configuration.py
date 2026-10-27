@@ -1,7 +1,7 @@
 """Policy contract of ``configure_session_gate`` (untether-native-migration-review).
 
 Covers the explicit-configuration gate applied before runners are built,
-using ``SimpleNamespace`` policy inputs (no pydantic, no IO):
+using typed policy inputs (no IO):
 
 1. Disabled policy is a no-op — the env var is never touched.
 2. Enabled with no persistence profiles is a no-op too.
@@ -16,8 +16,6 @@ Plus: pydantic itself rejects a relative ``gate_root``.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 from pydantic import ValidationError
 
@@ -26,6 +24,8 @@ from untether.session_migration.session_gate import (
     configure_session_gate,
 )
 from untether.session_migration.settings import (
+    EnginePersistenceProfile,
+    EnginePersistenceSettings,
     ReceiverSettings,
     SessionMigrationSettings,
 )
@@ -76,12 +76,27 @@ def test_receiver_project_root_rejects_unsafe_paths(root):
         receiver_settings(project_root=root)
 
 
-def policy(*, enabled: bool, engines: bool, gate_root: str | None) -> SimpleNamespace:
-    return SimpleNamespace(
-        enabled=enabled,
+def policy(
+    *, enabled: bool, engines: bool, gate_root: str | None
+) -> SessionMigrationSettings:
+    settings = SessionMigrationSettings(
         gate_root=gate_root,
-        persistence=SimpleNamespace(engines={"c": object()} if engines else {}),
+        persistence=EnginePersistenceSettings(
+            engines={
+                "c": EnginePersistenceProfile(
+                    format="pi-jsonl-v3",
+                    sessions_dir="/tmp/sessions",
+                    session_record="events.jsonl",
+                    restart_argv=("restart",),
+                )
+            }
+            if engines
+            else {},
+        ),
     )
+    # Isolate gate policy from unrelated enabled-policy peer validation.
+    settings.enabled = enabled
+    return settings
 
 
 def test_disabled_never_mutates_env(monkeypatch: pytest.MonkeyPatch) -> None:

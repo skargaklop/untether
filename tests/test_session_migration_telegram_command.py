@@ -8,6 +8,8 @@ import tomllib
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Never
+from unittest.mock import Mock
 from uuid import uuid4
 
 import anyio
@@ -32,12 +34,17 @@ from untether.session_migration.telegram_command import (
     describe_engine_adapters,
 )
 from untether.transport import MessageRef, RenderedMessage
+from untether.transport_runtime import TransportRuntime
 
 FIXTURE = Path(__file__).parent / "fixtures" / "native_persistence_engine.py"
 ENGINE = "fixture-engine"
 PIN = "SHA256:" + "A" * 43
 AUTH_CHAT = -100123
 AUTH_TOPIC = 42
+
+
+def _unused_adapter() -> Never:
+    raise AssertionError("adapter factory must not be called")
 
 
 @dataclass
@@ -98,7 +105,7 @@ def _ctx(
         reply_text=None,
         config_path=config_path,
         plugin_config={},
-        runtime=object(),
+        runtime=Mock(spec=TransportRuntime),
         executor=_Executor(),
     )
 
@@ -301,6 +308,7 @@ def test_session_command_registered_plugin_and_dispatched(tmp_path):
     """
     with _isolated_command_metadata(tmp_path):
         backend = commands.get_command("session")
+    assert isinstance(backend, SessionCommand)
     assert backend.id == "session"
     assert "Transfer a session" in backend.description
 
@@ -533,7 +541,7 @@ def test_move_refuses_unique_configured_engine_when_sid_undiscovered(tmp_path):
         recorded.append(kwargs)
         return _fake_result(kwargs)
 
-    register_persistence_adapter(ENGINE, lambda: None)
+    register_persistence_adapter(ENGINE, _unused_adapter)
     try:
         ctx = _ctx(
             tmp_path,
@@ -564,8 +572,8 @@ def _seed_catalog(tmp_path: Path, entries: tuple[tuple[str, str], ...]) -> None:
 def test_move_to_resolves_discovered_engine_among_two(tmp_path):
     """One catalog hit across two registered engines picks that engine."""
     other = "fixture-engine-two"
-    register_persistence_adapter(ENGINE, lambda: None)
-    register_persistence_adapter(other, lambda: None)
+    register_persistence_adapter(ENGINE, _unused_adapter)
+    register_persistence_adapter(other, _unused_adapter)
     _seed_catalog(tmp_path, ((ENGINE, "sid"),))
     recorded = []
 
@@ -592,8 +600,8 @@ def test_move_to_resolves_discovered_engine_among_two(tmp_path):
 def test_move_to_refuses_catalog_collision(tmp_path):
     """Same sid discovered under two engines refuses instead of guessing."""
     other = "fixture-engine-two"
-    register_persistence_adapter(ENGINE, lambda: None)
-    register_persistence_adapter(other, lambda: None)
+    register_persistence_adapter(ENGINE, _unused_adapter)
+    register_persistence_adapter(other, _unused_adapter)
     _seed_catalog(tmp_path, ((ENGINE, "sid"), (other, "sid")))
     recorded = []
 

@@ -56,7 +56,7 @@ def _runner(*events: Any) -> FakeRunner:
     return FakeRunner(
         engine=ENGINE,
         command="unused",
-        peer_factory=FakeRunner._peer,
+        peer_factory=None,
         events=list(events),
     )
 

@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import inspect
 import json
 import os
 import sys
@@ -47,10 +48,10 @@ def test_receiver_endpoint_uses_only_configured_root(tmp_path, root):
         migration._build_receiver_endpoint(
             engine="fixture", project="chat-supplied", cfg=cfg
         )
-    with pytest.raises(TypeError, match="project_root"):
-        migration._build_receiver_endpoint(
-            engine="fixture", project="demo", cfg=cfg, project_root="/chat/root"
-        )
+    assert (
+        "project_root"
+        not in inspect.signature(migration._build_receiver_endpoint).parameters
+    )
 
 
 def test_native_receive_through_cli(monkeypatch, tmp_path):
@@ -58,6 +59,9 @@ def test_native_receive_through_cli(monkeypatch, tmp_path):
 
     class Adapter:
         engine = "fixture"
+
+        def export_exact(self, session_id):
+            raise AssertionError("receive must not export")
 
         def import_exact(self, archive):
             seen.append(archive)
@@ -139,6 +143,9 @@ def test_native_receive_through_cli(monkeypatch, tmp_path):
 def test_native_export_through_cli(monkeypatch, tmp_path):
     class Adapter:
         engine = "fixture"
+
+        def import_exact(self, archive):
+            raise AssertionError("export must not import")
 
         @contextmanager
         def export_snapshot(self, session_id):

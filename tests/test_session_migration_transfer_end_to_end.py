@@ -946,19 +946,23 @@ def test_second_push_after_return_pull_reclaims_real_receiver(tmp_path, monkeypa
             )
         return {**result, "endpoint_id": kwargs["peer"].expected_endpoint_id}
 
-    common = {
-        "peer_name": "vps",
-        "project": "demo",
-        "session_id": sid,
-        "engine": ENGINE,
-        "root": tmp_path / "ops",
-        "receiver_call": call,
-    }
+    def move(direction):
+        return transfer.perform(
+            cfg,
+            direction=direction,
+            peer_name="vps",
+            project="demo",
+            session_id=sid,
+            engine=ENGINE,
+            root=tmp_path / "ops",
+            receiver_call=call,
+        )
+
     register_persistence_adapter(ENGINE, lambda: _adapter(local))
     try:
-        first = transfer.perform(cfg, direction="to", **common)
+        first = move("to")
         _seed(remote, sid, generation=3)
-        returned = transfer.perform(cfg, direction="from", **common)
+        returned = move("from")
         assert returned.state == "verified"
         with session_gate(root=tmp_path / "gate", engine_id=ENGINE, native_id=sid):
             pass
@@ -978,7 +982,7 @@ def test_second_push_after_return_pull_reclaims_real_receiver(tmp_path, monkeypa
         data["records"]["history/tool.ndjson"] = base64.b64encode(latest).decode()
         path.write_text(json.dumps(data))
         try:
-            second = transfer.perform(cfg, direction="to", **common)
+            second = move("to")
         except Exception:
             # Preserve the original failure, but first prove it fails closed:
             # no success receipt, no ownership release, no second import retry.
@@ -991,7 +995,7 @@ def test_second_push_after_return_pull_reclaims_real_receiver(tmp_path, monkeypa
             )
 
             with pytest.raises(ReceiverProtocolError, match="NEEDS_RECONCILE"):
-                transfer.perform(cfg, direction="to", **common)
+                move("to")
             assert (len(imports), len(overwrites)) == counts
             for gate in ("gate", "receiver-gate"):
                 with (
@@ -1015,7 +1019,7 @@ def test_second_push_after_return_pull_reclaims_real_receiver(tmp_path, monkeypa
         ):
             pytest.fail("second push source admitted")
         counts = (len(imports), len(overwrites))
-        assert transfer.perform(cfg, direction="to", **common) == second
+        assert move("to") == second
         assert (len(imports), len(overwrites)) == counts
     finally:
         unregister_persistence_adapter(ENGINE)

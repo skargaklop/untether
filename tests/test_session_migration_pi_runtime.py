@@ -140,12 +140,13 @@ def _rpc_coldload(pi_cmd: Path, argv_rest: list[str], root: Path) -> tuple[dict,
 
     qout: queue.Queue[str] = queue.Queue()
     qerr: queue.Queue[str] = queue.Queue()
-    assert proc.stdout is not None and proc.stderr is not None
+    stdout, stderr = proc.stdout, proc.stderr
+    assert stdout is not None and stderr is not None
     threading.Thread(
-        target=lambda: [qout.put(line) for line in proc.stdout], daemon=True
+        target=lambda: [qout.put(line) for line in stdout], daemon=True
     ).start()
     threading.Thread(
-        target=lambda: [qerr.put(line) for line in proc.stderr], daemon=True
+        target=lambda: [qerr.put(line) for line in stderr], daemon=True
     ).start()
 
     import time

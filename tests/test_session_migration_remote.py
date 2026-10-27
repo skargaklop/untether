@@ -13,6 +13,7 @@ import pytest
 
 from untether.session_migration import receiver_protocol
 from untether.session_migration import remote as remote_module
+from untether.session_migration.native_receiver import NativeReceiver
 from untether.session_migration.receiver_protocol import (
     ReceiverEndpoint,
     ReceiverProtocolError,
@@ -225,13 +226,13 @@ def test_binary_receiver_export(tmp_path):
     assert rest == b""
 
 
-class _StubNativeReceiver:
+class _StubNativeReceiver(NativeReceiver):
     def __init__(self, max_archive):
         self.max_archive = max_archive
         self.exported = None
 
     def export_exact(
-        self, session_id, *, engine, operation_id, peer_name=None, project=None
+        self, session_id, *, engine, operation_id=None, peer_name=None, project=None
     ):
         self.exported = (session_id, engine, operation_id)
         return b"x" * (self.max_archive + 1)

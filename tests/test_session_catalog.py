@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -8,20 +9,19 @@ from untether.session_catalog import SessionCatalog, SessionObservation
 
 
 def _obs(**overrides: object) -> SessionObservation:
-    data: dict[str, object] = {
-        "engine": "omp",
-        "session_id": "01a0e1ed",
-        "resume_value": "01a0e1ed",
-        "project_path": r"D:\OSPanel\home\dolibarr.local",
-        "title": "Fix resume",
-        "first_user_prompt": "first ask",
-        "last_user_prompt": "check the latest errors",
-        "created_at": 10.0,
-        "updated_at": 20.0,
-        "model": "grok",
-    }
-    data.update(overrides)
-    return SessionObservation(**data)  # type: ignore[arg-type]
+    data = SessionObservation(
+        engine="omp",
+        session_id="01a0e1ed",
+        resume_value="01a0e1ed",
+        project_path=r"D:\OSPanel\home\dolibarr.local",
+        title="Fix resume",
+        first_user_prompt="first ask",
+        last_user_prompt="check the latest errors",
+        created_at=10.0,
+        updated_at=20.0,
+        model="grok",
+    )
+    return replace(data, **overrides)
 
 
 @pytest.mark.anyio

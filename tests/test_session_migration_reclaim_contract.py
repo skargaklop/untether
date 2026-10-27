@@ -168,7 +168,9 @@ def test_completed_descendant_reclaim_rotates_fence_and_replaces_record(tmp_path
         operation_id=inbound_op,
         package_sha256=inbound_digest,
     )
-    assert read_source_fence(fences, engine="pi", native_id=sid).state == "completed"
+    completed = read_source_fence(fences, engine="pi", native_id=sid)
+    assert completed is not None
+    assert completed.state == "completed"
 
 
 def test_pending_fence_is_never_reclaimed(tmp_path):
@@ -190,6 +192,7 @@ def test_pending_fence_is_never_reclaimed(tmp_path):
             prior_record=None,
         )
     fence = read_source_fence(fences, engine="pi", native_id=sid)
+    assert fence is not None
     assert fence.operation_id == op and fence.state == "pending"
 
 
@@ -229,6 +232,7 @@ def test_divergent_or_foreign_reclaim_refused_without_state_change(tmp_path):
                 prior_lineage=record.lineage,
             )
         fence = read_source_fence(fences, engine="pi", native_id=sid)
+        assert fence is not None
         assert fence.operation_id == prior_op and fence.state == "completed"
 
 
@@ -339,4 +343,5 @@ def test_reclaim_crash_replay_is_idempotent(tmp_path):
             prior_record=record,
         )
     fence = read_source_fence(fences, engine="pi", native_id=sid)
+    assert fence is not None
     assert fence.state == "pending" and fence.operation_id == inbound_op
