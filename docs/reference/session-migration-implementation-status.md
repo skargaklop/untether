@@ -104,7 +104,9 @@ python -m pytest tests/test_session_migration_*.py tests/test_acp_migration_gate
 python -m pytest tests -q --no-cov --tb=short                                                    # 4,260 passed, 47 skipped, 9 warnings
 python -m ruff check src tests                                                                  # All checks passed!
 python -m ruff format --check src tests                                                         # 425 files already formatted
-python -m ty check src/untether/session_migration                                                # All checks passed!
+python -m ty check                                                                              # All source and test checks passed!
+python -m bandit -r src -c pyproject.toml -q                                                     # Passed
+python -m pip_audit --skip-editable --progress-spinner=off --ignore-vuln CVE-2026-4539 --ignore-vuln CVE-2026-3219 --ignore-vuln CVE-2026-6357 # No known vulnerabilities found
 ```
 
 Skips are environment-bound (Windows symlink privilege, absent optional binaries) and reported with reasons via `-rs`.
