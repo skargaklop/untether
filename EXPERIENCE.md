@@ -209,3 +209,20 @@ Verification: `uv run pytest tests/test_session_migration_transfer_end_to_end.py
 tests/test_session_migration_transfer_end_to_end.py` and `uv run ruff format
 --check tests/test_session_migration_transfer_end_to_end.py` passed. No live
 stores, agents, dependency installations, production edits, or commits used.
+
+## 2026-10-27 PR CI stabilization (parent-driven)
+
+- CI's `ty check` covers tests too — local `ty check src` missed 47 test-side
+  diagnostics. Always run the full command before pushing.
+- GitHub-hosted Windows runners can collide `st_mtime_ns` for rapid writes, but
+  `os.replace` always yields a new `st_ino`: the (mtime, ino, size) tuple in
+  `state_store.py` is collision-free. A test that copies the REPLACEMENT's
+  identity into the cached signature artificially defeats it — simulate only
+  the timestamp collision and keep the old inode.
+- New Windows/CI-only failures with green local runs: fetch `--log-failed`
+  before theorizing; three separate fixture issues were all POSX chmod(0o700).
+- OMP collection must carry the real journal filename: record names lose the
+  stem, and the filename defines the sibling artifact root.
+- Repeated-move receiver collisions need operator-bound `authorized_peer`
+  evidence, never a wire-supplied identity; status must stay hidden until
+  fence activation completes.
