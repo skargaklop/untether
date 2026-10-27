@@ -35,7 +35,8 @@ def _snapshot(root: Path):
 @pytest.fixture
 def discovery(tmp_path, monkeypatch):
     store = tmp_path / "sessions"
-    store.mkdir()
+    store.mkdir(mode=0o700)
+    store.chmod(0o700)
     for sid, cwd in (
         ("session-one", "/work/demo"),
         ("session-two", "/work/demo"),
