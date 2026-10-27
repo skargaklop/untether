@@ -309,7 +309,8 @@ class FileBundlePersistenceAdapter:
                 stderr=subprocess.DEVNULL,
                 timeout=self.profile.restart_timeout_s,
                 check=False,
-                shell=False,
+                # Validated operator-configured probe argv, not chat input.
+                shell=False,  # nosec B603
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise CapabilityUnavailable("RESTART_PROBE_FAILED") from exc

@@ -61,7 +61,8 @@ def probe_endpoint(spec: ProbeSpec, hooks: ProbeCallbacks) -> dict[str, bool]:
         if not spec.project.is_dir() or not spec.expected_git_head:
             return False
         try:
-            outcome = subprocess.run(
+            # Fixed Git inspection; project is a separate argv token, never shell code.
+            outcome = subprocess.run(  # nosec B603, B607
                 ["git", "-C", str(spec.project), "rev-parse", "--verify", "HEAD"],
                 capture_output=True,
                 text=True,

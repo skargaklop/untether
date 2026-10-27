@@ -76,9 +76,10 @@ def _bounded_run(
     remaining budget and the child is killed and reaped once it is spent;
     stderr is discarded. Returns (returncode, stdout).
     """
+    # Callers build pinned SSH/key-inspection argv from validated operator settings.
     proc = subprocess.Popen(
         argv,
-        shell=False,
+        shell=False,  # nosec B603
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,

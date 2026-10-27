@@ -166,7 +166,9 @@ class PiFamilyScanner:
             if ts is not None:
                 first_ts = ts if first_ts is None else min(first_ts, ts)
                 last_ts = ts if last_ts is None else max(last_ts, ts)
-            message = row.get("message") if isinstance(row.get("message"), dict) else {}
+            message = row.get("message")
+            if not isinstance(message, dict):
+                message = {}
             if row.get("type") not in {None, "message"} and "message" not in row:
                 continue
             role = message.get("role") or row.get("role")
@@ -230,7 +232,9 @@ class ClaudeScanner:
             if ts is not None:
                 first_ts = ts if first_ts is None else min(first_ts, ts)
                 last_ts = ts if last_ts is None else max(last_ts, ts)
-            message = row.get("message") if isinstance(row.get("message"), dict) else {}
+            message = row.get("message")
+            if not isinstance(message, dict):
+                message = {}
             if message.get("role") != "user" and row.get("type") != "user":
                 continue
             text = _text_from_content(message.get("content", row.get("content")))
@@ -280,9 +284,9 @@ class CodexScanner:
         last_user: str | None = None
         first_user: str | None = None
         for row in _iter_jsonl(path):
-            payload = (
-                row.get("payload") if isinstance(row.get("payload"), dict) else row
-            )
+            payload = row.get("payload")
+            if not isinstance(payload, dict):
+                payload = row
             ts = _parse_ts(row.get("timestamp") or payload.get("timestamp"))
             if ts is not None:
                 first_ts = ts if first_ts is None else min(first_ts, ts)

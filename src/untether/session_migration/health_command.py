@@ -38,9 +38,10 @@ def run_health(argv: tuple[str, ...], timeout_s: float) -> dict[str, bool]:
     """
     result: list[bytes] = [b""]
     drained = threading.Event()
+    # Validated operator-configured health argv; never a chat-provided command.
     proc = subprocess.Popen(
         list(argv),
-        shell=False,
+        shell=False,  # nosec B603
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         stdin=subprocess.DEVNULL,
