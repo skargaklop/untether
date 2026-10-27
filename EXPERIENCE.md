@@ -1,5 +1,21 @@
 # ACP Phase E Experience
 
+## Session-transfer controller checkpoint
+
+Repeated flash worker packets consumed their turn budgets during inspection without writing the assigned patch, including mandatory gate configuration and runner integration. Their reports are not implementation evidence. The controller implemented those narrow changes and reran checks. Test-only workers also left a broken placeholder and a tautological `closed or True` assertion; both were corrected, and teardown is now observed through the fake generator's `finally`. Keep packet scope to one explicit behavioural invariant and inspect the actual diff before accepting output.
+
+The migration worktree lacked the corrected product contract and existing discovery modules, although they existed uncommitted in the main checkout. Contract text and the bounded catalog/scanner modules were copied without altering the originals; discovery tests use disposable roots. Never infer branch contents from another checkout.
+
+Argon was consulted personally through the existing authenticated Untether thread. Its source-fencing and cold-restart suggestions are useful review input, not engine verification. Its generic path-rewrite suggestion conflicts with the fidelity contract and was not adopted. See [[docs/reference/session-migration-advisor-review]].
+
+## Native-transfer verification pitfalls
+
+A restored Pi v3 record can load correctly yet fail byte fidelity: cold startup appended a missing `thinking_level_change` record. The disposable runtime fixture now declares that state before export; installed-Pi history/identity checks and post-restart byte equality pass together. Do not remove the byte check to accommodate a synthetic fixture.
+
+Operation-bound receiver exports now require an explicit gate and a held snapshot context. Older CLI/subprocess fixture adapters must implement that contract rather than bypass production guards. When logical and native IDs differ, both identities need admission and durable fences; fencing only the logical ID leaves the actual native session runnable. Controller verification passed 16 receiver/protocol tests after that repair.
+
+A coverage investigation returned stale claims about absent executable registration and Pi runtime evidence while workers were modifying those areas. Re-read current files and rerun checks before adopting research summaries. Fixture subprocesses remain plumbing evidence, not installed-engine round-trip evidence.
+
 ## Shared runner cancel-scope cleanup
 
 A successful `CompletedEvent` is emitted while the per-attempt async generator may still own subprocess and AnyIO task-group cancel scopes. Returning or breaking from the retry wrapper at that yield abandons the nested generator, so Python may finalize it in a different task and raise `Attempted to exit a cancel scope that isn't the current task's current cancel scope` after the final Telegram answer was already delivered. Explicit `aclose()` is also unsafe here because injecting `GeneratorExit` through an active AnyIO task group becomes a `BaseExceptionGroup`; the minimal safe fix is to mark the terminal event, drain the attempt generator to natural completion in the same task, ignore any post-terminal events, and only then return or sleep before retrying. The deterministic regression asserts cleanup has run before `run_impl()` returns and in the same task that consumed the generator. Investigation required explicit Windows `HOME`/`USERPROFILE`, focused pytest needed `-o addopts=''`, and two attempted cheap-model routes were unavailable (one unknown alias and one retired upstream), so the default general-purpose route completed the read-only diagnosis.
@@ -120,3 +136,76 @@ Added a runtime-checkable `ForkableRunner` capability, implemented Codex app-ser
 ### Inconveniences
 
 Pre-existing `.local/` and `.trash/` remain untracked and untouched.
+
+- Reclaim lifecycle pitfall: durable inbound intent blocks ordinary replay; only exact pending fence owner/digest with persisted prior-operation linkage can reconcile.
+- In-process receiver tests must isolate remote gate roots from local migration locks.
+- File-bundle export_exact acquires runner admission internally; it cannot reload under a held migration lock. A public lock-only adapter read contract is needed (adapter files left untouched).
+
+## Bounded file-bundle reclaim follow-up
+
+Added caller-context/live-descriptor validated export_locked; coordinator reads reuse that seam while executable adapters retain export_exact. File overwrite validates incoming header and metadata before replacement, persists incoming metadata, and reruns scoped restart proof on reconciliation retries. Changed-byte file roundtrip and failed-probe retry pass. Record and metadata replacements remain separate: a crash between them leaves pending ownership blocking admission; matching incoming bytes with prior metadata can retry. Power-loss directory durability and arbitrary external store edits are not proven. Legacy reclaim_contract has two incompatible tests omitting lineage and declaring an unscoped nonexistent restart command; these fail closed, and were not edited outside the allowed scope. Final focused file/coordinator/gate/Pi check: 65 passed, 4 skipped; scoped Ruff passes. No live infrastructure or commits.
+
+## OMP public-SDK cold-load verification
+
+OMP 18.1.6 exports SessionManager through ./session/*; use that narrow public surface rather than importing agent orchestration. Its v3 title slot, sibling artifacts and global blob references are not Pi-compatible. The disposable Bun probe uses inMemory, appendMessage, persistCopy with suppressBreadcrumb, flush/close, then a separate process opens the exact file with breadcrumbs suppressed. An environment allowlist isolates HOME, USERPROFILE, XDG, Windows app/temp directories and PI_CODING_AGENT_DIR; empty OMP_PROFILE/PI_PROFILE prevents inherited named-profile routing. No agent/model/provider calls or installed-library edits.
+
+Verified: focused pytest 1 passed in 2.64s; Ruff check, Ruff format --check and py_compile passed. Assertions cover native UUIDv7/header/file identity, ordered user/toolResult/user payloads and parent links, 256-byte native title slot, unchanged file bytes after cold load, and no terminal breadcrumb files. Each child has a 25-second timeout and 64-KiB cap per output pipe; only the owned child is killed/reaped. Initial format check flagged the new Python test; formatting was applied and rechecked. This proves SDK persistence/cold-load only, not migration adapter integration, roundtrip, asset/blob transfer, fsync durability or provider-signed replay.
+
+## Store-local identity lookup
+
+Extracted the existing bounded header scan for export reuse; lookup_exact returns only the requested native ID after a unique valid header match and declared-store validation. This is store-local identity, not project authorization. Lookup does not read transcript bodies or metadata, acquire gates, run probes, or write fences/cache/configuration. Boundary tests simulate 10,000/10,001 candidates without creating thousands of files. Verification: file pytest --no-cov: 43 passed, 3 skipped; scoped Ruff and ty: all checks passed. Pitfall: Windows symlink privileges were unavailable, so three real-symlink tests skipped; symlink refusal is not runtime-proven on this host.
+
+
+## In-process session discovery boundary
+
+Added a bounded integration test connecting real remote.inspect_session frame/reply validation through an injected subprocess transport to real handle_receiver and FileBundlePersistenceAdapter.lookup_for_project. Two distinct sessions reuse the same peer; foreign session cwd and mismatched receiver project root refuse. An unrelated registered adapter must never be invoked. Full temporary-tree snapshots prove discovery creates no files or directories (including fences/cache). Preflight, identity paths, and transport are simulated; no SSH, keys, model, or deployment was exercised. The SessionCommand/perform boundary remains untested by this file.
+
+Verification: uv run pytest tests/test_session_migration_discovery_end_to_end.py --no-cov -q: 3 passed (0.48s); Ruff check and format check passed; ty check passed. Pitfalls: transport refusal translation intentionally asserts the receiver redaction code inside except (targeted PT017 suppression); anchored regex uses a raw string (RUF043); initial format check required Ruff formatting before the final successful checks.
+
+## 2026-10-27 OMP restore + runtime probes (parent-implemented)
+
+- `omp_restore.py`: the collector's record names lose the journal stem (sibling
+  artifact root), so `journal_name` MUST be passed explicitly — the header does
+  not encode it. Guessing `native_id.jsonl` breaks artifact placement.
+- OMP SDK `SessionManager.open` pins `getHeader().cwd` and `sessionDir` to the
+  probe root; cross-tree verification needs `OMP_SESSION_DIR`/`OMP_EXPECT_CWD`
+  env overrides (added to `omp_persistence_probe.ts`).
+- `_environment()` in the runtime test mkdirs each env dir: pre-create the
+  probe root before calling it, or it raises FileNotFoundError.
+- Delegated restore worker burned its whole budget on re-reading context and
+  wrote zero files; the five verified findings it did return were still useful.
+
+## OMP restore preflight security boundary
+
+Restore now validates portable artifact names, existing target ancestors via
+`omp_bundle._checked`, referenced blob closure in root and child journals, and
+all planned file collisions/prefix conflicts before creating the journal.
+Exclusive creation alone did not prevent parent-link traversal or partial trees
+from predictable collisions. PurePosixPath normalizes `.` to empty parts, so
+explicitly reject that spelling as well. Concurrent hostile replacement remains
+outside this quiescent disposable-tree contract; interrupted writes may leave a
+partial tree that must be discarded, with no production activation.
+
+Verification: focused restore and collector pytest: 30 passed, 5 skipped;
+real parent-symlink tests could not run on this Windows host (privileges).
+Scoped Ruff and ty passed. No dependencies, live stores, agents, or commits
+were used. Historical recall retrieval timed out waiting for its existing index
+builder; implementation used freshly read local files.
+
+## Receiver reclaim boundary verification
+
+Added real protocol/NativeReceiver checks for absent configured authorized_peer,
+foreign peer/project, divergent lineage, and receipt replay after an injected
+activation interruption. Build outbound authority using real export/completion;
+restore original destination bytes before submitting the evolved return package.
+Refusals preserved exact destination bytes and the completed outbound fence.
+Replay preserved the exact receipt file and restored bytes, prohibited both import
+methods, and reopened session admission. No production bug reproduced in these
+boundaries. The existing test module already exceeded the 1000-line guideline;
+kept changes in the sole allowed test file rather than moving unrelated tests.
+History retrieval timed out; fresh source inspection supplied the contracts.
+Verification: `uv run pytest tests/test_session_migration_transfer_end_to_end.py
+--no-cov -q` (32 passed); `uv run ruff check
+tests/test_session_migration_transfer_end_to_end.py` and `uv run ruff format
+--check tests/test_session_migration_transfer_end_to_end.py` passed. No live
+stores, agents, dependency installations, production edits, or commits used.
