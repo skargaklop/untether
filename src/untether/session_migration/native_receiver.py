@@ -45,7 +45,29 @@ class NativeReceiver:
         self.importer_version = importer_version
 
     def status_receipt(self, operation_id: str) -> Receipt | None:
-        return self.receipts.read(operation_id)
+        receipt = self.receipts.read(operation_id)
+        if receipt is None:
+            return None
+        from . import transfer
+
+        record = transfer._read(self.root / "operations", operation_id)
+        if record is not None and record.direction == "from":
+            gate_root = os.environ.get("UNTETHER_SESSION_GATE_ROOT")
+            if not gate_root:
+                return None
+            fence = read_source_fence(
+                Path(gate_root) / "fences",
+                engine=record.engine,
+                native_id=receipt.native_id,
+            )
+            if (
+                fence is None
+                or fence.state != "active"
+                or fence.operation_id != operation_id
+                or fence.package_sha256 != receipt.package_sha256
+            ):
+                return None
+        return receipt
 
     def receive(
         self,
@@ -316,9 +338,6 @@ class NativeReceiver:
             raise NativeReceiverError("EXPORT_CACHE_CORRUPT") from exc
         if archive.engine != engine or archive.logical_id != session_id:
             raise NativeReceiverError("EXPORT_CACHE_IDENTITY_MISMATCH")
-        record = self._export_evidence(
-            archive, package, operation_id, peer_name, project
-        )
         pending = []
         for native_id in dict.fromkeys((session_id, archive.native_id)):
             fence = read_source_fence(fences, engine=engine, native_id=native_id)
@@ -331,6 +350,9 @@ class NativeReceiver:
                 raise NativeReceiverError("EXPORT_FENCE_MISMATCH")
             if fence.state == "pending":
                 pending.append(fence)
+        record = self._export_evidence(
+            archive, package, operation_id, peer_name, project
+        )
         for fence in pending:
             complete_source_fence(
                 fences,

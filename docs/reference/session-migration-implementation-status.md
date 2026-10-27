@@ -12,7 +12,7 @@ OMP 18.1.6 has offline persistence evidence (`tests/test_session_migration_omp_r
 
 Reclaim now retains prior-operation fence evidence and publishes explicit verified local ownership. Changed-record round trips exercise runner admission, repeat pulls, interrupted metadata publication and restart-probe failure. Installed-Pi offline cold-load verification passed; it does not prove a model follow-up. Record and metadata publication remain separate atomic replacements; simulated interruption recovery is tested, not filesystem power-loss durability.
 
-The final full-repository regression run passed: **4,259 passed, 47 skipped, 9 warnings** in 388.91 seconds with `PYTHONPATH=src PYTHONUTF8=1 python -m pytest tests -q --no-cov --tb=short`, including the discovery integration and OMP additions. Coverage was not measured; warnings include unawaited AsyncMock coroutines and remain visible in the report.
+The final full-repository regression run passed: **4,260 passed, 47 skipped, 9 warnings** in 389.99 seconds with `PYTHONPATH=src PYTHONUTF8=1 python -m pytest tests -q --no-cov --tb=short`, including the discovery integration and OMP additions. Coverage was not measured; warnings include unawaited AsyncMock coroutines and remain visible in the report.
 
 An earlier full regression run passed: **4,081 passed, 41 skipped, 9 warnings** in 380.35 seconds with `PYTHONPATH=src PYTHONUTF8=1 python -m pytest tests -q --no-cov --tb=short`. Per-test home/config isolation clears inherited global overrides and preserves explicit test path patches; isolated homes live outside directories under test. Earlier shared-override and directory-contamination failures were corrected, not waived. No live configuration was changed to accommodate tests. Coverage was not measured; warnings include unawaited AsyncMock coroutines and remain visible in the regression report.
 
@@ -90,7 +90,7 @@ Codex probe evidence (2026-10-27, `D:/Temp/untether-codex-persistence-probe/prob
 
 OpenCode local evidence (`D:/Temp/untether-opencode-probe/native-eb9f8bd799-output.json`, adjacent `-export.json`): offline `/api/session/{id}/prompt` with `resume:false` creates one `session.next.prompt.admitted` event in A history. Native export/import both exit zero and retain the session ID, but export has only `info` and `messages: []`, and B history is empty. This proves loss of that admitted input, not that all completed-message exports are broken. Empty projected message/context equality is not fidelity. No model/tool turn or production adapter is claimed.
 
-Final bounded review reproduced and fixed a repeated-move defect: a second A→B push after A→B→A formerly failed `SESSION_ID_COLLISION`. Receiver-side reclaim now requires operator-bound `authorized_peer` context and durable prior export evidence. Real-receiver tests cover the second push, foreign peer/project/lineage refusal without overwriting prior bytes, and receipt replay after interrupted activation without another import. Final verification: 463 migration tests passed, 10 skipped; full regression 4,259 passed, 47 skipped, 9 warnings. Repository lint, formatting (425 files), migration types, lockfile and whitespace checks pass. No live VPS transfer or real model follow-up is claimed.
+Final bounded review reproduced and fixed a repeated-move defect: a second A→B push after A→B→A formerly failed `SESSION_ID_COLLISION`. Receiver-side reclaim now requires operator-bound `authorized_peer` context and durable prior export evidence. Real-receiver tests cover the second push, foreign peer/project/lineage refusal without overwriting prior bytes, and receipt replay after interrupted activation without another import. After the recovery-ordering fix, targeted receiver/transfer checks passed 43 tests; full regression passed 4,260 tests, 47 skipped, 9 warnings. Status withholds receipts while reclaim activation is pending; rejected completion validates both fences before creating export evidence. Repository lint, formatting (425 files), migration types, lockfile and whitespace checks pass. No live VPS transfer or real model follow-up is claimed.
 
 The branch is not ready to merge. No live SSH, deployment, restart, secret
 access, or modification of local unpublished work has occurred.
@@ -101,7 +101,7 @@ Run from the review checkout with the Untether venv interpreter, `PYTHONPATH=src
 
 ```sh
 python -m pytest tests/test_session_migration_*.py tests/test_acp_migration_gate.py -q --no-cov   # 463 passed, 10 skipped
-python -m pytest tests -q --no-cov --tb=short                                                    # 4,259 passed, 47 skipped, 9 warnings
+python -m pytest tests -q --no-cov --tb=short                                                    # 4,260 passed, 47 skipped, 9 warnings
 python -m ruff check src tests                                                                  # All checks passed!
 python -m ruff format --check src tests                                                         # 425 files already formatted
 python -m ty check src/untether/session_migration                                                # All checks passed!

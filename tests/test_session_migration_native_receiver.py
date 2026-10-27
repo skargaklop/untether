@@ -388,3 +388,39 @@ def test_complete_export_refuses_foreign_digest_and_unknown_op_without_fence_cha
         assert calls == ["sid"]
     finally:
         unregister_persistence_adapter(_CompleteExportAdapter.engine)
+
+
+def test_rejected_completion_does_not_create_export_evidence(tmp_path, monkeypatch):
+    from untether.session_migration.source_fence import _fence_path
+
+    gates = tmp_path / "gates"
+    monkeypatch.setenv("UNTETHER_SESSION_GATE_ROOT", str(gates))
+    register_persistence_adapter(
+        _CompleteExportAdapter.engine,
+        lambda: _CompleteExportAdapter(gates, "actual-native", []),
+    )
+    try:
+        receiver = NativeReceiver(
+            tmp_path / "state", max_archive=8192, max_expanded=8192
+        )
+        op = str(uuid4())
+        package = receiver.export_exact(
+            "sid", engine=_CompleteExportAdapter.engine, operation_id=op
+        )
+        fence = _fence_path(
+            gates / "fences", _CompleteExportAdapter.engine, "actual-native"
+        )
+        fence.rename(fence.with_suffix(".held"))
+        assert not (receiver.root / "operations").exists()
+        with pytest.raises(NativeReceiverError, match="EXPORT_FENCE_MISMATCH"):
+            receiver.complete_export(
+                op,
+                engine=_CompleteExportAdapter.engine,
+                session_id="sid",
+                package_sha256=hashlib.sha256(package).hexdigest(),
+                peer_name="trusted-local",
+                project="demo",
+            )
+        assert not (receiver.root / "operations").exists()
+    finally:
+        unregister_persistence_adapter(_CompleteExportAdapter.engine)

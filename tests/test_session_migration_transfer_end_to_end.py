@@ -1108,7 +1108,8 @@ def test_receiver_reclaim_authority_and_receipt_replay(tmp_path, monkeypatch, bo
                 patch.setattr(transfer, "activate_source_fence", interrupted)
                 with pytest.raises(ReceiverProtocolError, match="injected activation"):
                     call(op, incoming, **kwargs)
-            receipt = receiver.status_receipt(op)
+            assert receiver.status_receipt(op) is None
+            receipt = receiver.receipts.read(op)
             assert receipt is not None
             receipt_path = receiver.root / "receipts" / (op + ".json")
             receipt_bytes = receipt_path.read_bytes()
@@ -1131,7 +1132,11 @@ def test_receiver_reclaim_authority_and_receipt_replay(tmp_path, monkeypatch, bo
             reply = call(op, incoming, **kwargs)
             assert reply["package_sha256"] == receipt.package_sha256
             assert reply["status"] == "verified" and reply["native_id"] == sid
-            assert receiver.status_receipt(op) == receipt
+            with monkeypatch.context() as patch:
+                patch.setenv(
+                    "UNTETHER_SESSION_GATE_ROOT", str(tmp_path / "receiver-gate")
+                )
+                assert receiver.status_receipt(op) == receipt
             assert receipt_path.read_bytes() == receipt_bytes
             assert (store / (sid + ".json")).read_bytes() == restored
             with session_gate(
