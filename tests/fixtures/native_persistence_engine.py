@@ -32,6 +32,39 @@ elif req["action"] == "import_and_restart_verify":
         "restarted": True,
         "resumed": True,
     }
+elif req["action"] == "overwrite_and_restart_verify":
+    if not target.is_file():
+        sys.exit(5)
+    prior = json.loads(target.read_text())
+    prior_records = {
+        name: base64.b64decode(blob) for name, blob in prior.get("records", {}).items()
+    }
+    if prior_records != {
+        name: base64.b64decode(blob)
+        for name, blob in p["expected_prior_records"].items()
+    }:
+        sys.exit(6)
+    target.write_text(
+        json.dumps(
+            {
+                "engine": req["engine"],
+                **{k: v for k, v in p.items() if k != "expected_prior_records"},
+            }
+        )
+    )
+    out = {
+        "engine": req["engine"],
+        "logical_id": p["logical_id"],
+        "native_id": p["native_id"],
+        "generation": p["generation"],
+        "lineage": p["lineage"],
+        "record_hashes": {
+            k: hashlib.sha256(base64.b64decode(v)).hexdigest()
+            for k, v in p["records"].items()
+        },
+        "restarted": True,
+        "resumed": True,
+    }
 else:
     sys.exit(4)
 out["version"] = 1

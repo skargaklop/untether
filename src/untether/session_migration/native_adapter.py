@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import hashlib
-from importlib.metadata import entry_points
 from collections.abc import Callable
 from dataclasses import dataclass
+from importlib.metadata import entry_points
 from typing import Protocol
 
 from .native_archive import NativeArchive
@@ -27,7 +27,8 @@ class RestoreProof:
 
 
 class PersistenceAdapter(Protocol):
-    engine: str
+    @property
+    def engine(self) -> str: ...
 
     def export_exact(self, session_id: str) -> NativeArchive: ...
     def import_exact(self, archive: NativeArchive) -> RestoreProof: ...
@@ -42,6 +43,20 @@ def register_persistence_adapter(
     if not engine or engine in _ADAPTERS:
         raise CapabilityUnavailable("DUPLICATE_OR_INVALID_ENGINE")
     _ADAPTERS[engine] = factory
+
+
+def registered_adapter_engines() -> tuple[str, ...]:
+    """In-process registry contents; entry-point plugins are discovered lazily."""
+    installed = set(_ADAPTERS)
+    installed.update(
+        ep.name for ep in entry_points(group="untether.session_persistence")
+    )
+    return tuple(sorted(installed))
+
+
+def unregister_persistence_adapter(engine: str) -> None:
+    """Remove an in-process registration; used only by tests and process exit."""
+    _ADAPTERS.pop(engine, None)
 
 
 def require_persistence_adapter(engine: str) -> PersistenceAdapter:

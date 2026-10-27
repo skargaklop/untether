@@ -4,23 +4,125 @@ from __future__ import annotations
 
 import re
 from pathlib import PurePosixPath
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _SAFE_HOST = re.compile(r"^(?=.{1,253}$)[a-zA-Z0-9][a-zA-Z0-9._-]*$")
 _SAFE_NAME = re.compile(r"^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$")
 _SHA256 = re.compile(r"^SHA256:[A-Za-z0-9+/]{43}$")
+_RECORD_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_ENGINE_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+_WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:[\\/].*")
+
+
+class EnginePersistenceProfile(BaseModel):
+    """Operator-declared, one-time persistence layout for exactly one engine.
+
+    Nothing is inferred: every path, the record name, and the restart probe
+    command are explicit operator configuration validated fail-closed.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    format: Literal["pi-jsonl-v3"]
+    sessions_dir: str
+    session_record: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+    restart_argv: tuple[str, ...] = Field(min_length=1, max_length=16)
+    restart_timeout_s: float = Field(default=120, gt=0, le=1800)
+
+    @field_validator("sessions_dir")
+    @classmethod
+    def sessions_dir_safe(cls, value: str) -> str:
+        # Local engine store: Windows and POSIX absolute paths are both valid
+        # (the profile may run on either OS); symlinks are refused at adapter
+        # construction, not at parse time.
+        return _absolute_local_path(value)
+
+    @field_validator("restart_argv")
+    @classmethod
+    def restart_argv_safe(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not v or any(c in v for c in "\x00\n\r") for v in values):
+            raise ValueError("restart_argv entries must be non-empty argv tokens")
+        return values
+
+
+class ExecutablePersistenceProfile(BaseModel):
+    """Operator-declared external adapter bound to one real executable.
+
+    Paths must be literal absolute local paths; the adapter refuses to run
+    against a missing executable or store — stores are never created implicitly.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    format: Literal["executable-v1"]
+    executable: str
+    store: str
+    interpreter: str | None = None
+    timeout: float = Field(default=30.0, gt=0, le=1800)
+
+    @field_validator("executable", "store")
+    @classmethod
+    def paths_absolute(cls, value: str) -> str:
+        return _absolute_local_path(value)
+
+    @field_validator("interpreter")
+    @classmethod
+    def interpreter_absolute(cls, value: str | None) -> str | None:
+        return None if value is None else _absolute_local_path(value)
+
+
+EngineProfile = Annotated[
+    EnginePersistenceProfile | ExecutablePersistenceProfile,
+    Field(discriminator="format"),
+]
+
+
+class EnginePersistenceSettings(BaseModel):
+    """The single persistence contract root: engines -> exact layout."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    engines: dict[str, EngineProfile] = Field(default_factory=dict)
+
+    @field_validator("engines")
+    @classmethod
+    def engines_safe(
+        cls, values: dict[str, EnginePersistenceProfile]
+    ) -> dict[str, EnginePersistenceProfile]:
+        for name in values:
+            if not _ENGINE_ID.fullmatch(name):
+                raise ValueError("engine keys must be lowercase engine ids")
+        return values
 
 
 def _absolute_safe_path(value: str) -> str:
-    """Accept a literal POSIX path, never an interpreter expression or traversal."""
+    """Accept a literal POSIX path (remote hosts), never a shell expression."""
     if not value.startswith("/") or any(c in value for c in "\\'\"\x00\n\r`;$|&<>*?{}"):
         raise ValueError("expected an absolute, literal POSIX path")
     if any(p in ("", ".", "..") for p in value.split("/")[1:]):
         raise ValueError("empty or traversal path component")
     if not PurePosixPath(value).is_absolute():
         raise ValueError("absolute path required")
+    return value
+
+
+def _absolute_local_path(value: str) -> str:
+    """Accept a literal absolute local path — Windows or POSIX — never traversal.
+
+    Deterministic across host OSes: a Windows ``C:\\...`` or UNC path and a
+    POSIX ``/...`` path are both accepted; relative paths, drive-relative
+    paths, and any ``.``/``..`` component are refused.
+    """
+    if not value or any(c in value for c in "'\"\x00\n\r`;$|&<>*?{}"):
+        raise ValueError("expected a literal absolute path")
+    windows_absolute = _WINDOWS_ABSOLUTE.fullmatch(value) or value.startswith("\\\\")
+    if not (value.startswith("/") or windows_absolute):
+        raise ValueError("absolute path required (Windows or POSIX)")
+    parts = [p for p in re.split(r"[\\/]", value) if p]
+    if not parts or any(p in (".", "..") for p in parts):
+        raise ValueError("empty or traversal path component")
     return value
 
 
@@ -90,10 +192,75 @@ class MigrationPeer(BaseModel):
         return values
 
 
+class ReceiverSettings(BaseModel):
+    """Fail-closed receiver deployment configuration."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    endpoint_id: str
+    engine: str
+    project: str
+    state_dir: str
+    destination_binding: str
+    health_argv: tuple[str, ...] = Field(min_length=1)
+    project_root: str | None = None
+    authorized_peer: str | None = None
+
+    @field_validator("authorized_peer")
+    @classmethod
+    def authorized_peer_safe(cls, value: str | None) -> str | None:
+        if value is not None and not _SAFE_NAME.fullmatch(value):
+            raise ValueError("invalid authorized peer identifier")
+        return value
+
+    execution_mode: Literal["native", "container-wrapper"] = "native"
+
+    @field_validator("endpoint_id", "engine", "destination_binding")
+    @classmethod
+    def identifier_safe(cls, value: str) -> str:
+        if not _SAFE_NAME.fullmatch(value):
+            raise ValueError("invalid receiver identifier")
+        return value
+
+    @field_validator("project")
+    @classmethod
+    def project_safe(cls, value: str) -> str:
+        if not _SAFE_NAME.fullmatch(value):
+            raise ValueError("invalid project alias")
+        return value
+
+    @field_validator("state_dir")
+    @classmethod
+    def state_dir_safe(cls, value: str) -> str:
+        return _absolute_local_path(value)
+
+    @field_validator("project_root")
+    @classmethod
+    def project_root_safe(cls, value: str | None) -> str | None:
+        return None if value is None else _absolute_local_path(value)
+
+    @field_validator("health_argv")
+    @classmethod
+    def health_argv_safe(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not v or any(c in v for c in "\x00\n\r") for v in values):
+            raise ValueError("health_argv entries must be non-empty argv tokens")
+        return values
+
+
 class SessionMigrationSettings(BaseModel):
+    """Fail-closed settings; ``persistence`` gates adapter registration."""
+
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     enabled: bool = False
+    gate_root: str | None = None
+
+    @field_validator("gate_root")
+    @classmethod
+    def gate_root_safe(cls, value: str | None) -> str | None:
+        return _absolute_local_path(value) if value is not None else None
+
+    receiver: ReceiverSettings | None = None
     connect_timeout_s: float = Field(default=10, gt=0, le=120)
     probe_timeout_s: float = Field(default=30, gt=0, le=300)
     drain_timeout_s: float = Field(default=15, gt=0, le=300)
@@ -108,6 +275,9 @@ class SessionMigrationSettings(BaseModel):
     min_free_bytes: int = Field(default=536870912, ge=1)
     staging_ttl_s: int = Field(default=86400, ge=60)
     peers: dict[str, MigrationPeer] = Field(default_factory=dict)
+    persistence: EnginePersistenceSettings = Field(
+        default_factory=EnginePersistenceSettings
+    )
 
     @model_validator(mode="after")
     def check_peers(self) -> SessionMigrationSettings:

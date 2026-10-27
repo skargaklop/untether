@@ -61,8 +61,7 @@ class EnrollmentStore:
             or bot_id <= 0
             or not chat_id
             or bot_id == source_bot_id
-            or topic_id is not None
-            and topic_id <= 0
+            or (topic_id is not None and topic_id <= 0)
             or not peer_name
             or not endpoint_id
         ):
