@@ -90,7 +90,8 @@ def test_completed_descendant_reclaim_rotates_fence_and_replaces_record(tmp_path
     fences.mkdir(parents=True)
     ops = tmp_path / "ops"
     store = tmp_path / "store"
-    store.mkdir()
+    store.mkdir(mode=0o700)
+    store.chmod(0o700)
     sid = "reclaim-1"
 
     v1 = _session_bytes(sid, "first")
@@ -233,7 +234,8 @@ def test_divergent_or_foreign_reclaim_refused_without_state_change(tmp_path):
 
 def test_import_overwrite_replaces_only_expected_prior_record(tmp_path):
     store = tmp_path / "store"
-    store.mkdir()
+    store.mkdir(mode=0o700)
+    store.chmod(0o700)
     sid = "overwrite-1"
     adapter = _adapter(store)
     v1 = _session_bytes(sid, "v1")

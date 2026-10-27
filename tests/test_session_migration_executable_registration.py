@@ -102,7 +102,8 @@ def test_relative_path_profile_refused_at_config(clean_registry):
 
 def test_pi_registration_remains_alongside_executable(clean_registry, tmp_path):
     sessions_dir = tmp_path / "sessions"
-    sessions_dir.mkdir()
+    sessions_dir.mkdir(mode=0o700)
+    sessions_dir.chmod(0o700)
     settings = settings_for(
         {
             PI_ENGINE: pi_profile(str(sessions_dir)),
