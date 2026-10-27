@@ -15,7 +15,7 @@ Authority: [[../plans/session-migration-product-correction]]. This is a work tra
 | Malformed/foreign-owner/foreign-engine rejection | Protocol and native receiver tests | Re-run final safety suite |
 | Bounded output, archive sizes and deadlines | Receiver and executable adapters reuse bounded process runner; configured timeout no longer gains five seconds; 20 focused transport/adapter tests pass | Final-revision malicious-process checks |
 | Optional Coolify and outbound pull | SSH peer configuration and pull path | Final portable setup documentation |
-| Reviewed local PR, no live changes | Existing working branch preserved; live process untouched; focused migration suite 443 passed/9 skipped; final full suite 4,253 passed/47 skipped/9 warnings; lint/format/migration types, whitespace and lockfile checks pass | Final bounded review and scoped PR update |
+| Reviewed local PR, no live changes | Existing working branch preserved; live process untouched; focused migration suite 443 passed/9 skipped; final full suite 4,259 passed/47 skipped/9 warnings; lint/format/migration types, whitespace and lockfile checks pass | Draft PR #1 updated; final committed-code safety review pending |
 
 ## Engine coverage truth boundary
 

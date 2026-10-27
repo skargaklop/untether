@@ -1,6 +1,6 @@
 # Session migration implementation — corrected native fidelity contract
 
-**Status:** draft, not delivered or deployed. This document supersedes the previous transcript-copy status.
+**Status:** draft PR [#1](https://github.com/skargaklop/untether/pull/1), not deployed or approved as all-engine completion. This document supersedes the previous transcript-copy status.
 
 ## Current local verification checkpoint (27 October)
 
@@ -12,7 +12,7 @@ OMP 18.1.6 has offline persistence evidence (`tests/test_session_migration_omp_r
 
 Reclaim now retains prior-operation fence evidence and publishes explicit verified local ownership. Changed-record round trips exercise runner admission, repeat pulls, interrupted metadata publication and restart-probe failure. Installed-Pi offline cold-load verification passed; it does not prove a model follow-up. Record and metadata publication remain separate atomic replacements; simulated interruption recovery is tested, not filesystem power-loss durability.
 
-The final full-repository regression run passed: **4,253 passed, 47 skipped, 9 warnings** in 385.20 seconds with `PYTHONPATH=src PYTHONUTF8=1 python -m pytest tests -q --no-cov --tb=short`, including the discovery integration and OMP additions. Coverage was not measured; warnings include unawaited AsyncMock coroutines and remain visible in the report.
+The final full-repository regression run passed: **4,259 passed, 47 skipped, 9 warnings** in 388.91 seconds with `PYTHONPATH=src PYTHONUTF8=1 python -m pytest tests -q --no-cov --tb=short`, including the discovery integration and OMP additions. Coverage was not measured; warnings include unawaited AsyncMock coroutines and remain visible in the report.
 
 An earlier full regression run passed: **4,081 passed, 41 skipped, 9 warnings** in 380.35 seconds with `PYTHONPATH=src PYTHONUTF8=1 python -m pytest tests -q --no-cov --tb=short`. Per-test home/config isolation clears inherited global overrides and preserves explicit test path patches; isolated homes live outside directories under test. Earlier shared-override and directory-contamination failures were corrected, not waived. No live configuration was changed to accommodate tests. Coverage was not measured; warnings include unawaited AsyncMock coroutines and remain visible in the regression report.
 
