@@ -133,7 +133,7 @@ def test_omp_public_sdk_persistence_coldload(tmp_path: Path) -> None:
 
 def test_omp_bundle_collect_restore_sdk_coldload(tmp_path: Path) -> None:
     """Real SDK write -> collect -> restore -> separate SDK process read."""
-    from untether.session_migration.omp_bundle import collect_omp_records
+    from untether.session_migration.omp_bundle import collect_omp_bundle
     from untether.session_migration.omp_restore import restore_omp_records
 
     if not BUN.is_file():
@@ -147,7 +147,7 @@ def test_omp_bundle_collect_restore_sdk_coldload(tmp_path: Path) -> None:
     blobs = src_root / "agent" / "blobs" / "data"
     blobs.mkdir(parents=True, exist_ok=True)
     sid = written["id"]
-    records = collect_omp_records(
+    bundle = collect_omp_bundle(
         sessions_dir=src_root / "sessions",
         blobs_dir=blobs,
         native_id=sid,
@@ -160,10 +160,10 @@ def test_omp_bundle_collect_restore_sdk_coldload(tmp_path: Path) -> None:
     env2["OMP_SESSION_DIR"] = str(verify_root / "restored")
     env2["OMP_EXPECT_CWD"] = str(src_root)
     restored = restore_omp_records(
-        records=records,
+        records=bundle.records,
         sessions_dir=verify_root / "restored",
         blobs_dir=verify_root / "agent" / "blobs" / "data",
-        journal_name=Path(written["file"]).name,
+        journal_name=bundle.journal_name,
     )
     assert restored.read_bytes() == Path(written["file"]).read_bytes()
     loaded = _run("read", verify_root, env2, str(restored))
