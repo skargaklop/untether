@@ -27,8 +27,16 @@ _GRANDCHILD = (
 # Probe: spawns the grandchild inside its own group, then hangs past its deadline.
 _HANG_WITH_GRANDCHILD = (
     "import subprocess, sys, time\n"
-    "subprocess.Popen([sys.executable, '-c', sys.argv[3], sys.argv[1], sys.argv[2]])\n"
+    "args = [sys.executable, '-c', sys.argv[3], sys.argv[1], sys.argv[2]]\n"
+    "subprocess.Popen(args)\n"
     "time.sleep(300)\n"
+)
+# Probe: spawns the grandchild, then exits 0 while that child is still alive.
+_LEADER_EXITS_LEAVING_GRANDCHILD = (
+    "import subprocess, sys, time\n"
+    "args = [sys.executable, '-c', sys.argv[3], sys.argv[1], sys.argv[2]]\n"
+    "subprocess.Popen(args)\n"
+    "time.sleep(0.5)\n"
 )
 
 _GRANDCHILD_DELAY_S = 3.0
@@ -79,3 +87,29 @@ def test_timeout_kills_owned_tree_before_grandchild_marker(tmp_path: Path) -> No
     remaining = max(0.0, _GRANDCHILD_DELAY_S - elapsed) + 1.0
     time.sleep(remaining)
     assert not marker.exists(), "leaked grandchild survived probe teardown"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires a Windows job object")
+def test_windows_leader_exit_does_not_orphan_its_child(tmp_path: Path) -> None:
+    """A probe that exits 0 while a child survives must still kill the child.
+
+    ``taskkill /T /F`` only reports ``rc=128`` for a leader that is already
+    gone, so this grandchild would survive and write its marker. The job the
+    leader was created in is what kills it: the marker must never appear.
+    """
+    marker = tmp_path / "orphan-marker.txt"
+    argv = [
+        sys.executable,
+        "-c",
+        _LEADER_EXITS_LEAVING_GRANDCHILD,
+        str(marker),
+        str(_GRANDCHILD_DELAY_S),
+        _GRANDCHILD,
+    ]
+    started = time.monotonic()
+    run_probe(argv, timeout_s=30.0)
+    elapsed = time.monotonic() - started
+    assert elapsed < _GRANDCHILD_DELAY_S, "leader did not exit before the marker"
+
+    time.sleep(max(0.0, _GRANDCHILD_DELAY_S - elapsed) + 1.0)
+    assert not marker.exists(), "grandchild outlived the probe job teardown"

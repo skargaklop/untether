@@ -3,10 +3,15 @@
 The probe runs with every standard stream on ``DEVNULL``: nothing a hung or
 hostile engine writes can accumulate in this process. Whatever the probe does
 — exit zero, fail, or hang past the deadline — its privately owned process
-group (POSIX) or process tree (Windows) is killed and the leader reaped before
+group (POSIX) or Job Object (Windows) is killed and the leader reaped before
 this function returns, so a failed restart probe cannot leave an engine orphan
-behind it. No global process scan and no signal ever leaves the group or tree
+behind it. No global process scan and no signal ever leaves the group or job
 this module created.
+
+Windows teardown closes the job the probe was created in, which kills probes
+whose leader exited with children still alive — the case ``taskkill /T /F``
+cannot prove, since it only reports ``rc=128`` for a leader that is already
+gone (see ``windows_probe_job``).
 """
 
 from __future__ import annotations
@@ -14,32 +19,40 @@ from __future__ import annotations
 import os
 import signal
 import subprocess
+from typing import Protocol
 
 from .native_adapter import CapabilityUnavailable
 
 # Teardown budget: the probe deadline belongs to the caller, the cleanup that
 # follows it must be bounded too.
 _REAP_TIMEOUT_S = 5.0
-_TASKKILL_TIMEOUT_S = 5.0
-# `taskkill` exits 128 when the PID (and thus the tree) is already gone.
-_TASKKILL_ALREADY_GONE = 128
 
 
-def _spawn(argv: list[str]) -> subprocess.Popen[bytes]:
-    """Start *argv* as the leader of a fresh, privately owned group.
+class _OwnedProbe(Protocol):
+    """The probe-handle surface ``run_probe`` relies on, ``Popen`` compatible."""
+
+    @property
+    def pid(self) -> int: ...
+
+    @property
+    def returncode(self) -> int | None: ...
+
+    def wait(self, timeout: float | None = None) -> int: ...
+
+    def poll(self) -> int | None: ...
+
+
+def _spawn(argv: list[str]) -> _OwnedProbe:
+    """Start *argv* as the leader of a fresh, privately owned group or job.
 
     ``argv`` is validated operator configuration, never chat input, so
-    ``shell=False`` is kept explicit.
+    ``shell=False`` is kept explicit. On Windows the leader is created
+    suspended and assigned to a kill-on-close job before it can run.
     """
     if os.name == "nt":
-        return subprocess.Popen(  # nosec B603
-            argv,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
-            shell=False,
-        )
+        from .windows_probe_job import spawn_suspended_in_job
+
+        return spawn_suspended_in_job(argv)
     return subprocess.Popen(  # nosec B603
         argv,
         stdin=subprocess.DEVNULL,
@@ -51,34 +64,16 @@ def _spawn(argv: list[str]) -> subprocess.Popen[bytes]:
     )
 
 
-def _kill_owned_tree(proc: subprocess.Popen[bytes]) -> str | None:
+def _kill_owned_tree(proc: _OwnedProbe) -> str | None:
     """Kill the probe's own group/tree. Return a reason when that failed.
 
     POSIX signals ``os.killpg(proc.pid, SIGKILL)`` — the group id created by
     ``start_new_session=True``, so the signal is confined to this probe's
-    session and its descendants. Windows walks the OS tree by parent PID with
-    a bounded ``taskkill /T /F``, falling back to killing the direct child.
+    session and its descendants. Windows tears down the job object that has
+    owned the probe and every descendant since before it was resumed.
     """
     if os.name == "nt":
-        reason: str | None = None
-        try:
-            result = subprocess.run(  # nosec B603
-                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-                timeout=_TASKKILL_TIMEOUT_S,
-                shell=False,
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            reason = f"taskkill unavailable or failed: {exc!r}"
-        else:
-            if result.returncode not in (0, _TASKKILL_ALREADY_GONE):
-                reason = f"taskkill rc={result.returncode}"
-        if proc.poll() is None:
-            proc.kill()
-        return reason
+        return _teardown_job(proc)
     try:
         os.killpg(proc.pid, signal.SIGKILL)
     except ProcessLookupError:
@@ -88,11 +83,31 @@ def _kill_owned_tree(proc: subprocess.Popen[bytes]) -> str | None:
     return None
 
 
-def _reap_leader(proc: subprocess.Popen[bytes]) -> bool:
+def _teardown_job(proc: _OwnedProbe) -> str | None:
+    """Windows: terminate the probe's job and close the handle that owns it."""
+    from .windows_probe_job import JobProbeProcess
+
+    if not isinstance(proc, JobProbeProcess):  # pragma: no cover - wiring bug
+        return "probe handle is not a Windows job probe"
+    return proc.teardown()
+
+
+def _release_owned_handles(proc: _OwnedProbe) -> str | None:
+    """Drop any residual OS handle. A no-op for POSIX process groups."""
+    if os.name != "nt":
+        return None
+    from .windows_probe_job import JobProbeProcess
+
+    if not isinstance(proc, JobProbeProcess):
+        return None
+    return proc.release()
+
+
+def _reap_leader(proc: _OwnedProbe) -> bool:
     """Reap the direct child inside the teardown budget. False means alive."""
     try:
         proc.wait(timeout=_REAP_TIMEOUT_S)
-    except subprocess.TimeoutExpired:
+    except (subprocess.TimeoutExpired, OSError):
         return False
     return True
 
@@ -107,7 +122,7 @@ def run_probe(argv: list[str], timeout_s: float) -> None:
     Raises:
         CapabilityUnavailable: ``RESTART_PROBE_FAILED`` when the probe cannot
             be started, exits nonzero, exceeds ``timeout_s``, or when its
-            process group/tree cannot be proven dead — an unproven teardown is
+            process group/job cannot be proven dead — an unproven teardown is
             never reported as success.
     """
     try:
@@ -123,7 +138,8 @@ def run_probe(argv: list[str], timeout_s: float) -> None:
     finally:
         cleanup = _kill_owned_tree(proc)
         if not _reap_leader(proc):
-            cleanup = cleanup or "probe leader still unreaped after SIGKILL"
+            cleanup = cleanup or "probe leader still unreaped after kill"
+        cleanup = _release_owned_handles(proc) or cleanup
 
     if cleanup is not None and failure is None:
         failure = RuntimeError(cleanup)
