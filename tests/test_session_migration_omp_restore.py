@@ -58,6 +58,28 @@ def _restore(tmp_path: Path, records: dict[str, bytes], tag: str, **overrides):
     return restore_omp_records(**kwargs)
 
 
+@pytest.mark.parametrize("corrupt", [False, True])
+def test_restore_shared_blob_preserves_existing_content(
+    tmp_path: Path, corrupt: bool
+) -> None:
+    """Moving another session must reuse shared assets without overwriting them."""
+    records = _bundle(tmp_path)
+    digest = hashlib.sha256(b"image-data").hexdigest()
+    blobs = tmp_path / "dest" / "agent" / "blobs" / "data"
+    blobs.mkdir(parents=True)
+    original = b"corrupt-existing" if corrupt else b"image-data"
+    blob = blobs / digest
+    blob.write_bytes(original)
+    if corrupt:
+        with pytest.raises(ValueError, match="OMP_RESTORE_BLOB_MISMATCH"):
+            _restore(tmp_path, records, "dest")
+        assert not (tmp_path / "dest" / "sessions" / JOURNAL_NAME).exists()
+    else:
+        journal = _restore(tmp_path, records, "dest")
+        assert journal.read_bytes() == records["session.jsonl"]
+    assert blob.read_bytes() == original
+
+
 def test_restore_roundtrip_exact_bytes_and_refs(tmp_path: Path) -> None:
     records = _bundle(tmp_path)
     journal = tmp_path / "sessions" / JOURNAL_NAME

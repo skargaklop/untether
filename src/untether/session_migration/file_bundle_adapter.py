@@ -44,6 +44,7 @@ from .native_adapter import (
     registered_adapter_engines,
 )
 from .native_archive import NativeArchive, _safe_name
+from .omp_adapter import OmpPersistenceAdapter
 from .settings import EnginePersistenceProfile, SessionMigrationSettings
 from .subprocess_adapter import ExecutablePersistenceAdapter
 
@@ -623,6 +624,16 @@ def register_from_settings(settings: SessionMigrationSettings, *, engine: str) -
     configure_session_gate(settings)
     profile = settings.persistence.engines.get(engine)
     if profile is None:
+        return
+    if profile.format == "omp-v1":
+        # Route before any file-layout path math: the OMP adapter owns its own
+        # realdir validation at construction and never creates stores implicitly.
+        if engine in registered_adapter_engines():
+            return
+        register_persistence_adapter(
+            engine,
+            lambda: OmpPersistenceAdapter(engine=engine, profile=profile),
+        )
         return
     if profile.format == "executable-v1":
         # Route before any file-layout path math: the executable adapter owns

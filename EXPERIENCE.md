@@ -1,5 +1,9 @@
 # ACP Phase E Experience
 
+## All-engine completion boundary
+
+The all-engine contract was incorrectly claimed satisfied while production OMP/Codex/OpenCode registrations and real follow-up turns were still missing. The operator's statement that Codex/OpenCode could be tested locally was not permission to defer them. A coordinator probe using a constant-true health command and `pi --version` demonstrates framing/import only, not native continuation. Read-only adapter research also suggested copying OpenCode's whole database; that would violate per-session migration and preservation of unrelated destination sessions, so session-scoped persistence must be investigated instead. OMP collector/restore routines are reusable but do not become a production adapter merely by existing; registration, gating, durable identity metadata, reclaim and a genuine scoped restore probe require verification.
+
 ## Session-transfer controller checkpoint
 
 Repeated flash worker packets consumed their turn budgets during inspection without writing the assigned patch, including mandatory gate configuration and runner integration. Their reports are not implementation evidence. The controller implemented those narrow changes and reran checks. Test-only workers also left a broken placeholder and a tautological `closed or True` assertion; both were corrected, and teardown is now observed through the fake generator's `finally`. Keep packet scope to one explicit behavioural invariant and inspect the actual diff before accepting output.

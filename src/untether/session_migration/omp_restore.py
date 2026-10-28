@@ -134,7 +134,19 @@ def restore_omp_records(
                 raise ValueError("OMP_RESTORE_BLOB_NAME_INVALID")
             if hashlib.sha256(data).hexdigest() != digest:
                 raise ValueError("OMP_RESTORE_BLOB_MISMATCH")
-            targets.append((blobs_dir / digest, data))
+            blob_path = blobs_dir / digest
+            try:
+                blob_path.lstat()
+            except FileNotFoundError:
+                targets.append((blob_path, data))
+            else:
+                # Blobs are shared, content-addressed assets, not session ownership.
+                # Never replace an existing blob, even if its filename is correct.
+                _checked(blob_path)
+                with blob_path.open("rb") as stream:
+                    existing = stream.read(len(data) + 1)
+                if existing != data:
+                    raise ValueError("OMP_RESTORE_BLOB_MISMATCH")
         elif name.startswith(_ARTIFACT_KEY):
             relative = _safe_relative(name[len(_ARTIFACT_KEY) :])
             targets.append((sibling_root / Path(*relative.parts), data))

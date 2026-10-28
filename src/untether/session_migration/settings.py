@@ -73,8 +73,39 @@ class ExecutablePersistenceProfile(BaseModel):
         return None if value is None else _absolute_local_path(value)
 
 
+class OmpPersistenceProfile(BaseModel):
+    """Operator-declared OMP 18.1.6 store: journal tree plus canonical blob store.
+
+    ``sessions_dir`` holds ``<journal>.jsonl`` files with sibling artifact
+    directories; ``blobs_dir`` is the content-addressed blob store root
+    (``blob:sha256:...`` refs resolve to ``<blobs_dir>/<digest>``).
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    format: Literal["omp-v1"]
+    sessions_dir: str
+    blobs_dir: str
+    restart_argv: tuple[str, ...] = Field(min_length=1, max_length=16)
+    restart_timeout_s: float = Field(default=120, gt=0, le=1800)
+    max_file_bytes: int = Field(default=33554432, gt=0, le=1073741824)
+    max_files: int = Field(default=10000, ge=1, le=1000000)
+
+    @field_validator("sessions_dir", "blobs_dir")
+    @classmethod
+    def dirs_absolute(cls, value: str) -> str:
+        return _absolute_local_path(value)
+
+    @field_validator("restart_argv")
+    @classmethod
+    def restart_argv_safe(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not v or any(c in v for c in "\x00\n\r") for v in values):
+            raise ValueError("restart_argv entries must be non-empty argv tokens")
+        return values
+
+
 EngineProfile = Annotated[
-    EnginePersistenceProfile | ExecutablePersistenceProfile,
+    EnginePersistenceProfile | ExecutablePersistenceProfile | OmpPersistenceProfile,
     Field(discriminator="format"),
 ]
 
