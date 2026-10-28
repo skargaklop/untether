@@ -33,11 +33,7 @@ _OUTPUT_REFS_MAX = 4096
 _ASSETS_TOTAL_LIMIT = 64 * 1024 * 1024
 # Binary read, never following a symlink at open time (POSIX); Windows has
 # no O_NOFOLLOW, so replacement is caught by the fstat/lstat identity check.
-_READ_FLAGS = (
-    os.O_RDONLY
-    | getattr(os, "O_NOFOLLOW", 0)
-    | getattr(os, "O_BINARY", 0)
-)
+_READ_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
 
 
 def _refuse() -> CapabilityUnavailable:
@@ -217,9 +213,10 @@ def validate_asset_manifest(
         manifest = json.loads(blob)
     except (ValueError, UnicodeError) as exc:
         raise _refuse() from exc
-    if not isinstance(manifest, dict) or json.dumps(
-        manifest, separators=(",", ":"), sort_keys=True
-    ).encode() != blob:
+    if (
+        not isinstance(manifest, dict)
+        or json.dumps(manifest, separators=(",", ":"), sort_keys=True).encode() != blob
+    ):
         raise _refuse()  # non-canonical or structurally invalid manifest
     listing: dict[str, str] = {}
     for ref, entry in manifest.items():
@@ -230,9 +227,7 @@ def validate_asset_manifest(
         record = entry.get("record")
         digest = entry.get("sha256")
         size = entry.get("size")
-        if not isinstance(record, str) or not record.startswith(
-            _ASSET_RECORD_PREFIX
-        ):
+        if not isinstance(record, str) or not record.startswith(_ASSET_RECORD_PREFIX):
             raise _refuse()
         if not _SPILL_NAME.fullmatch(record[len(_ASSET_RECORD_PREFIX) :]):
             raise _refuse()
