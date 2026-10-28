@@ -54,6 +54,21 @@ from .native_adapter import (
 )
 from .native_archive import NativeArchive, _safe_name
 from .omp_adapter import OmpPersistenceAdapter
+from .pi_output_assets import (
+    MANIFEST_RECORD as _PI_OUTPUT_MANIFEST_RECORD,
+)
+from .pi_output_assets import (
+    asset_record_name as _pi_output_asset_record_name,
+)
+from .pi_output_assets import (
+    collect_assets as _collect_pi_output_assets,
+)
+from .pi_output_assets import (
+    full_output_refs as _pi_output_refs,
+)
+from .pi_output_assets import (
+    manifest_record as _pi_output_manifest_record,
+)
 from .settings import EnginePersistenceProfile, SessionMigrationSettings
 from .subprocess_adapter import ExecutablePersistenceAdapter
 
@@ -646,6 +661,20 @@ class FileBundlePersistenceAdapter:
                     )
             except OSError as exc:
                 raise CapabilityUnavailable("SESSION_METADATA_UNREADABLE") from exc
+        # pi spills oversized bash output to OS tmp; carry those bytes so the
+        # archive is self-contained. The journal itself is never modified.
+        journal_blobs = [
+            records["session.jsonl"],
+            *(records[f"parent-{index}.jsonl"] for index in range(1, len(parents) + 1)),
+        ]
+        pi_refs = _pi_output_refs(journal_blobs)
+        if pi_refs:
+            assets = _collect_pi_output_assets(pi_refs, Path(tempfile.gettempdir()))
+            for ref, blob in assets.items():
+                records[_pi_output_asset_record_name(ref)] = blob
+            records[_PI_OUTPUT_MANIFEST_RECORD] = _pi_output_manifest_record(assets)
+            if len(records) > _MAX_RECORDS:
+                raise CapabilityUnavailable("ARCHIVE_TOO_LARGE")
         # Metadata records imported identity, not a version of mutable engine history.
         return NativeArchive(
             engine=self.engine,
@@ -669,6 +698,13 @@ class FileBundlePersistenceAdapter:
         allowed = {"session.jsonl", _LAYOUT_RECORD, _PARENTS_RECORD} | {
             f"parent-{index}.jsonl" for index in range(1, _MAX_PARENTS + 1)
         }
+        # Asset-carrying archives refuse before ANY store write: spill bytes
+        # are carried faithfully but their restore-to-tmp semantics are not
+        # implemented, and a silent drop would falsely certify fidelity.
+        if _PI_OUTPUT_MANIFEST_RECORD in archive.records:
+            raise CapabilityUnavailable("PI_OUTPUT_IMPORT_NOT_IMPLEMENTED")
+        if set(archive.records) - allowed - {_PI_OUTPUT_MANIFEST_RECORD}:
+            raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
         if not {"session.jsonl"} <= set(archive.records) <= allowed:
             raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
         layout_name = (
@@ -833,6 +869,12 @@ class FileBundlePersistenceAdapter:
             {_LAYOUT_RECORD} if layout_name is not None else set()
         )
         record_names |= allowed_parents & set(records)
+        # Reclaim carries only journal records; a spill-manifest archive is
+        # refused before any overwrite exactly like import_exact.
+        if _PI_OUTPUT_MANIFEST_RECORD in records or any(
+            name.startswith("pi-output/") for name in records
+        ):
+            raise CapabilityUnavailable("PI_OUTPUT_IMPORT_NOT_IMPLEMENTED")
         if set(records) != record_names or set(expected_prior_records) != record_names:
             raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
         data = records["session.jsonl"]
