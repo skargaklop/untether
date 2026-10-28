@@ -13,6 +13,10 @@ $env:UNTETHER_TEST_OPENCODE_EXE = "$env:APPDATA\npm\node_modules\opencode-ai\bin
     tests/test_session_migration_omp_runtime.py `
     tests/test_session_migration_codex_runtime.py `
     tests/test_session_migration_opencode_runtime.py `
+    tests/test_session_migration_pi_coordinator.py `
+    tests/test_session_migration_omp_coordinator.py `
+    tests/test_session_migration_codex_coordinator.py `
+    tests/test_session_migration_opencode_coordinator.py `
     -q -o addopts=""
 ```
 
@@ -32,8 +36,11 @@ Limits stated honestly: these are native shell persistence proofs, not
 LLM/model continuation; coordinator-integrated SSH round trips are covered by
 the separate transfer suites (`tests/test_session_migration_transfer_end_to_end.py`).
 
-Last full controller run of this exact command (all four engines installed):
-`6 passed in 75.72s`.
+Controller rerun of `bash scripts/check-engine-matrix.sh`, bounded to 420
+seconds, passed with all four engines installed: `14 passed in 257.39s`.
+This includes the unconditional Codex inbound binding check and each engine's
+coordinator suite. The separate Codex appendix-validation suite passed 14 tests;
+Codex coordinator plus reclaim recovery passed 7 tests.
 
 Skips are explicit and environmental (missing engine executable, Windows
 symlink/gate privileges). A passing row requires the installed engine; absence

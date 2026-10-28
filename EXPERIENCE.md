@@ -1,5 +1,9 @@
 # ACP Phase E Experience
 
+## Codex resume and asset-research boundaries
+
+Controller expanded installed-engine gate passed 14 checks in 257.39 seconds; full regression passed 4,539 with 54 skips before the additional metadata-crash repair. Native resumes append settings events, so original prefixes must remain exact while only bounded validated appendices are admitted. Review found a separate interrupted metadata-publication case: incoming journal plus prior sidecar must be pinned to the cached prior metadata, not trusted from current bytes. Its targeted repair is still being verified. Asset scouts initially overgeneralized inline images from opaque journals; tagged Codex source proves separately persisted thread attachments and opaque file IDs. Do not confuse thread-attachment metadata RPCs with an attachment-byte resolver. Untagged upstream schemas do not establish installed-version behavior. Repository-wide Ruff includes untracked diagnostic fragments under `trash/`; the production `src tests` gate passes without modifying those unrelated diagnostic files.
+
 ## Parent import and probe ownership review
 
 Controller reruns passed the installed-engine matrix (seven checks) and parent import/archive regression (143 passed, five platform skips), but review found two uncovered invariants: the parent loop wrote earlier missing journals before checking later collisions, and Windows taskkill cannot prove descendants dead once their leader has exited. Separate bounded Flash workers are correcting all-destination preflight and durable Windows process ownership. Passing these tests alone is not evidence those gaps are repaired; rerun new regressions and the matrix after integration. Parent reclaim remains separate work.
