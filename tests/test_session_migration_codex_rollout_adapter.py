@@ -18,6 +18,7 @@ import pytest
 
 from untether.session_migration.codex_rollout_adapter import (
     CodexRolloutPersistenceAdapter,
+    _assert_read_history,
 )
 from untether.session_migration.native_adapter import (
     CapabilityUnavailable,
@@ -601,6 +602,27 @@ def test_import_overwrite_refuses_foreign_engine_and_identity(tmp_path):
             generation=2,
             lineage=lineage,
         )
+
+
+@pytest.mark.parametrize("turns", [[], [{"items": []}], [{"items": [{"id": "wrong"}]}]])
+def test_history_probe_refuses_missing_native_items(turns):
+    data = _rollout_bytes(
+        "session",
+        "/work",
+        extra_line={"type": "item_completed", "item": {"id": "expected"}},
+    )
+    with pytest.raises(CapabilityUnavailable, match="RESTART_PROBE_FAILED"):
+        _assert_read_history(data, {"thread": {"turns": turns}})
+
+
+def test_history_probe_accepts_metadata_only_and_visible_items():
+    _assert_read_history(_rollout_bytes("session", "/work"), {"thread": {}})
+    data = _rollout_bytes(
+        "session",
+        "/work",
+        extra_line={"type": "item_completed", "item": {"id": "expected"}},
+    )
+    _assert_read_history(data, {"thread": {"turns": [{"items": [{"id": "expected"}]}]}})
 
 
 def test_default_probe_used_when_no_injection(tmp_path):

@@ -9,7 +9,9 @@ byte-for-byte with ``O_EXCL`` at the lineage-pinned path (parents created
 ``codex app-server`` JSON-RPC flow (initialize -> initialized -> thread/resume
 -> thread/read). Proof requires the echoed thread id/cwd/model/provider to
 match the rollout header exactly (cwd compared via ``os.path.normcase``) and
-the post-probe rollout on disk to keep the pre-probe bytes as an exact prefix
+persisted history to remain visible through thread/read (including stable native
+completed-item IDs where present), and the post-probe rollout on disk to keep
+the pre-probe bytes as an exact prefix
 (the engine appends a ``thread_settings_applied`` event on resume).
 
 Generation/lineage identity is durably preserved in a separate validated
@@ -210,6 +212,44 @@ def _assert_read_echo(result: object, native_id: str, cwd: str) -> None:
         raise CapabilityUnavailable("RESTART_PROBE_FAILED")
 
 
+def _assert_read_history(data: bytes, result: object) -> None:
+    """Refuse empty replay of persisted history; pin native completed item IDs.
+
+    This is a history visibility check, not proof of model continuation or tool
+    execution. Legacy response items do not always carry stable item IDs.
+    """
+    has_history = False
+    expected_ids: set[str] = set()
+    try:
+        for line in data.splitlines()[1:]:
+            record = json.loads(line)
+            payload = record.get("payload", {})
+            if (
+                record.get("type") == "response_item"
+                and payload.get("type")
+                in {"message", "function_call", "function_call_output"}
+            ) or (
+                record.get("type") == "event_msg"
+                and payload.get("type")
+                in {"item_completed", "user_message", "agent_message"}
+            ):
+                has_history = True
+                item = payload.get("item", {})
+                if isinstance(item, dict) and isinstance(item.get("id"), str):
+                    expected_ids.add(item["id"])
+        if not has_history:
+            return
+        thread = result.get("thread") if isinstance(result, dict) else None
+        turns = thread.get("turns") if isinstance(thread, dict) else None
+        if not isinstance(turns, list):
+            raise ValueError("missing turns")
+        items = [item for turn in turns for item in turn["items"]]
+        if not items or not expected_ids.issubset({item["id"] for item in items}):
+            raise ValueError("missing history items")
+    except (ValueError, UnicodeError, AttributeError, KeyError, TypeError) as exc:
+        raise CapabilityUnavailable("RESTART_PROBE_FAILED") from exc
+
+
 def _validate_rollout_store(sessions_root: Path) -> None:
     """Fail closed unless the declared root is a real, link-free directory."""
     if not sessions_root.is_dir() or sessions_root.is_symlink():
@@ -265,7 +305,7 @@ class CodexRolloutPersistenceAdapter:
 
     def _default_rpc_resume(
         self, native_id: str, journal_path: Path, timeout_s: float
-    ) -> None:
+    ) -> object:
         """Real probe: drive codex app-server's JSON-RPC resume flow.
 
         The child runs with an isolated CODEX_HOME (the declared store's
@@ -421,9 +461,11 @@ class CodexRolloutPersistenceAdapter:
             )
             _assert_resume_echo(resumed, native_id, cwd, model, provider)
             read = _send(
-                "thread/read", {"threadId": native_id, "includeTurns": False}, 3
+                "thread/read", {"threadId": native_id, "includeTurns": True}, 3
             )
             _assert_read_echo(read, native_id, cwd)
+            _assert_read_history(data, read)
+            return read  # Narrow observation seam; child is closed before return.
         finally:
             with suppress(OSError, ValueError, AttributeError):
                 if proc.stdin is not None:
