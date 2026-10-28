@@ -173,3 +173,28 @@ def test_installed_opencode_adapter_restore_restart(tmp_path, monkeypatch):
     with _running(destination):
         assert _ok(destination, f"/session/{sid}/message") == after
         assert destination._collect_events(keep["id"]) == keep_events
+
+    # Evolved-archive return leg: the destination store evolved past the
+    # restored archive (follow-up shell output), so re-export must contain the
+    # original events as a strict prefix, then round-trip into a third store.
+    evolved = destination.export_exact(sid)
+    evolved_events = json.loads(evolved.records["sync-events.json"])
+    assert evolved_events[: len(events)] == events
+    assert len(evolved_events) > len(events)
+    assert followup in json.dumps(evolved_events)
+
+    returner = adapter("return")
+    proof = returner.import_exact(evolved)
+    assert proof.native_id == sid
+    assert proof.restarted and proof.resumed
+
+    # A fresh serve child (independent restart) must read both the original
+    # admitted prompt and the follow-up shell output from the third store.
+    with _running(returner):
+        fetched = _ok(returner, f"/session/{sid}/message")
+        returned_outputs = _tool_outputs(fetched)
+        assert any(initial in output for output in returned_outputs)
+        assert any(followup in output for output in returned_outputs)
+        assert admitted in json.dumps(returner._collect_events(sid))
+        assert returner._collect_events(sid) == evolved_events
+    assert returner.export_exact(sid).records == evolved.records

@@ -600,6 +600,26 @@ class FileBundlePersistenceAdapter:
     def _export_snapshot(self, session_id: str) -> NativeArchive:
         record_path = self._lookup_record(session_id)
         records = _read_record_strict(self.profile, record_path, session_id)
+        # pi's parentSession lineage must survive the move: each parent journal
+        # is carried as its own record so the restored tree does not dangle.
+        # The bounded headers were already read by _collect_parent_chain; the
+        # re-read here is pure and bounded and yields the strict-read identity.
+        parents = _collect_parent_chain(self.profile, self.sessions_dir, record_path)
+        if len(parents) + (1 if parents else 0) + len(records) > _MAX_RECORDS:
+            raise CapabilityUnavailable("PARENT_REF_DEPTH")
+        for index, parent_path in enumerate(parents, 1):
+            header = _read_bounded_header(parent_path)
+            parent_id = header.get("id")
+            if not isinstance(parent_id, str) or not parent_id:
+                raise CapabilityUnavailable("SESSION_RECORD_MALFORMED")
+            records[f"parent-{index}.jsonl"] = _read_record_strict(
+                self.profile, parent_path, parent_id
+            )["session.jsonl"]
+        if parents:
+            records[_PARENTS_RECORD] = json.dumps(
+                {"version": 1, "journals": [p.name for p in parents]},
+                sort_keys=True,
+            ).encode()
         # Preserve the original root journal basename when it is not the
         # degenerate canonical name: native parentSession entries reference
         # journal paths and would dangle after a rename.
