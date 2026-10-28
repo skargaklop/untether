@@ -358,18 +358,23 @@ class CodexRolloutPersistenceAdapter:
 
             threading.Thread(target=_reader, daemon=True).start()
 
-            def _send(method: str, params: dict, request_id: int) -> object:
+            def _send(
+                method: str, params: dict, request_id: int | None = None
+            ) -> object:
                 request = {
                     "jsonrpc": "2.0",
                     "method": method,
                     "params": params,
-                    "id": request_id,
                 }
+                if request_id is not None:
+                    request["id"] = request_id
                 try:
                     proc.stdin.write(json.dumps(request) + "\n")
                     proc.stdin.flush()
                 except (OSError, ValueError, TypeError, AttributeError) as exc:
                     raise CapabilityUnavailable("RESTART_PROBE_FAILED") from exc
+                if request_id is None:
+                    return None
                 while True:
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
@@ -390,7 +395,11 @@ class CodexRolloutPersistenceAdapter:
                     ):
                         continue
                     if "error" in response:
-                        raise CapabilityUnavailable("RESTART_PROBE_FAILED")
+                        error = response["error"]
+                        code = error.get("code") if isinstance(error, dict) else None
+                        raise CapabilityUnavailable(
+                            f"RESTART_PROBE_FAILED: {method} RPC code={code}"
+                        )
                     return response.get("result")
 
             _send(
