@@ -35,3 +35,24 @@ projects = { projects = "/srv" }
 # Destination must enrol its own bot/chat/topic before activation.
 destination_binding = "REQUIRED_PRE_ENROLLED_BINDING_ID"
 # Agent credentials remain in destination secret store. No private keys/tokens copied.
+
+# Receiver-side configuration, on the receiving endpoint only. Values below
+# are placeholders, not permission to change or restart a running installation.
+# Omitted-engine inbound discovery requires project_root and a persistence
+# adapter with project-scoped lookup. Existing explicit-engine transfers do
+# not infer project membership from this alias.
+[session_migration.receiver]
+# Optional trusted caller identity for return/repeated-move reclaim. Bind this
+# receiver wrapper/configuration to one authorised SSH principal; never take
+# the value from a Telegram message or incoming protocol field. Use distinct
+# receiver configurations/state for separately authorised peers. Omit to
+# refuse collision reclaim (ordinary noncolliding imports remain supported).
+authorized_peer = "REQUIRED_OPERATOR_BOUND_CALLER_ALIAS"
+endpoint_id = "REQUIRED_ENROLLED_ENDPOINT_ID"
+engine = "pi"
+project = "projects"
+project_root = "/srv/projects"
+state_dir = "/var/lib/untether/migration"
+destination_binding = "REQUIRED_PRE_ENROLLED_BINDING_ID"
+health_argv = ["/path/to/operator-installed-health-probe"]
+execution_mode = "native"

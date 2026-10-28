@@ -9,6 +9,9 @@ related:
 ---
 # One-action SSH session migration — implementation plan/spec
 
+> **Superseded for fidelity and product acceptance:** The transcript-seeding recommendation below is rejected. The binding contract is full native session restoration only through a verified engine persistence adapter, with the public `/session move <id> --to|--from <peer>` single-action interface. ACP does not define portable native storage; missing adapter capabilities must refuse without reseeding. See [implementation status](../reference/session-migration-implementation-status.md).
+
+
 > **Decision:** Do not copy Coddy's remote-control mode as migration. Implement an explicit, resumable SSH transfer in Untether, with a single command or Telegram action after one-time configuration. This is a plan, **not a deployed feature**. No live service or VPS changes are authorised by this document.
 
 **Goal:** Configure a named VPS, its SSH identity and destination projects once; move one selected session from local → VPS or VPS → local securely by one action, with a verified usable destination and an unambiguous source/destination ownership result.

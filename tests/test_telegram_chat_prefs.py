@@ -28,7 +28,9 @@ async def test_chat_prefs_store_roundtrip(tmp_path) -> None:
 
 
 @pytest.mark.anyio
-async def test_store_sees_external_rewrite_within_same_mtime_tick(tmp_path) -> None:
+async def test_store_sees_external_rewrite_within_same_mtime_tick(
+    tmp_path, monkeypatch
+) -> None:
     """Two store instances on one file must not miss an external rewrite.
 
     On some filesystems (notably GitHub's windows-latest runners) two
@@ -51,10 +53,15 @@ async def test_store_sees_external_rewrite_within_same_mtime_tick(tmp_path) -> N
     # store_a rewrites the file; simulate the windows-latest pathology
     # where the rewrite lands in the same mtime tick as the previous write
     # (old mtime), while the file itself was genuinely replaced (new ino).
-    old_mtime = (store_b._identity or (None, None, None))[0]
+    old_identity = store_b._identity
+    assert old_identity is not None
     await store_a.set_engine_override(123, "claude", EngineOverrides(model="y"))
     _mtime, ino, size = store_a._stat_signature()
-    store_b._identity = (old_mtime, ino, size)  # colliding mtime, real replace
+    assert ino != old_identity[1], "atomic replacement must change file identity"
+    # Simulate only timestamp collision; retain the reader's cached OLD inode.
+    monkeypatch.setattr(
+        store_b, "_stat_signature", lambda: (old_identity[0], ino, size)
+    )
     override = await store_b.get_engine_override(123, "claude")
     assert override is not None
     assert override.model == "y", "store_b served stale state across same-mtick rewrite"

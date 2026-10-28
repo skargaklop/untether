@@ -1,5 +1,49 @@
 # ACP Phase E Experience
 
+## Codex resume and asset-research boundaries
+
+Controller expanded installed-engine gate passed 14 checks in 257.39 seconds; full regression passed 4,539 with 54 skips before the additional metadata-crash repair. Native resumes append settings events, so original prefixes must remain exact while only bounded validated appendices are admitted. Review found a separate interrupted metadata-publication case: incoming journal plus prior sidecar must be pinned to the cached prior metadata, not trusted from current bytes. Its targeted repair is still being verified. Asset scouts initially overgeneralized inline images from opaque journals; tagged Codex source proves separately persisted thread attachments and opaque file IDs. Do not confuse thread-attachment metadata RPCs with an attachment-byte resolver. Untagged upstream schemas do not establish installed-version behavior. Repository-wide Ruff includes untracked diagnostic fragments under `trash/`; the production `src tests` gate passes without modifying those unrelated diagnostic files.
+
+## Parent import and probe ownership review
+
+Controller reruns passed the installed-engine matrix (seven checks) and parent import/archive regression (143 passed, five platform skips), but review found two uncovered invariants: the parent loop wrote earlier missing journals before checking later collisions, and Windows taskkill cannot prove descendants dead once their leader has exited. Separate bounded Flash workers are correcting all-destination preflight and durable Windows process ownership. Passing these tests alone is not evidence those gaps are repaired; rerun new regressions and the matrix after integration. Parent reclaim remains separate work.
+
+## Pi runtime follow-up boundary
+
+The Pi worker used documented RPC bash execution after restore, not a hand-written journal append. Both distinct sessions retain the native bashExecution output and original history across independent restart and evolved-archive return. Controller rerun passed the installed runtime check. RPC inspections must wait for the asynchronous bash response. Direct shell output is native session persistence evidence, not an LLM tool result or model-generated follow-up; do not label it coordinator or SSH evidence.
+
+## OMP production lookup versus collector-only evidence
+
+The read-only compatibility scout found that production lookup parsed a title slot as the session header, while the SDK runtime test bypassed lookup through the bundle collector. The repair worker reproduced SESSION_NOT_FOUND, then reused collector validation to accept only the fixed 256-byte title slot followed immediately by a bounded native header. Controller rerun passed 45 checks with five Windows symlink privilege skips. Runtime now routes export/import through OmpPersistenceAdapter with independent SDK cold loading; neither this result nor SDK append establishes model continuation or full asset transfer.
+
+## OpenCode replay verification boundary
+
+The runtime worker found that replay verification in the importing writer process did not establish independent persistence. Import now stops that owned child, launches another, and compares full canonical events again before certifying restart. Controller rerun passed 14 checks with one Windows symlink privilege skip, including original completed shell output, unrelated destination-session preservation, and a follow-up shell command surviving another restart. Fresh non-repository working directories timed out during worker diagnostics; repository-cwd evidence must not be generalised to arbitrary project authorization. Remaining source-scoping, duplicate-collision, port ownership and HTTP size limits need separate fixes. Native shell follow-up is not provider/model continuation.
+
+## Codex installed-engine resume diagnostic
+
+The bounded diagnostic worker isolated RPC -32600 to a synthetic rollout named without the native timestamp component. Use `rollout-YYYY-MM-DDTHH-MM-SS-<uuid>.jsonl`; do not weaken identity or exact-prefix assertions to accommodate a malformed fixture. The production probe must send `initialized` as a notification, not wait for a response. A fresh app-server can verify a second resume without duplicating an RPC client in the test. Controller rerun: Codex runtime and adapter suite passed (25 passed, one platform privilege skip). This proves disposable synthetic-journal restoration and independent resume, not conversational/model follow-up fidelity.
+
+## All-engine completion boundary
+
+The all-engine contract was incorrectly claimed satisfied while production OMP/Codex/OpenCode registrations and real follow-up turns were still missing. The operator's statement that Codex/OpenCode could be tested locally was not permission to defer them. A coordinator probe using a constant-true health command and `pi --version` demonstrates framing/import only, not native continuation. Read-only adapter research also suggested copying OpenCode's whole database; that would violate per-session migration and preservation of unrelated destination sessions, so session-scoped persistence must be investigated instead. OMP collector/restore routines are reusable but do not become a production adapter merely by existing; registration, gating, durable identity metadata, reclaim and a genuine scoped restore probe require verification.
+
+## Session-transfer controller checkpoint
+
+Repeated flash worker packets consumed their turn budgets during inspection without writing the assigned patch, including mandatory gate configuration and runner integration. Their reports are not implementation evidence. The controller implemented those narrow changes and reran checks. Test-only workers also left a broken placeholder and a tautological `closed or True` assertion; both were corrected, and teardown is now observed through the fake generator's `finally`. Keep packet scope to one explicit behavioural invariant and inspect the actual diff before accepting output.
+
+The migration worktree lacked the corrected product contract and existing discovery modules, although they existed uncommitted in the main checkout. Contract text and the bounded catalog/scanner modules were copied without altering the originals; discovery tests use disposable roots. Never infer branch contents from another checkout.
+
+Argon was consulted personally through the existing authenticated Untether thread. Its source-fencing and cold-restart suggestions are useful review input, not engine verification. Its generic path-rewrite suggestion conflicts with the fidelity contract and was not adopted. See [[docs/reference/session-migration-advisor-review]].
+
+## Native-transfer verification pitfalls
+
+A restored Pi v3 record can load correctly yet fail byte fidelity: cold startup appended a missing `thinking_level_change` record. The disposable runtime fixture now declares that state before export; installed-Pi history/identity checks and post-restart byte equality pass together. Do not remove the byte check to accommodate a synthetic fixture.
+
+Operation-bound receiver exports now require an explicit gate and a held snapshot context. Older CLI/subprocess fixture adapters must implement that contract rather than bypass production guards. When logical and native IDs differ, both identities need admission and durable fences; fencing only the logical ID leaves the actual native session runnable. Controller verification passed 16 receiver/protocol tests after that repair.
+
+A coverage investigation returned stale claims about absent executable registration and Pi runtime evidence while workers were modifying those areas. Re-read current files and rerun checks before adopting research summaries. Fixture subprocesses remain plumbing evidence, not installed-engine round-trip evidence.
+
 ## Shared runner cancel-scope cleanup
 
 A successful `CompletedEvent` is emitted while the per-attempt async generator may still own subprocess and AnyIO task-group cancel scopes. Returning or breaking from the retry wrapper at that yield abandons the nested generator, so Python may finalize it in a different task and raise `Attempted to exit a cancel scope that isn't the current task's current cancel scope` after the final Telegram answer was already delivered. Explicit `aclose()` is also unsafe here because injecting `GeneratorExit` through an active AnyIO task group becomes a `BaseExceptionGroup`; the minimal safe fix is to mark the terminal event, drain the attempt generator to natural completion in the same task, ignore any post-terminal events, and only then return or sleep before retrying. The deterministic regression asserts cleanup has run before `run_impl()` returns and in the same task that consumed the generator. Investigation required explicit Windows `HOME`/`USERPROFILE`, focused pytest needed `-o addopts=''`, and two attempted cheap-model routes were unavailable (one unknown alias and one retired upstream), so the default general-purpose route completed the read-only diagnosis.
@@ -120,3 +164,142 @@ Added a runtime-checkable `ForkableRunner` capability, implemented Codex app-ser
 ### Inconveniences
 
 Pre-existing `.local/` and `.trash/` remain untracked and untouched.
+
+- Reclaim lifecycle pitfall: durable inbound intent blocks ordinary replay; only exact pending fence owner/digest with persisted prior-operation linkage can reconcile.
+- In-process receiver tests must isolate remote gate roots from local migration locks.
+- File-bundle export_exact acquires runner admission internally; it cannot reload under a held migration lock. A public lock-only adapter read contract is needed (adapter files left untouched).
+
+## Bounded file-bundle reclaim follow-up
+
+Added caller-context/live-descriptor validated export_locked; coordinator reads reuse that seam while executable adapters retain export_exact. File overwrite validates incoming header and metadata before replacement, persists incoming metadata, and reruns scoped restart proof on reconciliation retries. Changed-byte file roundtrip and failed-probe retry pass. Record and metadata replacements remain separate: a crash between them leaves pending ownership blocking admission; matching incoming bytes with prior metadata can retry. Power-loss directory durability and arbitrary external store edits are not proven. Legacy reclaim_contract has two incompatible tests omitting lineage and declaring an unscoped nonexistent restart command; these fail closed, and were not edited outside the allowed scope. Final focused file/coordinator/gate/Pi check: 65 passed, 4 skipped; scoped Ruff passes. No live infrastructure or commits.
+
+## OMP public-SDK cold-load verification
+
+OMP 18.1.6 exports SessionManager through ./session/*; use that narrow public surface rather than importing agent orchestration. Its v3 title slot, sibling artifacts and global blob references are not Pi-compatible. The disposable Bun probe uses inMemory, appendMessage, persistCopy with suppressBreadcrumb, flush/close, then a separate process opens the exact file with breadcrumbs suppressed. An environment allowlist isolates HOME, USERPROFILE, XDG, Windows app/temp directories and PI_CODING_AGENT_DIR; empty OMP_PROFILE/PI_PROFILE prevents inherited named-profile routing. No agent/model/provider calls or installed-library edits.
+
+Verified: focused pytest 1 passed in 2.64s; Ruff check, Ruff format --check and py_compile passed. Assertions cover native UUIDv7/header/file identity, ordered user/toolResult/user payloads and parent links, 256-byte native title slot, unchanged file bytes after cold load, and no terminal breadcrumb files. Each child has a 25-second timeout and 64-KiB cap per output pipe; only the owned child is killed/reaped. Initial format check flagged the new Python test; formatting was applied and rechecked. This proves SDK persistence/cold-load only, not migration adapter integration, roundtrip, asset/blob transfer, fsync durability or provider-signed replay.
+
+## Store-local identity lookup
+
+Extracted the existing bounded header scan for export reuse; lookup_exact returns only the requested native ID after a unique valid header match and declared-store validation. This is store-local identity, not project authorization. Lookup does not read transcript bodies or metadata, acquire gates, run probes, or write fences/cache/configuration. Boundary tests simulate 10,000/10,001 candidates without creating thousands of files. Verification: file pytest --no-cov: 43 passed, 3 skipped; scoped Ruff and ty: all checks passed. Pitfall: Windows symlink privileges were unavailable, so three real-symlink tests skipped; symlink refusal is not runtime-proven on this host.
+
+
+## In-process session discovery boundary
+
+Added a bounded integration test connecting real remote.inspect_session frame/reply validation through an injected subprocess transport to real handle_receiver and FileBundlePersistenceAdapter.lookup_for_project. Two distinct sessions reuse the same peer; foreign session cwd and mismatched receiver project root refuse. An unrelated registered adapter must never be invoked. Full temporary-tree snapshots prove discovery creates no files or directories (including fences/cache). Preflight, identity paths, and transport are simulated; no SSH, keys, model, or deployment was exercised. The SessionCommand/perform boundary remains untested by this file.
+
+Verification: uv run pytest tests/test_session_migration_discovery_end_to_end.py --no-cov -q: 3 passed (0.48s); Ruff check and format check passed; ty check passed. Pitfalls: transport refusal translation intentionally asserts the receiver redaction code inside except (targeted PT017 suppression); anchored regex uses a raw string (RUF043); initial format check required Ruff formatting before the final successful checks.
+
+## 2026-10-27 OMP restore + runtime probes (parent-implemented)
+
+- `omp_restore.py`: the collector's record names lose the journal stem (sibling
+  artifact root), so `journal_name` MUST be passed explicitly — the header does
+  not encode it. Guessing `native_id.jsonl` breaks artifact placement.
+- OMP SDK `SessionManager.open` pins `getHeader().cwd` and `sessionDir` to the
+  probe root; cross-tree verification needs `OMP_SESSION_DIR`/`OMP_EXPECT_CWD`
+  env overrides (added to `omp_persistence_probe.ts`).
+- `_environment()` in the runtime test mkdirs each env dir: pre-create the
+  probe root before calling it, or it raises FileNotFoundError.
+- Delegated restore worker burned its whole budget on re-reading context and
+  wrote zero files; the five verified findings it did return were still useful.
+
+## OMP restore preflight security boundary
+
+Restore now validates portable artifact names, existing target ancestors via
+`omp_bundle._checked`, referenced blob closure in root and child journals, and
+all planned file collisions/prefix conflicts before creating the journal.
+Exclusive creation alone did not prevent parent-link traversal or partial trees
+from predictable collisions. PurePosixPath normalizes `.` to empty parts, so
+explicitly reject that spelling as well. Concurrent hostile replacement remains
+outside this quiescent disposable-tree contract; interrupted writes may leave a
+partial tree that must be discarded, with no production activation.
+
+Verification: focused restore and collector pytest: 30 passed, 5 skipped;
+real parent-symlink tests could not run on this Windows host (privileges).
+Scoped Ruff and ty passed. No dependencies, live stores, agents, or commits
+were used. Historical recall retrieval timed out waiting for its existing index
+builder; implementation used freshly read local files.
+
+## Receiver reclaim boundary verification
+
+Added real protocol/NativeReceiver checks for absent configured authorized_peer,
+foreign peer/project, divergent lineage, and receipt replay after an injected
+activation interruption. Build outbound authority using real export/completion;
+restore original destination bytes before submitting the evolved return package.
+Refusals preserved exact destination bytes and the completed outbound fence.
+Replay preserved the exact receipt file and restored bytes, prohibited both import
+methods, and reopened session admission. No production bug reproduced in these
+boundaries. The existing test module already exceeded the 1000-line guideline;
+kept changes in the sole allowed test file rather than moving unrelated tests.
+History retrieval timed out; fresh source inspection supplied the contracts.
+Verification: `uv run pytest tests/test_session_migration_transfer_end_to_end.py
+--no-cov -q` (32 passed); `uv run ruff check
+tests/test_session_migration_transfer_end_to_end.py` and `uv run ruff format
+--check tests/test_session_migration_transfer_end_to_end.py` passed. No live
+stores, agents, dependency installations, production edits, or commits used.
+
+## 2026-10-27 PR CI stabilization (parent-driven)
+
+- CI's `ty check` covers tests too — local `ty check src` missed 47 test-side
+  diagnostics. Always run the full command before pushing.
+- GitHub-hosted Windows runners can collide `st_mtime_ns` for rapid writes, but
+  `os.replace` always yields a new `st_ino`: the (mtime, ino, size) tuple in
+  `state_store.py` is collision-free. A test that copies the REPLACEMENT's
+  identity into the cached signature artificially defeats it — simulate only
+  the timestamp collision and keep the old inode.
+- New Windows/CI-only failures with green local runs: fetch `--log-failed`
+  before theorizing; three separate fixture issues were all POSX chmod(0o700).
+- OMP collection must carry the real journal filename: record names lose the
+  stem, and the filename defines the sibling artifact root.
+- Repeated-move receiver collisions need operator-bound `authorized_peer`
+  evidence, never a wire-supplied identity; status must stay hidden until
+  fence activation completes.
+
+## 2026 file-bundle layout record (bounded step: basename preservation only)
+
+- Difficulties/pitfalls:
+  - Windows reserved device names are case-insensitive (`com1` vs `COM1`): compare `stem.casefold()` against a lowercase set, or lowercase params slip through.
+  - `import_exact`/`import_overwrite` with a layout basename must still call `_resolve_native_id` first — it is the traversal guard backing `_metadata_path`, and skipping it when `layout_name` is set re-opens native-id traversal.
+  - Strict-subset check `{"session.jsonl"} < set(records)` silently refuses every legacy single-record archive; it must be `<=`.
+  - Reclaim rename-refusal test: drop the layout record from the INCOMING side (prior keeps it); dropping from both sides is a legal legacy reclaim, not a rename.
+  - Inserting tests between an existing `@pytest.mark.parametrize` decorator and its function breaks collection — anchor edits on function defs, not decorators.
+
+- pytest `python_classes = Test*` skips non-Test-prefixed test classes — use `__test__ = True` (or Test prefix) or the class silently never runs; re-run collection after concurrent worker edits to shared test files (W1/W2 parents-record step, 2026-10-28).
+- Bash heredocs mangle backslash-containing literals (`..\x.jsonl`) into unicode escapes — write such test lines via edit calls, not heredoc (parent-chain step, 2026-10-28).
+- `_MAX_PARENTS = 8` allows 8 hops; the depth-refusal test must build 9 hops (10 journals) (parent-chain step, 2026-10-28).
+
+## 2026-10-28 Pi parent/coordinator evidence refresh (docs-only reviewer pitfalls)
+
+- There is no `pi_coordinator.py`; the coordinator is `src/untether/session_migration/transfer.py` and the Pi
+  round-trip evidence lives in `tests/test_session_migration_pi_coordinator.py`. Grepping for a guessed module
+  name returns nothing and invites a false "module missing" report — read the test file, not the parent module
+  the task named.
+- The coordinator test's receiver is an IN-PROCESS stand-in (`_receiver_call`: real protocol codec +
+  `NativeReceiver` + `ReceiverEndpoint`, swapped `native_adapter._ADAPTERS[ENGINE]`, `_REQUIRED_CHECKS` stubbed
+  true). Reviewers keep over-reading it as SSH-transport proof; the row must say "injected in-process transport".
+- Commit `23975e7` ("fix: verify immutable Pi parent bytes during reclaim") was already in history but
+  unreferenced anywhere under `docs/`, `src/` or `tests/`; docs claimed the parent/reclaim gap without citing it.
+  Check `git log`/`git cat-file` before writing prose that implies missing work.
+- The matrix row claimed "coordinator-integrated real-engine round trips remain unverified" while
+  `test_session_migration_pi_coordinator.py` already existed — stale-claim risk when a test file predates the doc
+  refresh. Cite concrete assertions (zero-write `calls == []`, unchanged `st_mtime_ns`, `state == "bound"`,
+  `messageCount == 3`) instead of the word "verified".
+- Keep model/assets/all-engine gaps open: Pi coordinator evidence is native-shell only with an injected transport;
+  do not let a bounded Pi result close the all-engine or model-continuation rows. Do not refresh incidental
+  suite totals in the same pass (no test run was performed).
+
+## 2026-10-28 Codex attachment RPC probe pitfalls (docs-only evidence refresh)
+
+- `thread/start` alone persists no rollout row; the attachment store's threads(id) FK only accepts after an
+  offline `thread/shellCommand` turn flushes it — budget one extra RPC round, not a model turn.
+- Repeat `thread/attachment/add` with the same identityKey returns `existing` and silently keeps the original
+  id/createdAt/payload; a mutated payload is not an update — assert idempotency, never assume echo.
+- The server mints `id` (UUIDv7) and `createdAt`; only attachmentType/identityKey/payload are stable across
+  homes — cross-home equality checks must expect exactly two differing fields.
+- Attachment RPCs interleave `turn/completed` notifications: use `strict=False` and match by response id
+  after draining notifications, or strict rpc asserts on the wrong frame.
+- `probe.py` writes `report.json` next to itself via `ROOT = Path(__file__).parent`, and `diag.py` does
+  `from probe import ...` — run from the probe folder, not the repo root, or the import fails.
+- Windows: wrap `codex.cmd` as `COMSPEC /c ...` and pin CODEX_HOME/HOME/USERPROFILE plus
+  APPDATA/LOCALAPPDATA/TEMP/XDG_* into probe-scratch subdirs, or the server writes into the real profile.
+Pitfall (session-migration asset review): a session-record-only audit can miss pi bash full-output spills — verify the engine's tmpdir output-file mechanism (pi 1.4.0 bash-executor/output-files), and never claim a spilled file is reread without caller-side proof; only the embedded absolute path string is proven.
