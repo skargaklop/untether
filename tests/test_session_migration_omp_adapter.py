@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+import tempfile
 from dataclasses import replace
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
@@ -71,6 +72,23 @@ def omp_profile(sessions: Path, blobs: Path) -> OmpPersistenceProfile:
             "assert h['type']=='session' and h['id']==sid",
             "{session_path}",
             "{session_id}",
+        ),
+        # Unit-level stand-in for the production RPC probe launcher: the
+        # template resolves placeholders and writes the evidence record the
+        # production path requires, without spawning a real engine.
+        restart_probe_argv=(
+            sys.executable,
+            "-c",
+            "import json,pathlib,sys;"
+            "j=pathlib.Path(sys.argv[-3]);"
+            "h=json.loads(j.read_text(encoding='utf8').splitlines()[0]);"
+            "pathlib.Path(sys.argv[-2]).write_text(json.dumps("
+            "{'sessionId':h['id'],'sessionFile':str(j.resolve()),'messages':0}),"
+            "encoding='utf8')",
+            "{probe}",
+            "rpc",
+            "package-root",
+            "{sessions_dir}",
         ),
     )
 
@@ -369,13 +387,156 @@ def test_import_failed_probe_rolls_back_journal_and_metadata(tmp_path):
 
 def test_unscoped_probe_refused(tmp_path):
     sessions, blobs = make_store(tmp_path / "store")
-    engine = omp_adapter(sessions, blobs)
+    engine = omp_adapter(sessions, blobs, run_argv=lambda argv, timeout: None)
     engine = replace(
         engine,
         profile=engine.profile.model_copy(update={"restart_argv": ("echo", "hi")}),
     )
     with pytest.raises(CapabilityUnavailable, match="SESSION_PROBE_UNSCOPED"):
         engine._run_restart_probe("sid", sessions / "j.jsonl")
+
+
+def test_unaided_import_without_probe_config_refuses(tmp_path):
+    """No injected runner and no declared probe command: import fails closed
+    before the restored journal can be certified."""
+    src_sessions, src_blobs = make_store(tmp_path / "src")
+    seed_journal(src_sessions, src_blobs, "j.jsonl", "abc", "/work")
+    archive = omp_adapter(src_sessions, src_blobs).export_exact("abc")
+    dst_sessions, dst_blobs = make_store(tmp_path / "dst")
+    profile = omp_profile(dst_sessions, dst_blobs).model_copy(
+        update={"restart_probe_argv": ()}
+    )
+    target = OmpPersistenceAdapter(engine="omp", profile=profile)
+    with pytest.raises(CapabilityUnavailable, match="RESTART_PROBE_NOT_CONFIGURED"):
+        target.import_exact(archive)
+    # Refused proof removes the journal and metadata it had written.
+    assert not (dst_sessions / "j.jsonl").exists()
+    assert not (dst_sessions / ".untether-migration" / "abc.json").exists()
+
+
+def test_unaided_probe_without_evidence_refuses(tmp_path):
+    """Exit 0 alone never certifies: a probe that leaves no evidence record
+    refuses the import and rolls the restored journal back."""
+    src_sessions, src_blobs = make_store(tmp_path / "src")
+    seed_journal(src_sessions, src_blobs, "j.jsonl", "abc", "/work")
+    archive = omp_adapter(src_sessions, src_blobs).export_exact("abc")
+    dst_sessions, dst_blobs = make_store(tmp_path / "dst")
+    profile = omp_profile(dst_sessions, dst_blobs).model_copy(
+        update={
+            "restart_probe_argv": (
+                sys.executable,
+                "-c",
+                "pass",
+                "{probe}",
+                "rpc",
+            )
+        }
+    )
+    target = OmpPersistenceAdapter(engine="omp", profile=profile)
+    with pytest.raises(CapabilityUnavailable, match="RESTART_PROBE_FAILED"):
+        target.import_exact(archive)
+    assert not (dst_sessions / "j.jsonl").exists()
+    assert not (dst_sessions / ".untether-migration" / "abc.json").exists()
+
+
+def _write_journal(tmp_path: Path) -> Path:
+    journal = tmp_path / "j.jsonl"
+    journal.write_text('{"type": "session"}\n', encoding="utf-8")
+    return journal
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "not json at all",
+        '["sessionId"]',
+        '{"sessionId": "other", "sessionFile": "{journal}", "messages": 1}',
+        '{"sessionId": "abc", "sessionFile": "elsewhere.jsonl", "messages": 1}',
+        '{"sessionId": "abc", "sessionFile": "{journal}", "messages": true}',
+        '{"sessionId": "abc", "sessionFile": "{journal}", "messages": -1}',
+        '{"sessionId": "abc", "sessionFile": "{journal}", "messages": 1.5}',
+        '{"sessionId": "abc", "sessionFile": "{journal}"}',
+    ],
+)
+def test_probe_evidence_refuses_malformed_or_foreign_records(tmp_path, payload):
+    """A probe record that is not this exact session and journal (or is not
+    even a well-formed bounded object) never certifies the restore."""
+    journal = _write_journal(tmp_path)
+    evidence = tmp_path / "probe-evidence.json"
+    evidence.write_text(payload.replace("{journal}", str(journal)), encoding="utf-8")
+    with pytest.raises(CapabilityUnavailable, match="RESTART_PROBE_FAILED"):
+        OmpPersistenceAdapter._verify_probe_evidence(evidence, "abc", journal)
+
+
+def test_probe_evidence_refuses_missing_or_oversized_records(tmp_path):
+    journal = _write_journal(tmp_path)
+    with pytest.raises(CapabilityUnavailable, match="RESTART_PROBE_FAILED"):
+        OmpPersistenceAdapter._verify_probe_evidence(
+            tmp_path / "absent.json", "abc", journal
+        )
+    oversized = tmp_path / "oversized.json"
+    oversized.write_bytes(b" " * 4097)
+    with pytest.raises(CapabilityUnavailable, match="RESTART_PROBE_FAILED"):
+        OmpPersistenceAdapter._verify_probe_evidence(oversized, "abc", journal)
+
+
+def test_probe_evidence_accepts_certified_record(tmp_path):
+    """A normalized session file path for this session id and a nonnegative
+    message count is accepted."""
+    journal = _write_journal(tmp_path)
+    non_normalized = tmp_path / "nested" / ".." / journal.name
+    evidence = tmp_path / "probe-evidence.json"
+    evidence.write_text(
+        json.dumps(
+            {
+                "sessionId": "abc",
+                "sessionFile": str(non_normalized),
+                "messages": 3,
+            }
+        ),
+        encoding="utf-8",
+    )
+    OmpPersistenceAdapter._verify_probe_evidence(evidence, "abc", journal)
+
+
+def test_production_probe_argv_resolves_placeholders(tmp_path, monkeypatch):
+    """The production probe argv resolves the declared launcher template:
+    probe script, package root and scoped directories, then appended paths."""
+    sessions, blobs = make_store(tmp_path / "store")
+    seed_journal(sessions, blobs, "j.jsonl", "abc", "/work")
+    scratch = tmp_path / "probe-scratch"
+    scratch.mkdir()
+    monkeypatch.setattr(tempfile, "mkdtemp", lambda **_: str(scratch))
+    profile = omp_profile(sessions, blobs).model_copy(
+        update={
+            "restart_probe_argv": (
+                "launcher",
+                "{probe}",
+                "rpc",
+                "package-root",
+                "{sessions_dir}",
+            )
+        }
+    )
+    engine = OmpPersistenceAdapter(engine="omp", profile=profile)
+    argv, probe_scratch = engine._omp_rpc_probe_argv(sessions / "j.jsonl")
+    assert probe_scratch == scratch
+    assert Path(argv[1]).name == "omp_rpc_probe.ts"
+    assert Path(argv[1]).is_file()  # adapter-written probe script must exist
+    assert argv[2] == "rpc"
+    assert argv[3] == "package-root"
+    assert argv[4] == str(sessions)
+    assert argv[5] == str(sessions / "j.jsonl")
+    assert Path(argv[6]).name == "probe-evidence.json"
+    assert Path(argv[7]).name == "probe-env.json"
+    assert Path(argv[6]).parent == scratch and Path(argv[7]).parent == scratch
+    assert not any("{" in arg for arg in argv)
+    payload = json.loads(Path(argv[7]).read_text(encoding="utf-8"))
+    assert payload["PI_OFFLINE"] == "1"
+    assert payload["PI_CONFIG_DIR"] == ".omp"
+    assert payload["HOME"] == str(scratch / "home")
+    assert payload["PI_CODING_AGENT_DIR"] == str(scratch / "agent")
+    assert "ANTHROPIC_API_KEY" not in payload
 
 
 def test_probe_receives_scoped_substituted_argv(tmp_path):
@@ -391,6 +552,31 @@ def test_probe_receives_scoped_substituted_argv(tmp_path):
     assert sessions / "j.jsonl" == Path(seen["argv"][-2])
     assert seen["argv"][-1] == "sid"
     assert not any("{" in arg for arg in seen["argv"])
+
+
+def test_production_probe_ignores_legacy_scoped_template(tmp_path):
+    """The unaided RPC probe resolves its own argv: an unscoped legacy
+    ``restart_argv`` template must no longer refuse the production path."""
+    sessions, blobs = make_store(tmp_path / "store")
+    seed_journal(sessions, blobs, "j.jsonl", "abc", "/work")
+    profile = omp_profile(sessions, blobs).model_copy(
+        update={
+            "restart_argv": ("echo", "hi"),
+            "restart_probe_argv": (
+                sys.executable,
+                "-c",
+                "pass",
+                "{probe}",
+                "rpc",
+            ),
+        }
+    )
+    engine = OmpPersistenceAdapter(engine="omp", profile=profile)
+    # SESSION_PROBE_UNSCOPED would mean the legacy template is still built on
+    # the production path; the probe's own missing evidence is the real
+    # failure mode here.
+    with pytest.raises(CapabilityUnavailable, match="RESTART_PROBE_FAILED"):
+        engine._run_restart_probe("abc", sessions / "j.jsonl")
 
 
 # -- project authorization ----------------------------------------------

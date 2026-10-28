@@ -239,6 +239,13 @@ def _rpc(
     return state, messages
 
 
+def _probe_argv(root: Path) -> tuple[str, ...]:
+    """Production probe launcher template: the adapter substitutes ``{probe}``
+    with its embedded RPC probe script and appends the restored journal,
+    evidence and environment paths itself."""
+    return (str(BUN), "{probe}", "rpc", str(PACKAGE), str(root))
+
+
 def test_omp_public_sdk_persistence_coldload(tmp_path: Path) -> None:
     if not BUN.is_file():
         pytest.skip(f"installed Bun absent: {BUN}")
@@ -259,12 +266,20 @@ def test_omp_public_sdk_persistence_coldload(tmp_path: Path) -> None:
     assert not list(tmp_path.rglob("terminal-sessions/*"))
 
 
-def test_omp_adapter_export_import_sdk_coldload(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("injected", [False, True], ids=["unaided", "injected-runner"])
+def test_omp_adapter_export_import_sdk_coldload(
+    tmp_path: Path, monkeypatch, injected: bool
+) -> None:
     """SDK write -> production export/import -> independent SDK cold read.
 
     Then native RPC bash -> process restart -> evolved export/import return.
-    This proves offline native execution, not model/tool continuation.
+    This proves offline native execution, not model/tool continuation. The
+    ``unaided`` variant injects no restart runner: the production adapter
+    spawns the embedded OMP RPC probe itself and the probe's own evidence
+    record (sessionId, native file, ordered message count) is asserted; the
+    ``injected-runner`` variant keeps the SDK cold-load runner assertions.
     """
+    from untether.session_migration import omp_adapter
     from untether.session_migration.native_adapter import assert_exact_restore
     from untether.session_migration.omp_adapter import OmpPersistenceAdapter
     from untether.session_migration.settings import OmpPersistenceProfile
@@ -308,6 +323,24 @@ def test_omp_adapter_export_import_sdk_coldload(tmp_path: Path, monkeypatch) -> 
     def restart(argv: tuple[str, ...]) -> None:
         probes.append(_run("read", verify_root, env2, argv[-1]))
 
+    # Production-path evidence: the probe writes its own record after a fresh
+    # engine answered get_state/get_messages for the restored store. Wrap the
+    # adapter's real run_probe seam so the unaided proof is inspectable before
+    # the adapter disposes of the probe scratch root.
+    probes_run = []
+    probe_evidence = []
+    real_probe = omp_adapter.run_probe
+
+    def recording_probe(argv, timeout_s):
+        real_probe(argv, timeout_s)
+        probes_run.append(list(argv))
+        evidence = Path(argv[-2])
+        if evidence.is_file():
+            probe_evidence.append(json.loads(evidence.read_text(encoding="utf-8")))
+
+    if not injected:
+        monkeypatch.setattr(omp_adapter, "run_probe", recording_probe)
+    target_kwargs = {} if injected else {"restart_probe_argv": _probe_argv(verify_root)}
     target = OmpPersistenceAdapter(
         engine="omp",
         profile=OmpPersistenceProfile(
@@ -315,17 +348,33 @@ def test_omp_adapter_export_import_sdk_coldload(tmp_path: Path, monkeypatch) -> 
             sessions_dir=str(sessions),
             blobs_dir=str(target_blobs),
             restart_argv=("offline-sdk-read", "{session_path}"),
+            **target_kwargs,
         ),
-        restart_runner=restart,
+        **({} if not injected else {"restart_runner": restart}),
     )
     proof = target.import_exact(archive)
     assert_exact_restore(archive, proof)
-    assert len(probes) == 1
-    assert probes[0]["id"] == sid
-    assert probes[0]["entries"] == written["entries"]
+    assert proof.restarted is True and proof.resumed is True
+    restored = sessions / Path(written["file"]).name
+    if injected:
+        assert len(probes) == 1
+        assert probes[0]["id"] == sid
+        assert probes[0]["entries"] == written["entries"]
+    else:
+        assert not probes
+        assert len(probes_run) == 1
+        argv = probes_run[0]
+        assert argv[0] == str(BUN)
+        assert argv[2] == "rpc" and argv[3] == str(PACKAGE)
+        assert Path(argv[5]) == restored
+        assert argv[6].endswith("probe-evidence.json")
+        assert len(probe_evidence) == 1
+        evidence = probe_evidence[0]
+        assert evidence["sessionId"] == sid
+        assert Path(evidence["sessionFile"]) == restored
+        assert evidence["messages"] == len(written["entries"])
     assert target.lookup_for_project(sid, src_root) == sid
     assert target.export_exact(sid).records == archive.records
-    restored = sessions / Path(written["file"]).name
     assert restored.read_bytes() == Path(written["file"]).read_bytes()
     loaded = _run("read", verify_root, env2, str(restored))
     assert loaded["id"] == sid
@@ -372,6 +421,21 @@ def test_omp_adapter_export_import_sdk_coldload(tmp_path: Path, monkeypatch) -> 
     def restart_returned(argv: tuple[str, ...]) -> None:
         returned_probes.append(_rpc(src_root, returned_env, Path(argv[-1])))
 
+    returned_run = []
+    returned_evidence = []
+
+    def recording_returned_probe(argv, timeout_s):
+        real_probe(argv, timeout_s)
+        returned_run.append(list(argv))
+        evidence = Path(argv[-2])
+        if evidence.is_file():
+            returned_evidence.append(json.loads(evidence.read_text(encoding="utf-8")))
+
+    if not injected:
+        monkeypatch.setattr(omp_adapter, "run_probe", recording_returned_probe)
+    returned_kwargs = (
+        {} if injected else {"restart_probe_argv": _probe_argv(returned_root)}
+    )
     returned = OmpPersistenceAdapter(
         engine="omp",
         profile=OmpPersistenceProfile(
@@ -379,12 +443,24 @@ def test_omp_adapter_export_import_sdk_coldload(tmp_path: Path, monkeypatch) -> 
             sessions_dir=str(returned_sessions),
             blobs_dir=str(returned_blobs),
             restart_argv=("offline-native-rpc", "{session_path}"),
+            **returned_kwargs,
         ),
-        restart_runner=restart_returned,
+        **({} if not injected else {"restart_runner": restart_returned}),
     )
     assert_exact_restore(evolved, returned.import_exact(evolved))
-    assert len(returned_probes) == 1
-    assert returned_probes[0][0]["sessionId"] == sid
-    assert returned_probes[0][1] == evolved_messages
+    returned_restored = returned_sessions / Path(written["file"]).name
+    if injected:
+        assert len(returned_probes) == 1
+        assert returned_probes[0][0]["sessionId"] == sid
+        assert returned_probes[0][1] == evolved_messages
+    else:
+        assert not returned_probes
+        assert len(returned_run) == 1
+        assert returned_run[0][3] == str(PACKAGE)
+        assert Path(returned_run[0][5]) == returned_restored
+        assert len(returned_evidence) == 1
+        assert returned_evidence[0]["sessionId"] == sid
+        assert Path(returned_evidence[0]["sessionFile"]) == returned_restored
+        assert returned_evidence[0]["messages"] == len(evolved_messages)
     assert returned.lookup_for_project(sid, src_root) == sid
     assert returned.export_exact(sid).records == evolved.records

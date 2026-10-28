@@ -88,6 +88,13 @@ class OmpPersistenceProfile(BaseModel):
     blobs_dir: str
     restart_argv: tuple[str, ...] = Field(min_length=1, max_length=16)
     restart_timeout_s: float = Field(default=120, gt=0, le=1800)
+    # Unaided (no injected runner) the adapter launches the native OMP RPC
+    # restart probe from this launcher argv; empty means fail-closed refusal
+    # (`RESTART_PROBE_NOT_CONFIGURED`). Fixed template order: launcher
+    # token(s), `{probe}` (substituted with the bundled probe script), `rpc`,
+    # installed package root, probe working directory; the adapter appends the
+    # session file, evidence file and environment payload paths itself.
+    restart_probe_argv: tuple[str, ...] = Field(default=(), max_length=8)
     max_file_bytes: int = Field(default=33554432, gt=0, le=1073741824)
     max_files: int = Field(default=10000, ge=1, le=1000000)
 
@@ -96,7 +103,7 @@ class OmpPersistenceProfile(BaseModel):
     def dirs_absolute(cls, value: str) -> str:
         return _absolute_local_path(value)
 
-    @field_validator("restart_argv")
+    @field_validator("restart_argv", "restart_probe_argv")
     @classmethod
     def restart_argv_safe(cls, values: tuple[str, ...]) -> tuple[str, ...]:
         if any(not v or any(c in v for c in "\x00\n\r") for v in values):

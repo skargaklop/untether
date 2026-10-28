@@ -22,7 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import subprocess
+import shutil
 import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
@@ -40,6 +40,7 @@ from .native_adapter import (
 from .native_archive import FidelityError, NativeArchive, _safe_name
 from .omp_bundle import _checked, _journal, collect_omp_bundle
 from .omp_restore import restore_omp_records
+from .probe_process import run_probe
 from .settings import OmpPersistenceProfile, SessionMigrationSettings
 
 _METADATA_RECORD = "untether.json"
@@ -47,6 +48,158 @@ _BLOBS_KEY = "blobs/"
 _LINEAGE_PREFIX = "omp-v1:"
 _MAX_METADATA_BYTES = 4096
 _HEX = set("0123456789abcdef")
+# OS process essentials only: the probe child gets a disposable environment
+# assembled under a scratch root, never operator credentials or profiles.
+_PROBE_ENV_KEYS = frozenset(
+    {"SYSTEMROOT", "WINDIR", "SYSTEMDRIVE", "PATH", "PATHEXT", "COMSPEC"}
+)
+# Bounds what a compromised probe can make the adapter parse or buffer.
+_MAX_PROBE_EVIDENCE_BYTES = 4096
+# Shipped probe verifies native RPC identity/history in an isolated process.
+# Deadline and output limits fail closed; tests/ is not installed package data.
+_OMP_RPC_PROBE_SOURCE = """import { spawn } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import assert from "node:assert/strict";
+
+const [, packageRoot, root, sessionFile, evidenceFile, envJson] =
+  process.argv.slice(2);
+const metadata = JSON.parse(
+  readFileSync(path.join(packageRoot, "package.json"), "utf8"),
+);
+assert.equal(metadata.name, "@oh-my-pi/pi-coding-agent");
+assert.equal(metadata.version, "18.1.6");
+const lines = readFileSync(sessionFile, "utf8").split("\\n");
+const header = JSON.parse(lines[1]);
+assert.equal(header.type, "session");
+const historical = lines
+  .slice(2)
+  .filter((line) => line.trim())
+  .map((line) => JSON.parse(line))
+  .filter((entry) => entry.type === "message")
+  .map((entry) => entry.message);
+const child = spawn(
+  process.execPath,
+  [
+    path.join(packageRoot, "dist", "cli.js"),
+    "--model", "openai/gpt-4o-mini",
+    "--mode", "rpc",
+    "--session-dir", path.dirname(sessionFile),
+    "--session", sessionFile,
+    "--no-extensions", "--no-skills", "--no-rules", "--no-title",
+    "--no-lsp", "--no-pty", "--no-prewalk", "--no-tools",
+  ],
+  {
+    cwd: root,
+    env: JSON.parse(readFileSync(envJson, "utf8")),
+    stdio: ["pipe", "pipe", "pipe"],
+  },
+);
+let stdout = "";
+let stderr = "";
+let exited = false;
+const pending = new Map();
+child.stdout.on("data", (data) => {
+  stdout += data;
+  if (Buffer.byteLength(stdout, "utf8") > 67108864) {
+    child.kill("SIGKILL");
+    process.exit(1);
+  }
+  for (;;) {
+    const newline = stdout.indexOf("\\n");
+    if (newline === -1) break;
+    const line = stdout.slice(0, newline);
+    stdout = stdout.slice(newline + 1);
+    if (!line.trim()) continue;
+    let frame;
+    try { frame = JSON.parse(line); } catch { continue; }
+    const kind =
+      frame.type === "ready" ? "ready" :
+      frame.type === "response" ? frame.id : undefined;
+    if (kind === undefined) continue;
+    const waiter = pending.get(kind);
+    if (waiter) {
+      pending.delete(kind);
+      waiter(frame);
+    }
+  }
+});
+child.stderr.on("data", (data) => { stderr = (stderr + data).slice(-4000); });
+child.on("error", (error) => {
+  console.error("probe refused: spawn " + error);
+  process.exit(1);
+});
+child.on("exit", () => { exited = true; });
+const kill = () => { try { child.kill("SIGKILL"); } catch { /* gone */ } };
+const timer = setTimeout(() => {
+  kill();
+  console.error("probe refused: deadline exceeded; stderr=" + stderr);
+  process.exit(1);
+}, 20000);
+// One pending waiter per correlated frame; the request is issued once and
+// the response must arrive within the deadline or the child dies hard.
+const awaitFrame = (kind) =>
+  new Promise((resolve, reject) => {
+    const deadline = Date.now() + 15000;
+    if (kind !== "ready") {
+      child.stdin.write(JSON.stringify({ id: kind, type: kind }) + "\\n");
+    }
+    const check = () => {
+      if (!pending.has(kind)) return;
+      if (Date.now() > deadline || exited) {
+        pending.delete(kind);
+        reject(new Error(kind + " missing; stderr=" + stderr));
+        return;
+      }
+      setTimeout(check, 50);
+    };
+    pending.set(kind, (frame) => {
+      try {
+        if (kind === "ready") {
+          assert.equal(frame.type, "ready");
+          assert.equal(frame.protocolVersion, 1);
+        } else {
+          assert.equal(frame.type, "response");
+          assert.equal(frame.id, kind);
+          assert.ok(frame.success, kind + " refused");
+        }
+        resolve(frame.data ?? frame);
+      } catch (error) {
+        reject(error);
+      }
+    });
+    setTimeout(check, 50);
+  });
+try {
+  await awaitFrame("ready");
+  const state = await awaitFrame("get_state");
+  assert.equal(state.sessionId, header.id);
+  assert.equal(path.resolve(state.sessionFile), path.resolve(sessionFile));
+  const { messages } = await awaitFrame("get_messages");
+  assert.equal(messages.length, historical.length);
+  messages.forEach((message, index) => {
+    assert.deepStrictEqual(message, historical[index]);
+  });
+  child.stdin.end();
+  const code = await new Promise((resolve) => child.once("exit", resolve));
+  if (code !== 0) {
+    console.error("probe refused: rpc exit " + code + "; stderr=" + stderr);
+    process.exit(1);
+  }
+  writeFileSync(evidenceFile, JSON.stringify({
+    sessionId: state.sessionId,
+    sessionFile: state.sessionFile,
+    messages: messages.length,
+  }));
+  clearTimeout(timer);
+  process.exit(0);
+} catch (error) {
+  clearTimeout(timer);
+  kill();
+  console.error("probe refused: " + error + "; stderr=" + stderr);
+  process.exit(1);
+}
+"""
 
 
 class _OmpMigrationMetadata(BaseModel):
@@ -104,7 +257,10 @@ class OmpPersistenceAdapter:
 
     ``restart_runner(argv)`` / ``run_argv(argv, timeout)`` mirror the file
     bundle adapter's injection seams so tests prove argv scoping without
-    spawning processes.
+    spawning processes. Unaided (no injection), the production path launches
+    the native RPC probe declared by ``restart_probe_argv`` — a fresh engine
+    process that must answer ``get_state``/``get_messages`` for the restored
+    store — and refuses fail-closed when the profile configures none.
     """
 
     engine: str
@@ -139,7 +295,7 @@ class OmpPersistenceAdapter:
             raise CapabilityUnavailable("OMP_FILESYSTEM_INVALID") from exc
         return bundle.journal_name, bundle.records
 
-    def _run_restart_probe(self, native_id: str, journal_path: Path) -> None:
+    def _scoped_probe_argv(self, native_id: str, journal_path: Path) -> list[str]:
         # Scoped argv built and validated before any runner is invoked; an
         # unscoped probe is refused exactly like the file bundle adapter's.
         template = list(self.profile.restart_argv)
@@ -158,26 +314,145 @@ class OmpPersistenceAdapter:
             for key, value in replacements.items():
                 arg = arg.replace(key, value)
             argv.append(arg)
+        return argv
+
+    def _omp_rpc_probe_argv(self, journal_path: Path) -> tuple[list[str], Path]:
+        """Assemble the production RPC probe argv plus its disposable scratch
+        root (evidence file and allowlisted environment payload).
+
+        Template contract, fixed order: launcher token(s), ``{probe}`` (the
+        embedded protocol script path, written into ``scratch``), ``rpc``,
+        the installed package root and the probe working directory; the
+        adapter appends the restored journal, evidence and environment paths.
+        The engine child never sees operator credentials: ``scratch``
+        isolates HOME/USERPROFILE, XDG_*, APPDATA/LOCALAPPDATA, TEMP/TMP,
+        agent and config dirs. A template without ``{probe}`` refuses
+        fail-closed.
+        """
+        template = list(self.profile.restart_probe_argv)
+        if not any("{probe}" in arg for arg in template):
+            raise CapabilityUnavailable("RESTART_PROBE_NOT_CONFIGURED")
+        scratch = Path(tempfile.mkdtemp(prefix="untether-omp-probe-"))
+        probe_path = scratch / "omp_rpc_probe.ts"
+        try:
+            probe_path.write_text(_OMP_RPC_PROBE_SOURCE, encoding="utf-8")
+            env = {
+                key: value
+                for key, value in os.environ.items()
+                if key.upper() in _PROBE_ENV_KEYS
+            }
+            home = scratch / "home"
+            home.mkdir(parents=True)
+            env["HOME"] = str(home)
+            env["USERPROFILE"] = str(home)
+            agent = scratch / "agent"
+            agent.mkdir()
+            env["PI_CODING_AGENT_DIR"] = str(agent)
+            # Relative by contract: OMP joins PI_CONFIG_DIR onto the isolated
+            # HOME, so an absolute value would produce an invalid host path.
+            env["PI_CONFIG_DIR"] = ".omp"
+            for key in (
+                "XDG_CONFIG_HOME",
+                "XDG_DATA_HOME",
+                "XDG_STATE_HOME",
+                "XDG_CACHE_HOME",
+                "APPDATA",
+                "LOCALAPPDATA",
+                "TEMP",
+                "TMP",
+            ):
+                target = scratch / key.lower()
+                target.mkdir()
+                env[key] = str(target)
+            env["OMP_PROFILE"] = ""
+            env["PI_PROFILE"] = ""
+            env["PI_OFFLINE"] = "1"
+            env_path = scratch / "probe-env.json"
+            env_path.write_bytes(json.dumps(env).encode())
+            evidence_path = scratch / "probe-evidence.json"
+            replacements = {
+                "{probe}": str(probe_path),
+                "{sessions_dir}": str(self.sessions_dir),
+                "{blobs_dir}": str(self.blobs_dir),
+                "{session_path}": str(journal_path),
+            }
+            argv = []
+            for arg in template:
+                for key, value in replacements.items():
+                    arg = arg.replace(key, value)
+                argv.append(arg)
+            argv += [str(journal_path), str(evidence_path), str(env_path)]
+        except OSError as exc:
+            shutil.rmtree(scratch, ignore_errors=True)
+            raise CapabilityUnavailable("RESTART_PROBE_FAILED") from exc
+        return argv, scratch
+
+    @staticmethod
+    def _verify_probe_evidence(
+        evidence_path: Path, native_id: str, journal_path: Path
+    ) -> None:
+        """Certify the probe's evidence record, fail-closed.
+
+        Exit 0 alone is not proof: the record must be a bounded JSON object
+        naming this session and this restored journal with a nonnegative
+        message count. Any malformed, oversized, foreign or missing record
+        refuses with ``RESTART_PROBE_FAILED``.
+        """
+        try:
+            with evidence_path.open("rb") as handle:
+                raw = handle.read(_MAX_PROBE_EVIDENCE_BYTES + 1)
+        except OSError as exc:
+            raise CapabilityUnavailable("RESTART_PROBE_FAILED") from exc
+        if len(raw) > _MAX_PROBE_EVIDENCE_BYTES:
+            raise CapabilityUnavailable("RESTART_PROBE_FAILED")
+        try:
+            evidence = json.loads(raw)
+            certified = (
+                isinstance(evidence, dict)
+                and evidence.get("sessionId") == native_id
+                and Path(evidence["sessionFile"]).resolve() == journal_path.resolve()
+                and isinstance(evidence.get("messages"), int)
+                and not isinstance(evidence["messages"], bool)
+                and evidence["messages"] >= 0
+            )
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            raise CapabilityUnavailable("RESTART_PROBE_FAILED") from exc
+        if not certified:
+            raise CapabilityUnavailable("RESTART_PROBE_FAILED")
+
+    def _run_omp_rpc_probe(self, native_id: str, journal_path: Path) -> None:
+        """Launch the RPC probe unaided; it exits 0 only when a fresh engine
+        process answered get_state/get_messages for the restored journal and
+        left its evidence record. The probe bounds its own child;
+        ``restart_timeout_s`` bounds the probe process as the outer deadline.
+        """
+        argv, scratch = self._omp_rpc_probe_argv(journal_path)
+        evidence_path = scratch / "probe-evidence.json"
+        try:
+            # Bounded launch with guaranteed group/tree teardown: any start
+            # failure, nonzero exit or missed deadline refuses fail-closed.
+            run_probe(argv, self.profile.restart_timeout_s)
+            self._verify_probe_evidence(evidence_path, native_id, journal_path)
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+
+    def _run_restart_probe(self, native_id: str, journal_path: Path) -> None:
+        # The legacy scoped template is only a contract for injected runners;
+        # the production RPC probe resolves its own argv and never requires it.
         if self.restart_runner is not None:
-            self.restart_runner(tuple(argv))
+            self.restart_runner(tuple(self._scoped_probe_argv(native_id, journal_path)))
             return
         if self.run_argv is not None:
-            self.run_argv(argv, self.profile.restart_timeout_s)
-            return
-        try:
-            result = subprocess.run(
-                argv,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=self.profile.restart_timeout_s,
-                check=False,
-                # Validated operator-configured probe argv, not chat input.
-                shell=False,  # nosec B603
+            self.run_argv(
+                self._scoped_probe_argv(native_id, journal_path),
+                self.profile.restart_timeout_s,
             )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise CapabilityUnavailable("RESTART_PROBE_FAILED") from exc
-        if result.returncode != 0:
-            raise CapabilityUnavailable("RESTART_PROBE_FAILED")
+            return
+        if not self.profile.restart_probe_argv:
+            # Fail closed: an unaided import must be proven by the engine's
+            # own native RPC probe, never by an unverified exit code.
+            raise CapabilityUnavailable("RESTART_PROBE_NOT_CONFIGURED")
+        self._run_omp_rpc_probe(native_id, journal_path)
 
     @staticmethod
     def _reread_journal(journal_path: Path) -> bytes:
