@@ -1,5 +1,9 @@
 # ACP Phase E Experience
 
+## OpenCode replay verification boundary
+
+The runtime worker found that replay verification in the importing writer process did not establish independent persistence. Import now stops that owned child, launches another, and compares full canonical events again before certifying restart. Controller rerun passed 14 checks with one Windows symlink privilege skip, including original completed shell output, unrelated destination-session preservation, and a follow-up shell command surviving another restart. Fresh non-repository working directories timed out during worker diagnostics; repository-cwd evidence must not be generalised to arbitrary project authorization. Remaining source-scoping, duplicate-collision, port ownership and HTTP size limits need separate fixes. Native shell follow-up is not provider/model continuation.
+
 ## Codex installed-engine resume diagnostic
 
 The bounded diagnostic worker isolated RPC -32600 to a synthetic rollout named without the native timestamp component. Use `rollout-YYYY-MM-DDTHH-MM-SS-<uuid>.jsonl`; do not weaken identity or exact-prefix assertions to accommodate a malformed fixture. The production probe must send `initialized` as a notification, not wait for a response. A fresh app-server can verify a second resume without duplicating an RPC client in the test. Controller rerun: Codex runtime and adapter suite passed (25 passed, one platform privilege skip). This proves disposable synthetic-journal restoration and independent resume, not conversational/model follow-up fidelity.
