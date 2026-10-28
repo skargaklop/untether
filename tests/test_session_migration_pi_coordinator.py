@@ -7,7 +7,11 @@ ReceiverEndpoint + protocol codec) standing in only for the SSH byte
 transport. Test 1 pushes two sessions A -> B through the coordinator, re-reads
 the destination archive, then pulls both back B -> A-return into a third
 fresh store through a second receiver pair; the source, destination, and
-return journals must all stay byte-exact.
+return journals must all stay byte-exact. Pulls declare real destination
+chat/topic bindings and assert the durable ``TopicStateStore`` /
+``ChatSessionStore`` state, then the pulled bytes run a genuine installed-Pi
+RPC ``bash`` follow-up whose ``bashExecution`` message is re-read by an
+independent coldload and pushed back through the coordinator.
 
 Each store gets its own restart_runner: the adapter's restart probe IS a
 bounded installed-Pi RPC coldload against the declared store, asserting the
@@ -29,6 +33,7 @@ import time
 import uuid
 from pathlib import Path
 
+import anyio
 import pytest
 
 from untether.session_migration import native_adapter, transfer
@@ -50,6 +55,8 @@ from untether.session_migration.settings import (
     SessionMigrationSettings,
 )
 from untether.session_migration.ssh_transport import _REQUIRED_CHECKS
+from untether.telegram.chat_sessions import ChatSessionStore, resolve_sessions_path
+from untether.telegram.topic_state import TopicStateStore, resolve_state_path
 
 ENGINE = "pi"
 PI_CMD = Path(
@@ -136,9 +143,12 @@ def _child_env(root: Path) -> dict[str, str]:
     return env
 
 
-def _rpc_coldload(pi_cmd: Path, argv_rest: list[str], root: Path) -> tuple[dict, list]:
+def _rpc_coldload(
+    pi_cmd: Path, argv_rest: list[str], root: Path, *, bash_command: str | None = None
+) -> tuple[dict, list]:
     """Bounded coldload: start installed pi in RPC mode against the restored
-    store, send get_state + get_messages, collect both responses, kill/reap.
+    store, optionally run a native ``bash`` command first, then send
+    get_state + get_messages and collect all responses, kill/reap.
 
     Raises AssertionError (never skips) with the child's stderr on failure.
     Budget: COLDLOAD_BUDGET_S total, hard kill/reap after.
@@ -172,13 +182,19 @@ def _rpc_coldload(pi_cmd: Path, argv_rest: list[str], root: Path) -> tuple[dict,
     deadline = time.monotonic() + COLDLOAD_BUDGET_S
     responses: dict[str, dict] = {}
     stderr_tail: list[str] = []
-    expected_ids = {"gs", "gm"}
+    inspections = [
+        {"id": "gs", "type": "get_state"},
+        {"id": "gm", "type": "get_messages"},
+    ]
+    expected_ids = {"gs", "gm"} | ({"bash"} if bash_command is not None else set())
     try:
         assert proc.stdin is not None
-        for request in (
-            {"id": "gs", "type": "get_state"},
-            {"id": "gm", "type": "get_messages"},
-        ):
+        requests = (
+            [{"id": "bash", "type": "bash", "command": bash_command}]
+            if bash_command is not None
+            else inspections
+        )
+        for request in requests:
             proc.stdin.write(json.dumps(request) + "\n")
         proc.stdin.flush()
         while responses.keys() != expected_ids and time.monotonic() < deadline:
@@ -197,6 +213,11 @@ def _rpc_coldload(pi_cmd: Path, argv_rest: list[str], root: Path) -> tuple[dict,
                 continue
             if record.get("type") == "response" and record.get("id") in expected_ids:
                 responses[record["id"]] = record
+                # RPC commands are asynchronous: inspect only after bash completes.
+                if record["id"] == "bash":
+                    for request in inspections:
+                        proc.stdin.write(json.dumps(request) + "\n")
+                    proc.stdin.flush()
     finally:
         stderr_tail.clear()
         try:
@@ -224,6 +245,10 @@ def _rpc_coldload(pi_cmd: Path, argv_rest: list[str], root: Path) -> tuple[dict,
     for request_id in expected_ids:
         record = responses[request_id]
         assert record.get("success") is True, f"{request_id} failed: {record}"
+    if bash_command is not None:
+        result = responses["bash"]["data"]
+        assert result["exitCode"] == 0, result
+        assert result["cancelled"] is False and result["truncated"] is False
     return responses["gs"]["data"], responses["gm"]["data"]["messages"]
 
 
@@ -268,7 +293,13 @@ def _profile(sessions_dir: Path) -> EnginePersistenceProfile:
     )
 
 
-def _store_adapter(store: Path, profile: EnginePersistenceProfile, root: Path):
+def _store_adapter(
+    store: Path,
+    profile: EnginePersistenceProfile,
+    root: Path,
+    *,
+    expected_message_count: int = 2,
+):
     """One store, one adapter, one restart probe bound to that store."""
 
     def restart_runner(argv: tuple[str, ...]) -> None:
@@ -287,7 +318,7 @@ def _store_adapter(store: Path, profile: EnginePersistenceProfile, root: Path):
         assert Path(session_file) == store / f"{session_id}.jsonl", (
             f"cold-loaded sessionFile {session_file!r} is not the declared store"
         )
-        assert state.get("messageCount") == 2
+        assert state.get("messageCount") == expected_message_count
         user_texts = [m.get("content") for m in messages if m.get("role") == "user"]
         assert NATIVE_USER_TEXT in user_texts, (
             f"historical user text missing from get_messages: {user_texts!r}"
@@ -308,6 +339,7 @@ def _receiver_call(
     *,
     native_root: Path,
     receiver_gate: Path,
+    expected_message_count: int = 2,
 ):
     """In-process stand-in for the SSH RPC: real protocol + receiver + adapter.
 
@@ -318,7 +350,9 @@ def _receiver_call(
     import base64
     import hashlib
 
-    remote_adapter = _store_adapter(store, profile, root)
+    remote_adapter = _store_adapter(
+        store, profile, root, expected_message_count=expected_message_count
+    )
     exported: dict[str, tuple[str, str | None, str]] = {}
 
     def call(
@@ -491,6 +525,12 @@ def test_pi_coordinator_push_pull_roundtrip(tmp_path: Path, monkeypatch) -> None
         )
         with monkeypatch.context() as patch:
             patch.setenv("UNTETHER_SESSION_GATE_ROOT", str(tmp_path / "return-gate"))
+            # One pull binds a topic, the other binds a whole chat, so both
+            # durable destination stores are exercised through the real seams.
+            pull_destinations = (
+                {"destination_chat": -100123, "destination_topic": 42},
+                {"destination_chat": -100456, "destination_topic": None},
+            )
             pull_results = [
                 transfer.perform(
                     cfg,
@@ -500,15 +540,36 @@ def test_pi_coordinator_push_pull_roundtrip(tmp_path: Path, monkeypatch) -> None
                     engine=ENGINE,
                     direction="from",
                     root=ops,
+                    config_path=tmp_path / "untether.toml",
                     receiver_call=pull_call,
+                    **destination,
                 )
-                for sid in ids
+                for sid, destination in zip(ids, pull_destinations, strict=True)
             ]
         for result, sid in zip(pull_results, ids, strict=True):
-            assert result.state == "verified"
+            assert result.state == "bound"
             assert result.native_id == sid
             assert result.engine == ENGINE
             assert len(result.receipt_sha256) == 64
+
+        # Durable bindings written by the pull via the production stores.
+        config_file = tmp_path / "untether.toml"
+        topic_token = anyio.run(
+            TopicStateStore(resolve_state_path(config_file)).get_session_resume,
+            -100123,
+            42,
+            ENGINE,
+        )
+        assert topic_token is not None
+        assert topic_token.value == ids[0] and topic_token.engine == ENGINE
+        chat_token = anyio.run(
+            ChatSessionStore(resolve_sessions_path(config_file)).get_session_resume,
+            -100456,
+            None,
+            ENGINE,
+        )
+        assert chat_token is not None
+        assert chat_token.value == ids[1] and chat_token.engine == ENGINE
         operation_ids = {
             result.operation_id for result in (*push_results, *pull_results)
         }
@@ -519,15 +580,118 @@ def test_pi_coordinator_push_pull_roundtrip(tmp_path: Path, monkeypatch) -> None
     finally:
         unregister_persistence_adapter(ENGINE)
 
+    # --- Evolved follow-up: run a genuine installed-Pi RPC ``bash`` against the
+    # pulled bytes in a disposable store, prove the ``bashExecution`` message
+    # was persisted by pi itself (never fabricated here), then push the evolved
+    # journal BACK through the coordinator into a fresh store. ---
+    evolved_dir = tmp_path / "evolved-sessions"
+    evolved_dest_dir = tmp_path / "evolved-dest-sessions"
+    for store in (evolved_dir, evolved_dest_dir):
+        store.mkdir(mode=0o700)
+    for sid in ids:
+        (evolved_dir / f"{sid}.jsonl").write_bytes(
+            (return_dir / f"{sid}.jsonl").read_bytes()
+        )
+
+    evolved_bytes: dict[str, bytes] = {}
+    for sid in ids:
+        marker = f"pi-coordinator-followup-{sid}"
+        command = f"echo {marker}"
+        rest = [
+            arg.format(sessions_dir=str(evolved_dir), session_id=sid)
+            for arg in profile.restart_argv[1:]
+        ]
+        state, messages = _rpc_coldload(PI_CMD, rest, tmp_path, bash_command=command)
+        assert state["sessionId"] == sid
+        assert state["messageCount"] == 3
+        historical = [
+            entry["message"]
+            for line in originals[sid].splitlines()
+            if (entry := json.loads(line)).get("type") == "message"
+        ]
+        assert messages[:2] == historical
+        bash_message = messages[2]
+        assert bash_message["role"] == "bashExecution"
+        assert bash_message["command"] == command
+        assert bash_message["output"].strip() == marker
+        assert bash_message["exitCode"] == 0
+        # Native id and exact prefix preserved; the only delta is the single
+        # ``message`` entry pi appended for the bash execution above.
+        evolved = (evolved_dir / f"{sid}.jsonl").read_bytes()
+        assert evolved.startswith(originals[sid]) and len(evolved) > len(originals[sid])
+        appended = [
+            json.loads(line) for line in evolved[len(originals[sid]) :].splitlines()
+        ]
+        assert len(appended) == 1
+        assert appended[0]["type"] == "message"
+        assert appended[0]["parentId"] == "ccc03333"
+        assert appended[0]["message"] == bash_message
+        # Independent restart must recover the persisted bashExecution, not
+        # just the live process's in-memory result. Reading must not mutate.
+        restarted_state, restarted_messages = _rpc_coldload(PI_CMD, rest, tmp_path)
+        assert restarted_state["sessionId"] == sid
+        assert restarted_state["messageCount"] == 3
+        assert restarted_messages == messages
+        assert (evolved_dir / f"{sid}.jsonl").read_bytes() == evolved
+        evolved_bytes[sid] = evolved
+
+    evolved_push_call = _receiver_call(
+        evolved_dest_dir,
+        profile,
+        tmp_path,
+        native_root=tmp_path / "evolved-push-native",
+        receiver_gate=tmp_path / "evolved-push-receiver-gate",
+        expected_message_count=3,
+    )
+    register_persistence_adapter(
+        ENGINE,
+        lambda: _store_adapter(
+            evolved_dir, profile, tmp_path, expected_message_count=3
+        ),
+    )
+    try:
+        # A fresh gate root models a distinct source owner: the original push
+        # fence for these native ids stays completed and is never overwritten.
+        with monkeypatch.context() as patch:
+            patch.setenv("UNTETHER_SESSION_GATE_ROOT", str(tmp_path / "evolved-gate"))
+            evolved_push_results = [
+                transfer.perform(
+                    cfg,
+                    peer_name="vps",
+                    project="demo",
+                    session_id=sid,
+                    engine=ENGINE,
+                    direction="to",
+                    root=ops,
+                    receiver_call=evolved_push_call,
+                )
+                for sid in ids
+            ]
+    finally:
+        unregister_persistence_adapter(ENGINE)
+    for result, sid in zip(evolved_push_results, ids, strict=True):
+        assert result.state == "completed"
+        assert result.native_id == sid
+        assert result.engine == ENGINE
+        assert len(result.receipt_sha256) == 64
+    for sid in ids:
+        landed = (evolved_dest_dir / f"{sid}.jsonl").read_bytes()
+        assert landed == evolved_bytes[sid]
+        assert landed.startswith(originals[sid])
+        assert json.loads(landed.splitlines()[0])["id"] == sid
+
     # Byte-exact across all three stores; source bytes were never rewritten.
     for sid in ids:
         for store in (src_dir, dest_dir, return_dir):
             assert (store / f"{sid}.jsonl").read_bytes() == originals[sid]
 
     # Two import coldloads per direction, one per session, always against the
-    # store that received the archive; the export-only destination never
-    # loads Pi.
+    # store that received the archive; the export-only destinations never load
+    # Pi, and the evolved-push receiver adds one import per session. The
+    # original round trip still costs exactly four.
     assert sorted(_COLDLOAD_LOG) == sorted(
         [("b-sessions", sid) for sid in ids]
         + [("a-return-sessions", sid) for sid in ids]
+        + [("evolved-dest-sessions", sid) for sid in ids]
     )
+    assert len(_COLDLOAD_LOG) == 6
