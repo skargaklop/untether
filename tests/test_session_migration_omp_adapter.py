@@ -415,6 +415,70 @@ def test_windows_cwd_matches_drive_case_insensitively(tmp_path):
     assert engine.lookup_for_project("abc", PureWindowsPath("d:/Work/Demo")) == "abc"
 
 
+def title_slot() -> bytes:
+    slot = {
+        "type": "title",
+        "v": 1,
+        "title": "Native title",
+        "updatedAt": "",
+        "pad": "",
+    }
+    raw = json.dumps(slot).encode()
+    slot["pad"] = " " * (255 - len(raw))
+    result = json.dumps(slot).encode() + b"\n"
+    assert len(result) == 256
+    return result
+
+
+def test_native_title_slot_lookup_and_export(tmp_path):
+    sessions, blobs = make_store(tmp_path / "store")
+    raw = title_slot() + journal_bytes("abc", "/work/demo")
+    (sessions / "native.jsonl").write_bytes(raw)
+    engine = omp_adapter(sessions, blobs)
+    assert engine.lookup_exact("abc") == "abc"
+    assert engine.lookup_for_project("abc", PurePosixPath("/work/demo")) == "abc"
+    assert engine.export_exact("abc").records["session.jsonl"] == raw
+    with pytest.raises(CapabilityUnavailable, match="SESSION_PROJECT_REFUSED"):
+        engine.lookup_for_project("abc", PurePosixPath("/work"))
+    # A second identity is ambiguous even when its cwd is not authorised.
+    (sessions / "duplicate.jsonl").write_bytes(
+        title_slot() + journal_bytes("abc", "/elsewhere")
+    )
+    with pytest.raises(CapabilityUnavailable, match="SESSION_LOOKUP_AMBIGUOUS"):
+        engine.lookup_exact("abc")
+    with pytest.raises(CapabilityUnavailable, match="SESSION_PROJECT_REFUSED"):
+        engine.lookup_for_project("abc", PurePosixPath("/work/demo"))
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        title_slot()[:-1] + b" \n" + journal_bytes("abc", "/work"),
+        title_slot() + b" " * 65537,
+        title_slot(),
+    ],
+    ids=["bad-slot-length", "oversized-header", "missing-header"],
+)
+def test_native_title_slot_refuses_malformed_or_unbounded_header(tmp_path, raw):
+    sessions, blobs = make_store(tmp_path / "store")
+    (sessions / "bad.jsonl").write_bytes(raw)
+    with pytest.raises(CapabilityUnavailable, match="SESSION_RECORD_MALFORMED"):
+        omp_adapter(sessions, blobs).lookup_exact("abc")
+
+
+def test_native_title_slot_does_not_bypass_unsafe_file_rejection(tmp_path):
+    sessions, blobs = make_store(tmp_path / "store")
+    (sessions / "native.jsonl").write_bytes(
+        title_slot() + journal_bytes("abc", "/work")
+    )
+    try:
+        (sessions / "unsafe.jsonl").symlink_to(sessions / "native.jsonl")
+    except OSError:
+        pytest.skip("symlink creation unavailable")
+    with pytest.raises(CapabilityUnavailable, match="SESSION_RECORD_UNSAFE"):
+        omp_adapter(sessions, blobs).lookup_exact("abc")
+
+
 # -- bounded reclaim overwrite and blob reuse ----------------------------
 
 

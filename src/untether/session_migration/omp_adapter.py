@@ -38,7 +38,7 @@ from .native_adapter import (
     registered_adapter_engines,
 )
 from .native_archive import FidelityError, NativeArchive, _safe_name
-from .omp_bundle import collect_omp_bundle
+from .omp_bundle import _journal, collect_omp_bundle
 from .omp_restore import restore_omp_records
 from .settings import OmpPersistenceProfile, SessionMigrationSettings
 
@@ -325,12 +325,27 @@ class OmpPersistenceAdapter:
                         raise CapabilityUnavailable("SESSION_RECORD_UNSAFE")
                     with path.open("rb") as stream:
                         first = stream.readline(65537)
-                    if len(first) > 65536:
-                        raise CapabilityUnavailable("SESSION_RECORD_MALFORMED")
-                    try:
-                        header = json.loads(first)
-                    except (ValueError, UnicodeError):
-                        continue
+                        if len(first) > 65536:
+                            raise CapabilityUnavailable("SESSION_RECORD_MALFORMED")
+                        try:
+                            header = json.loads(first)
+                        except (ValueError, UnicodeError):
+                            continue
+                        if isinstance(header, dict) and header.get("type") == "title":
+                            # Native OMP has one fixed 256-byte title slot before
+                            # the header. Never search arbitrary history for cwd.
+                            if len(first) != 256 or not first.endswith(b"\n"):
+                                raise CapabilityUnavailable("SESSION_RECORD_MALFORMED")
+                            second = stream.readline(65537)
+                            if len(second) > 65536:
+                                raise CapabilityUnavailable("SESSION_RECORD_MALFORMED")
+                            try:
+                                _journal(first + second)
+                                header = json.loads(second)
+                            except (FidelityError, ValueError, UnicodeError) as exc:
+                                raise CapabilityUnavailable(
+                                    "SESSION_RECORD_MALFORMED"
+                                ) from exc
                     if _header_matches_session(header, session_id):
                         matches.append((path, header))
         except OSError as exc:

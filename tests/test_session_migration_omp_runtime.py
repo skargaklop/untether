@@ -1,4 +1,4 @@
-"""Installed OMP 18.1.6 SDK persistence/cold-load evidence, not adapter roundtrip.
+"""Installed OMP 18.1.6 SDK persistence/cold-load and adapter roundtrip evidence.
 
 OMP v3 is not Pi v3: its title slot, sibling artifacts and global blob refs
 require a separate transfer contract. This text/tool-only probe tests no asset
@@ -131,10 +131,16 @@ def test_omp_public_sdk_persistence_coldload(tmp_path: Path) -> None:
     assert not list(tmp_path.rglob("terminal-sessions/*"))
 
 
-def test_omp_bundle_collect_restore_sdk_coldload(tmp_path: Path) -> None:
-    """Real SDK write -> collect -> restore -> separate SDK process read."""
-    from untether.session_migration.omp_bundle import collect_omp_bundle
-    from untether.session_migration.omp_restore import restore_omp_records
+def test_omp_adapter_export_import_sdk_coldload(tmp_path: Path, monkeypatch) -> None:
+    """SDK write -> production export/import -> independent SDK cold read.
+
+    This proves historical persistence, not model continuation or SDK append.
+    """
+    from untether.session_migration.native_adapter import assert_exact_restore
+    from untether.session_migration.omp_adapter import OmpPersistenceAdapter
+    from untether.session_migration.settings import OmpPersistenceProfile
+
+    monkeypatch.setenv("UNTETHER_SESSION_GATE_ROOT", str(tmp_path / "gates"))
 
     if not BUN.is_file():
         pytest.skip(f"installed Bun absent: {BUN}")
@@ -147,24 +153,50 @@ def test_omp_bundle_collect_restore_sdk_coldload(tmp_path: Path) -> None:
     blobs = src_root / "agent" / "blobs" / "data"
     blobs.mkdir(parents=True, exist_ok=True)
     sid = written["id"]
-    bundle = collect_omp_bundle(
-        sessions_dir=src_root / "sessions",
-        blobs_dir=blobs,
-        native_id=sid,
-        max_expanded=1 << 22,
-        max_file_bytes=1 << 20,
+    source = OmpPersistenceAdapter(
+        engine="omp",
+        profile=OmpPersistenceProfile(
+            format="omp-v1",
+            sessions_dir=str(src_root / "sessions"),
+            blobs_dir=str(blobs),
+            restart_argv=("unused", "{session_path}"),
+        ),
     )
+    assert source.lookup_for_project(sid, src_root) == sid
+    archive = source.export_exact(sid)
+    assert archive.records["session.jsonl"] == Path(written["file"]).read_bytes()
     verify_root = tmp_path / "verify"
     verify_root.mkdir()
     env2 = _environment(verify_root)
     env2["OMP_SESSION_DIR"] = str(verify_root / "restored")
     env2["OMP_EXPECT_CWD"] = str(src_root)
-    restored = restore_omp_records(
-        records=bundle.records,
-        sessions_dir=verify_root / "restored",
-        blobs_dir=verify_root / "agent" / "blobs" / "data",
-        journal_name=bundle.journal_name,
+    sessions = verify_root / "restored"
+    target_blobs = verify_root / "agent" / "blobs" / "data"
+    sessions.mkdir(mode=0o700)
+    target_blobs.mkdir(parents=True)
+    probes = []
+
+    def restart(argv: tuple[str, ...]) -> None:
+        probes.append(_run("read", verify_root, env2, argv[-1]))
+
+    target = OmpPersistenceAdapter(
+        engine="omp",
+        profile=OmpPersistenceProfile(
+            format="omp-v1",
+            sessions_dir=str(sessions),
+            blobs_dir=str(target_blobs),
+            restart_argv=("offline-sdk-read", "{session_path}"),
+        ),
+        restart_runner=restart,
     )
+    proof = target.import_exact(archive)
+    assert_exact_restore(archive, proof)
+    assert len(probes) == 1
+    assert probes[0]["id"] == sid
+    assert probes[0]["entries"] == written["entries"]
+    assert target.lookup_for_project(sid, src_root) == sid
+    assert target.export_exact(sid).records == archive.records
+    restored = sessions / Path(written["file"]).name
     assert restored.read_bytes() == Path(written["file"]).read_bytes()
     loaded = _run("read", verify_root, env2, str(restored))
     assert loaded["id"] == sid
