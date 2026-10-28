@@ -63,6 +63,39 @@ def settings_for(engines: dict) -> SessionMigrationSettings:
     )
 
 
+@pytest.mark.parametrize("engine", ["codex", "opencode"])
+def test_native_profile_routes_to_production_adapter(tmp_path, engine):
+    from untether.session_migration.codex_rollout_adapter import (
+        CodexRolloutPersistenceAdapter,
+    )
+    from untether.session_migration.opencode_sync_adapter import OpenCodeSyncAdapter
+
+    store = (tmp_path / "sessions").resolve()
+    store.mkdir(mode=0o700)
+    if engine == "codex":
+        profile = {
+            "format": "codex-rollout-v1",
+            "sessions_root": str(store),
+            "app_server_executable": str(Path(sys.executable).resolve()),
+        }
+        expected_type = CodexRolloutPersistenceAdapter
+    else:
+        profile = {
+            "format": "opencode-sync-v1",
+            "data_root": str(store),
+            "executable": str(Path(sys.executable).resolve()),
+        }
+        expected_type = OpenCodeSyncAdapter
+    settings = settings_for({engine: profile})
+    try:
+        register_from_settings(settings, engine=engine)
+        adapter = require_persistence_adapter(engine)
+        assert isinstance(adapter, expected_type)
+        assert adapter.engine == engine
+    finally:
+        unregister_persistence_adapter(engine)
+
+
 def test_executable_profile_routes_to_executable_adapter(clean_registry, tmp_path):
     store = tmp_path / "store"
     store.mkdir()
