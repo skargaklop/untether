@@ -290,8 +290,7 @@ def _validate_profile(
     except OSError as exc:
         raise CapabilityUnavailable("PERSISTENCE_STORE_NOT_READY") from exc
     if resolved != sessions_dir:
-        # Any symlink component in the declared store escapes the declared
-        # path; the operator must declare the real directory itself.
+        # Any symlink component escapes the declared store path.
         raise CapabilityUnavailable("PERSISTENCE_STORE_SYMLINK") from None
     if os.name == "posix" and (sessions_dir.stat().st_mode & 0o077):
         # Same check the runner applies to its own session dirs (pi.py: mkdir 0o700).
@@ -425,6 +424,20 @@ def _record_bytes_eq(left: bytes, right: bytes) -> bool:
     return hashlib.sha256(left).digest() == hashlib.sha256(right).digest()
 
 
+def _capped_bytes_eq(path: Path, expected: bytes) -> bool:
+    """True only for exact equality, reading at most ``len(expected) + 1`` bytes.
+
+    An oversized or unreadable file is never slurped or treated as a match: the
+    preflight must bound what it reads from a store it does not own.
+    """
+    try:
+        with path.open("rb") as stream:
+            actual = stream.read(len(expected) + 1)
+    except OSError as exc:
+        raise CapabilityUnavailable("SESSION_RECORD_UNREADABLE") from exc
+    return actual == expected
+
+
 @dataclass(frozen=True, slots=True)
 class FileBundlePersistenceAdapter:
     """Native adapter over one validated per-engine file layout.
@@ -459,10 +472,8 @@ class FileBundlePersistenceAdapter:
         return self.sessions_dir / _record_name_for(self.profile, native_id)
 
     def _run_restart_probe(self, native_id: str, record_path: Path) -> None:
-        # Build and validate the scoped argv FIRST: every execution path —
-        # injected runner, injected argv runner, subprocess — receives the
-        # same substituted, scope-verified argv. An unscoped probe is refused
-        # before any runner is invoked.
+        # Scope-verify argv FIRST: every execution path receives the same
+        # substituted argv, and an unscoped probe is refused before any runner.
         template = list(self.profile.restart_argv)
         if not any(
             "{session_id}" in arg or "{session_path}" in arg for arg in template
@@ -582,8 +593,7 @@ class FileBundlePersistenceAdapter:
             except (ValueError, UnicodeError):
                 continue
             if _header_matches_session(header, session_id):
-                # Count identity matches before project authorization: duplicate IDs
-                # remain ambiguous even when only one declares the requested cwd.
+                # Count identity matches before authorization: duplicates stay ambiguous.
                 matches.append((candidate, header))
         if len(matches) != 1:
             raise CapabilityUnavailable(
@@ -602,8 +612,6 @@ class FileBundlePersistenceAdapter:
         records = _read_record_strict(self.profile, record_path, session_id)
         # pi's parentSession lineage must survive the move: each parent journal
         # is carried as its own record so the restored tree does not dangle.
-        # The bounded headers were already read by _collect_parent_chain; the
-        # re-read here is pure and bounded and yields the strict-read identity.
         parents = _collect_parent_chain(self.profile, self.sessions_dir, record_path)
         if len(parents) + (1 if parents else 0) + len(records) > _MAX_RECORDS:
             raise CapabilityUnavailable("PARENT_REF_DEPTH")
@@ -620,9 +628,8 @@ class FileBundlePersistenceAdapter:
                 {"version": 1, "journals": [p.name for p in parents]},
                 sort_keys=True,
             ).encode()
-        # Preserve the original root journal basename when it is not the
-        # degenerate canonical name: native parentSession entries reference
-        # journal paths and would dangle after a rename.
+        # Keep the original non-canonical root basename: native parentSession
+        # pointers reference journal paths and would dangle after a rename.
         canonical = _record_name_for(self.profile, session_id)
         if record_path.name != canonical:
             records[_LAYOUT_RECORD] = json.dumps(
@@ -659,14 +666,10 @@ class FileBundlePersistenceAdapter:
             raise CapabilityUnavailable("ENGINE_MISMATCH")
         if archive.logical_id != archive.native_id or not archive.records:
             raise CapabilityUnavailable("ARCHIVE_IDENTITY_INVALID")
-        if (
-            not {"session.jsonl"}
-            <= set(archive.records)
-            <= {
-                "session.jsonl",
-                _LAYOUT_RECORD,
-            }
-        ):
+        allowed = {"session.jsonl", _LAYOUT_RECORD, _PARENTS_RECORD} | {
+            f"parent-{index}.jsonl" for index in range(1, _MAX_PARENTS + 1)
+        }
+        if not {"session.jsonl"} <= set(archive.records) <= allowed:
             raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
         layout_name = (
             _layout_root_journal(archive.records[_LAYOUT_RECORD])
@@ -682,6 +685,12 @@ class FileBundlePersistenceAdapter:
             if layout_name
             else self._resolve_native_id(archive.native_id)
         )
+        # Pure, byte-only parent-pairing preflight before ANY store write.
+        from .pi_parent_archive import validate_parent_records
+
+        parents = validate_parent_records(
+            archive.records, record_path.name, archive.native_id
+        )
         metadata_path = _metadata_path(self.sessions_dir, archive.native_id)
         metadata = _metadata_decode(
             json.dumps(
@@ -694,15 +703,48 @@ class FileBundlePersistenceAdapter:
             ).encode(),
             archive.native_id,
         )
-        _write_record(
-            self.profile,
-            self.sessions_dir,
-            archive.native_id,
-            data,
-            record_name=layout_name,
-        )
+        # Preflight loop: every destination is validated before ANY write —
+        # reject symlinks/non-files, never adopt foreign bytes, and reuse a
+        # parent only when byte-identical (the root never, collision instead).
+        for basename, payload in parents:
+            destination = self.sessions_dir / basename
+            if destination.is_symlink() or (
+                destination.exists() and not destination.is_file()
+            ):
+                raise CapabilityUnavailable("SESSION_RECORD_UNSAFE")
+            if destination.exists() and not _capped_bytes_eq(destination, payload):
+                raise CapabilityUnavailable("SESSION_ID_COLLISION")
+        if record_path.is_symlink() or (
+            record_path.exists() and not record_path.is_file()
+        ):
+            raise CapabilityUnavailable("SESSION_RECORD_UNSAFE")
+        if record_path.exists():
+            raise CapabilityUnavailable("SESSION_ID_COLLISION")
+        owned: list[Path] = []  # only files this import created may be removed
         metadata_owned = False
         try:
+            for basename, payload in parents:
+                destination = self.sessions_dir / basename
+                if destination.exists():
+                    continue  # byte-identical preflight reuse: never owned
+                _write_record(
+                    self.profile,
+                    self.sessions_dir,
+                    json.loads(payload.split(b"\n", 1)[0])["id"],
+                    payload,
+                    record_name=basename,
+                )
+                owned.append(destination)
+            # Parents first, then the root: a truncated restore never leaves a
+            # root whose lineage is missing.
+            _write_record(
+                self.profile,
+                self.sessions_dir,
+                archive.native_id,
+                data,
+                record_name=layout_name,
+            )
+            owned.append(record_path)
             metadata_path.parent.mkdir(mode=0o700, exist_ok=True)
             _metadata_path(self.sessions_dir, archive.native_id)
             flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
@@ -719,15 +761,25 @@ class FileBundlePersistenceAdapter:
             self._run_restart_probe(archive.native_id, record_path)
             # 3) record still intact after the restart probe
             stored = _read_record_strict(self.profile, record_path, archive.native_id)
+            # 4) every parent re-read from disk for exact bytes: hashes are
+            # claimed only for parents that verifiably survived the restart.
+            for basename, payload in parents:
+                parent_path = self.sessions_dir / basename
+                if parent_path.is_symlink() or not parent_path.is_file():
+                    raise CapabilityUnavailable("SESSION_RECORD_UNSAFE")
+                if not _capped_bytes_eq(parent_path, payload):
+                    raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
         except (CapabilityUnavailable, OSError) as exc:
-            record_path.unlink(missing_ok=True)  # remove only this import's files
+            for path in owned:  # remove only this import's files
+                path.unlink(missing_ok=True)
             if metadata_owned:
                 metadata_path.unlink(missing_ok=True)
             if isinstance(exc, OSError):
                 raise CapabilityUnavailable("SESSION_METADATA_WRITE_FAILED") from exc
             raise
         if not _record_bytes_eq(stored["session.jsonl"], data):
-            record_path.unlink(missing_ok=True)
+            for path in owned:
+                path.unlink(missing_ok=True)
             metadata_path.unlink(missing_ok=True)
             raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
         return RestoreProof(
