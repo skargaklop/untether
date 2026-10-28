@@ -18,6 +18,14 @@ Supported declared formats today:
   json --no-session``; pi's ``SessionManager.findById`` scans the declared dir
   by header id).
 
+When the discovered root journal basename is not the degenerate
+``<native-id>.jsonl`` (pi's native storage names journals with a timestamp
+prefix), the export carries it in a small validated, manifest-hashed,
+versioned ``layout.json`` archive record, and import/reclaim restore the
+record under that exact original basename — native ``parentSession`` entries
+reference journal paths, so renaming breaks parent linkage. Archives without
+the layout record (legacy) keep the historical canonical-name behaviour.
+
 Any other declared ``session_record`` or ``format`` value is refused
 (``PERSISTENCE_FORMAT_UNSUPPORTED``): this adapter never claims to faithfully
 restore engine states it does not structurally verify.
@@ -51,6 +59,15 @@ from .subprocess_adapter import ExecutablePersistenceAdapter
 _MAX_RECORDS = 64
 _MAX_RECORD_BYTES = 64 * 1024 * 1024
 _MAX_METADATA_BYTES = 4096
+_MAX_LAYOUT_BYTES = 512
+_LAYOUT_RECORD = "layout.json"
+# Windows reserved device names cannot coexist with pi on Win32; pi itself
+# refuses them, so no engine-legitimate journal ever uses one.
+_RESERVED_BASENAMES = frozenset(
+    {"con", "prn", "aux", "nul"}
+    | {f"com{i}" for i in range(1, 10)}
+    | {f"lpt{i}" for i in range(1, 10)}
+)
 
 
 class _MigrationMetadata(BaseModel):
@@ -60,6 +77,49 @@ class _MigrationMetadata(BaseModel):
     native_id: str = Field(min_length=1, max_length=128)
     generation: int = Field(ge=0)
     lineage: str = Field(min_length=1, max_length=2048)
+
+
+class _LayoutRecord(BaseModel):
+    """Versioned layout archive record: the original root journal basename."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    version: int = Field(ge=1, le=1)
+    root_journal: str = Field(min_length=1, max_length=200)
+
+
+def _layout_root_journal(data: bytes) -> str:
+    """Validate a layout archive record; refuse anything unsafe fail-closed.
+
+    The basename is never authority for path resolution (the store path is
+    operator-declared); it must still be one plain, non-hidden,
+    ``.jsonl``-suffixed filename so it can never smuggle traversal, alternate
+    data streams, device names, or symlink components into a store write.
+    """
+    try:
+        if len(data) > _MAX_LAYOUT_BYTES:
+            raise ValueError("layout too large")
+        layout = _LayoutRecord.model_validate(
+            json.loads(data, object_pairs_hook=_unique_pairs)
+        )
+        name = layout.root_journal
+        stem, sep, suffix = name.rpartition(".")
+        if (
+            not sep
+            or suffix != "jsonl"
+            or not stem
+            or name.startswith(".")
+            or ":" in name
+            or Path(name).name != name
+            or "/" in name
+            or "\\" in name
+            or stem.casefold() in _RESERVED_BASENAMES
+            or not _safe_name(name)
+        ):
+            raise ValueError("unsafe layout basename")
+        return name
+    except (ValueError, ValidationError) as exc:
+        raise CapabilityUnavailable("LAYOUT_RECORD_REFUSED") from exc
 
 
 def _metadata_path(sessions_dir: Path, native_id: str) -> Path:
@@ -74,20 +134,21 @@ def _metadata_path(sessions_dir: Path, native_id: str) -> Path:
     return path
 
 
-def _metadata_decode(data: bytes, native_id: str) -> _MigrationMetadata:
-    def unique_pairs(pairs):
-        result = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError("duplicate metadata key")
-            result[key] = value
-        return result
+def _unique_pairs(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate layout/metadata key")
+        result[key] = value
+    return result
 
+
+def _metadata_decode(data: bytes, native_id: str) -> _MigrationMetadata:
     try:
         if len(data) > _MAX_METADATA_BYTES:
             raise ValueError("metadata too large")
         metadata = _MigrationMetadata.model_validate(
-            json.loads(data, object_pairs_hook=unique_pairs)
+            json.loads(data, object_pairs_hook=_unique_pairs)
         )
         if metadata.logical_id != native_id or metadata.native_id != native_id:
             raise ValueError("metadata identity mismatch")
@@ -206,11 +267,13 @@ def _write_record(
     sessions_dir: Path,
     native_id: str,
     data: bytes,
+    record_name: str | None = None,
 ) -> Path:
     """Collision-safe create: O_EXCL, never overwrite an existing native file."""
     if profile.session_record != "pi":
         raise CapabilityUnavailable("PERSISTENCE_FORMAT_UNSUPPORTED")
-    record_path = sessions_dir / _record_name_for(profile, native_id)
+    name = record_name or _record_name_for(profile, native_id)
+    record_path = sessions_dir / name
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
@@ -419,6 +482,15 @@ class FileBundlePersistenceAdapter:
     def _export_snapshot(self, session_id: str) -> NativeArchive:
         record_path = self._lookup_record(session_id)
         records = _read_record_strict(self.profile, record_path, session_id)
+        # Preserve the original root journal basename when it is not the
+        # degenerate canonical name: native parentSession entries reference
+        # journal paths and would dangle after a rename.
+        canonical = _record_name_for(self.profile, session_id)
+        if record_path.name != canonical:
+            records[_LAYOUT_RECORD] = json.dumps(
+                {"version": 1, "root_journal": record_path.name},
+                sort_keys=True,
+            ).encode()
         metadata_path = _metadata_path(self.sessions_dir, session_id)
         metadata = None
         if metadata_path.exists():
@@ -449,12 +521,29 @@ class FileBundlePersistenceAdapter:
             raise CapabilityUnavailable("ENGINE_MISMATCH")
         if archive.logical_id != archive.native_id or not archive.records:
             raise CapabilityUnavailable("ARCHIVE_IDENTITY_INVALID")
-        if set(archive.records) != {"session.jsonl"}:
+        if (
+            not {"session.jsonl"}
+            <= set(archive.records)
+            <= {
+                "session.jsonl",
+                _LAYOUT_RECORD,
+            }
+        ):
             raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
+        layout_name = (
+            _layout_root_journal(archive.records[_LAYOUT_RECORD])
+            if _LAYOUT_RECORD in archive.records
+            else None
+        )
         data = archive.records["session.jsonl"]
         if len(data) > _MAX_RECORD_BYTES or not data.count(b"\n"):
             raise CapabilityUnavailable("SESSION_RECORD_MALFORMED")
-        record_path = self._resolve_native_id(archive.native_id)
+        self._resolve_native_id(archive.native_id)  # traversal guard for metadata path
+        record_path = (
+            self.sessions_dir / layout_name
+            if layout_name
+            else self._resolve_native_id(archive.native_id)
+        )
         metadata_path = _metadata_path(self.sessions_dir, archive.native_id)
         metadata = _metadata_decode(
             json.dumps(
@@ -467,7 +556,13 @@ class FileBundlePersistenceAdapter:
             ).encode(),
             archive.native_id,
         )
-        _write_record(self.profile, self.sessions_dir, archive.native_id, data)
+        _write_record(
+            self.profile,
+            self.sessions_dir,
+            archive.native_id,
+            data,
+            record_name=layout_name,
+        )
         metadata_owned = False
         try:
             metadata_path.parent.mkdir(mode=0o700, exist_ok=True)
@@ -532,9 +627,22 @@ class FileBundlePersistenceAdapter:
         """
         if engine != self.engine:
             raise CapabilityUnavailable("ENGINE_MISMATCH")
-        if set(records) != {"session.jsonl"}:
+        prior_layout = expected_prior_records.get(_LAYOUT_RECORD)
+        layout_name = (
+            _layout_root_journal(records[_LAYOUT_RECORD])
+            if _LAYOUT_RECORD in records
+            else None
+        )
+        # A reclaim may never rename the store record: the layout record must
+        # be present on both sides with identical bytes, or absent on both.
+        if (_LAYOUT_RECORD in records) != (_LAYOUT_RECORD in expected_prior_records):
             raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
-        if set(expected_prior_records) != {"session.jsonl"}:
+        if layout_name is not None and records[_LAYOUT_RECORD] != prior_layout:
+            raise CapabilityUnavailable("OVERWRITE_PRIOR_MISMATCH")
+        record_names = {"session.jsonl"} | (
+            {_LAYOUT_RECORD} if layout_name is not None else set()
+        )
+        if set(records) != record_names or set(expected_prior_records) != record_names:
             raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
         data = records["session.jsonl"]
         prior = expected_prior_records["session.jsonl"]
@@ -559,7 +667,12 @@ class FileBundlePersistenceAdapter:
             native_id,
         )
         metadata_path = _metadata_path(self.sessions_dir, native_id)
-        record_path = self._resolve_native_id(native_id)
+        self._resolve_native_id(native_id)  # traversal guard for metadata path
+        record_path = (
+            self.sessions_dir / layout_name
+            if layout_name
+            else self._resolve_native_id(native_id)
+        )
         if record_path.is_symlink() or not record_path.is_file():
             raise CapabilityUnavailable("SESSION_RECORD_UNSAFE")
         current = record_path.read_bytes()
@@ -610,7 +723,9 @@ class FileBundlePersistenceAdapter:
             raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
         if not _record_bytes_eq(stored["session.jsonl"], data):
             raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
-        return {"session.jsonl": hashlib.sha256(data).hexdigest()}
+        return {
+            name: hashlib.sha256(blob).hexdigest() for name, blob in records.items()
+        }
 
 
 def register_from_settings(settings: SessionMigrationSettings, *, engine: str) -> None:

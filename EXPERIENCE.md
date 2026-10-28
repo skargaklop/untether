@@ -246,3 +246,12 @@ stores, agents, dependency installations, production edits, or commits used.
 - Repeated-move receiver collisions need operator-bound `authorized_peer`
   evidence, never a wire-supplied identity; status must stay hidden until
   fence activation completes.
+
+## 2026 file-bundle layout record (bounded step: basename preservation only)
+
+- Difficulties/pitfalls:
+  - Windows reserved device names are case-insensitive (`com1` vs `COM1`): compare `stem.casefold()` against a lowercase set, or lowercase params slip through.
+  - `import_exact`/`import_overwrite` with a layout basename must still call `_resolve_native_id` first — it is the traversal guard backing `_metadata_path`, and skipping it when `layout_name` is set re-opens native-id traversal.
+  - Strict-subset check `{"session.jsonl"} < set(records)` silently refuses every legacy single-record archive; it must be `<=`.
+  - Reclaim rename-refusal test: drop the layout record from the INCOMING side (prior keeps it); dropping from both sides is a legal legacy reclaim, not a rename.
+  - Inserting tests between an existing `@pytest.mark.parametrize` decorator and its function breaks collection — anchor edits on function defs, not decorators.

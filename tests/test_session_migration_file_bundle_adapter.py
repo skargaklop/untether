@@ -16,6 +16,10 @@ def configured_gate(tmp_path, monkeypatch):
     monkeypatch.setenv("UNTETHER_SESSION_GATE_ROOT", str(tmp_path / "shared-gates"))
 
 
+def _layout_bytes(name: str) -> bytes:
+    return json.dumps({"version": 1, "root_journal": name}, sort_keys=True).encode()
+
+
 def adapter(root):
     root.mkdir(mode=0o700, exist_ok=True)
     profile = EnginePersistenceProfile(
@@ -112,11 +116,20 @@ def test_two_sessions_restore_exact_bytes_and_refuse_collision(tmp_path):
         archive = source.export_exact(sid)
         proof = target.import_exact(archive)
         assert proof.native_id == sid
-        assert (target.sessions_dir / f"{sid}.jsonl").read_bytes() == raw
-        assert target.export_exact(sid).records == archive.records
+        # The ORIGINAL timestamped root journal basename survives import:
+        # native parentSession entries reference journal paths.
+        assert (
+            archive.records["layout.json"]
+            == json.dumps(
+                {"version": 1, "root_journal": f"2026_timestamp_{sid}.jsonl"},
+                sort_keys=True,
+            ).encode()
+        )
+        assert (target.sessions_dir / f"2026_timestamp_{sid}.jsonl").read_bytes() == raw
+        assert target.export_exact(sid) == archive
         with pytest.raises(CapabilityUnavailable, match="SESSION_ID_COLLISION"):
             target.import_exact(archive)
-        assert (target.sessions_dir / f"{sid}.jsonl").read_bytes() == raw
+        assert (target.sessions_dir / f"2026_timestamp_{sid}.jsonl").read_bytes() == raw
 
 
 def test_imported_identity_survives_engine_edits(tmp_path):
@@ -128,13 +141,15 @@ def test_imported_identity_survives_engine_edits(tmp_path):
     proof = target.import_exact(archive)
     assert proof.generation == 7
     assert target.export_exact("sid") == archive
-    path = target.sessions_dir / "sid.jsonl"
+    path = target.sessions_dir / "2026_evolved_sid.jsonl"
     evolved = raw + b'{"type":"message"}\n'
     path.write_bytes(evolved)
     reexported = target.export_exact("sid")
     assert reexported.lineage == archive.lineage
     assert reexported.generation == 7
-    assert reexported.records == {"session.jsonl": evolved}
+    assert reexported.records == {"session.jsonl": evolved} | {
+        k: v for k, v in archive.records.items() if k != "session.jsonl"
+    }
     assert path.read_bytes() == evolved
 
 
@@ -233,6 +248,191 @@ def test_locked_read_requires_live_owned_identity(tmp_path):
         assert engine.export_locked("sid").native_id == "sid"
     with pytest.raises(GateRefused, match="NOT_OWNED"):
         engine.export_locked("sid")
+
+
+def test_timestamped_journal_import_preserves_original_basename(tmp_path):
+    """Timestamped native journal imports under its ORIGINAL basename: the
+    archive carries a validated hashed versioned layout record, and parent-
+    session path references in the native journal stay intact."""
+    source = adapter(tmp_path / "source")
+    target = adapter(tmp_path / "target")
+    raw = (
+        b'{"type":"session","version":3,"id":"sid"}\n'
+        b'{"parentSession":"sessions/2026-01-02T03-04-05-sid.jsonl"}\n'
+    )
+    (source.sessions_dir / "2026-01-02T03-04-05-sid.jsonl").write_bytes(raw)
+    archive = source.export_exact("sid")
+    assert set(archive.records) == {"session.jsonl", "layout.json"}
+    assert archive.records["layout.json"] == _layout_bytes(
+        "2026-01-02T03-04-05-sid.jsonl"
+    )
+    proof = target.import_exact(archive)
+    assert proof.record_hashes == {
+        name: __import__("hashlib").sha256(blob).hexdigest()
+        for name, blob in archive.records.items()
+    }
+    assert (target.sessions_dir / "2026-01-02T03-04-05-sid.jsonl").read_bytes() == raw
+    assert not (target.sessions_dir / "sid.jsonl").exists()
+    assert target.export_exact("sid") == archive
+
+
+def test_evolved_return_reclaim_preserves_original_basename(tmp_path):
+    """An evolved descendant archive reclaims the pushed store record and
+    keeps the original timestamped basename; the rename attempt (canonical
+    name on one side only) is refused before any write."""
+    store = adapter(tmp_path / "store")
+    sid = "sid"
+    v1 = b'{"type":"session","version":3,"id":"sid"}\nv1\n'
+    v2 = b'{"type":"session","version":3,"id":"sid"}\nv2\n'
+    layout = _layout_bytes("2026-01-02T03-04-05-sid.jsonl")
+    (store.sessions_dir / "2026-01-02T03-04-05-sid.jsonl").write_bytes(v1)
+    prior = {"session.jsonl": v1, "layout.json": layout}
+    proof = store.import_overwrite(
+        engine="pi",
+        native_id=sid,
+        records={"session.jsonl": v2, "layout.json": layout},
+        expected_prior_records=prior,
+        generation=1,
+        lineage="reclaim-lineage",
+    )
+    assert set(proof) == {"session.jsonl", "layout.json"}
+    assert (store.sessions_dir / "2026-01-02T03-04-05-sid.jsonl").read_bytes() == v2
+    assert not (store.sessions_dir / "sid.jsonl").exists()
+    assert store.export_exact("sid").records == {
+        "session.jsonl": v2,
+        "layout.json": layout,
+    }
+    # Renaming during reclaim (layout dropped from the incoming side while
+    # the prior push carried it) is refused before any durable write.
+    with pytest.raises(CapabilityUnavailable, match="RECORD_LAYOUT_REFUSED"):
+        store.import_overwrite(
+            engine="pi",
+            native_id=sid,
+            records={"session.jsonl": v1},
+            expected_prior_records={"session.jsonl": v2, "layout.json": layout},
+            generation=2,
+            lineage="reclaim-lineage",
+        )
+    assert (store.sessions_dir / "2026-01-02T03-04-05-sid.jsonl").read_bytes() == v2
+    assert not (store.sessions_dir / "sid.jsonl").exists()
+
+
+def test_legacy_archive_without_layout_keeps_canonical_name(tmp_path):
+    """Legacy archives (no layout record) retain existing behaviour: the
+    canonical ``<id>.jsonl`` name, exact single-record set, and identical
+    reclaim contracts."""
+    from untether.session_migration.native_archive import NativeArchive
+
+    engine = adapter(tmp_path / "store")
+    raw = b'{"type":"session","version":3,"id":"legacy"}\n{}\n'
+    archive = NativeArchive(
+        engine="pi",
+        logical_id="legacy",
+        native_id="legacy",
+        generation=0,
+        lineage="file-bundle:pi:legacy.jsonl",
+        records={"session.jsonl": raw},
+        digest="0" * 64,
+    )
+    engine.import_exact(archive)
+    assert (engine.sessions_dir / "legacy.jsonl").read_bytes() == raw
+    assert set(engine.export_exact("legacy").records) == {"session.jsonl"}
+    v2 = b'{"type":"session","version":3,"id":"legacy"}\nv2\n'
+    proof = engine.import_overwrite(
+        engine="pi",
+        native_id="legacy",
+        records={"session.jsonl": v2},
+        expected_prior_records={"session.jsonl": raw},
+        generation=1,
+        lineage="file-bundle:pi:legacy.jsonl",
+    )
+    assert proof == {"session.jsonl": __import__("hashlib").sha256(v2).hexdigest()}
+    assert (engine.sessions_dir / "legacy.jsonl").read_bytes() == v2
+
+
+@pytest.mark.parametrize(
+    "layout",
+    [
+        b"{",
+        b"{}",
+        b"x" * 513,
+        b'{"version":2,"root_journal":"a.jsonl"}',
+        b'{"version":1,"root_journal":"../evil.jsonl"}',
+        b'{"version":1,"root_journal":"..\\\\evil.jsonl"}',
+        b'{"version":1,"root_journal":"C:\\\\evil.jsonl"}',
+        b'{"version":1,"root_journal":"file.jsonl:hidden"}',
+        b'{"version":1,"root_journal":"/abs.jsonl"}',
+        b'{"version":1,"root_journal":".hidden.jsonl"}',
+        b'{"version":1,"root_journal":"..jsonl"}',
+        b'{"version":1,"root_journal":"CON.jsonl"}',
+        b'{"version":1,"root_journal":"com1.jsonl"}',
+        b'{"version":1,"root_journal":"nul.jsonl"}',
+        b'{"version":1,"root_journal":"file.txt"}',
+        b'{"version":1,"root_journal":"file.JSONL"}',
+        b'{"version":1,"root_journal":""}',
+        b'{"version":1,"root_journal":"a\\u0000b.jsonl"}',
+        b'{"version":1,"version":1,"root_journal":"a.jsonl"}',
+        b'{"version":1,"root_journal":"a.jsonl","extra":1}',
+    ],
+)
+def test_malicious_layout_record_refused_before_writes(tmp_path, layout):
+    """A malicious layout record must be refused BEFORE any durable write:
+    no journal file, no metadata, nothing created in the store."""
+    from untether.session_migration.native_archive import NativeArchive
+
+    engine = adapter(tmp_path / "store")
+    raw = b'{"type":"session","version":3,"id":"evil"}\n{}\n'
+    archive = NativeArchive(
+        engine="pi",
+        logical_id="evil",
+        native_id="evil",
+        generation=0,
+        lineage="file-bundle:pi:evil.jsonl",
+        records={"session.jsonl": raw, "layout.json": layout},
+        digest="0" * 64,
+    )
+    before = {p.name for p in engine.sessions_dir.rglob("*")}
+    with pytest.raises(CapabilityUnavailable, match="LAYOUT_RECORD_REFUSED"):
+        engine.import_exact(archive)
+    assert {p.name for p in engine.sessions_dir.rglob("*")} == before
+    # Reclaim with the same malicious layout also refuses before writes.
+    store = adapter(tmp_path / "reclaim")
+    (store.sessions_dir / "evil.jsonl").write_bytes(raw)
+    with pytest.raises(CapabilityUnavailable, match="LAYOUT_RECORD_REFUSED"):
+        store.import_overwrite(
+            engine="pi",
+            native_id="evil",
+            records={"session.jsonl": raw, "layout.json": layout},
+            expected_prior_records={"session.jsonl": raw, "layout.json": layout},
+            generation=1,
+            lineage="lineage",
+        )
+    assert (store.sessions_dir / "evil.jsonl").read_bytes() == raw
+
+
+def test_foreign_layout_record_in_reclaim_refused_before_writes(tmp_path):
+    """A reclaim that would rename the store record (layout bytes differ
+    between prior and incoming) is refused before the overwrite."""
+    store = adapter(tmp_path / "store")
+    raw = b'{"type":"session","version":3,"id":"sid"}\n{}\n'
+    (store.sessions_dir / "2026-01-02T03-04-05-sid.jsonl").write_bytes(raw)
+    with pytest.raises(CapabilityUnavailable, match="OVERWRITE_PRIOR_MISMATCH"):
+        store.import_overwrite(
+            engine="pi",
+            native_id="sid",
+            records={
+                "session.jsonl": raw,
+                "layout.json": _layout_bytes("2026-OTHER-sid.jsonl"),
+            },
+            expected_prior_records={
+                "session.jsonl": raw,
+                "layout.json": _layout_bytes("2026-01-02T03-04-05-sid.jsonl"),
+            },
+            generation=1,
+            lineage="lineage",
+        )
+    assert (store.sessions_dir / "2026-01-02T03-04-05-sid.jsonl").read_bytes() == raw
+    assert not (store.sessions_dir / "2026-OTHER-sid.jsonl").exists()
 
 
 @pytest.mark.parametrize(
