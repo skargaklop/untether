@@ -348,11 +348,12 @@ class CodexRolloutPersistenceAdapter:
             shutil.rmtree(scratch, ignore_errors=True)
             raise CapabilityUnavailable("RESTART_PROBE_FAILED") from exc
         try:
-            if proc.stdin is None or proc.stdout is None:
+            stdin, stdout = proc.stdin, proc.stdout
+            if stdin is None or stdout is None:
                 raise CapabilityUnavailable("RESTART_PROBE_FAILED")
 
             def _reader() -> None:
-                for line in proc.stdout:
+                for line in stdout:
                     messages.put(line)
                 messages.put(None)
 
@@ -369,8 +370,8 @@ class CodexRolloutPersistenceAdapter:
                 if request_id is not None:
                     request["id"] = request_id
                 try:
-                    proc.stdin.write(json.dumps(request) + "\n")
-                    proc.stdin.flush()
+                    stdin.write(json.dumps(request) + "\n")
+                    stdin.flush()
                 except (OSError, ValueError, TypeError, AttributeError) as exc:
                     raise CapabilityUnavailable("RESTART_PROBE_FAILED") from exc
                 if request_id is None:
@@ -585,7 +586,9 @@ class CodexRolloutPersistenceAdapter:
                                 if path.suffix != ".jsonl":
                                     continue
                                 header = self._read_rollout_header(path)
-                                if _header_matches_session(header, session_id):
+                                if header is not None and _header_matches_session(
+                                    header, session_id
+                                ):
                                     matches.append((path, header))
         except OSError as exc:
             raise CapabilityUnavailable("SESSION_LOOKUP_FAILED") from exc
