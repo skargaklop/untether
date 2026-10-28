@@ -20,7 +20,6 @@ PY=".venv/Scripts/python.exe"
 # Optional OpenCode executable export (Windows npm location when installed).
 if [ -z "${UNTETHER_TEST_OPENCODE_EXE:-}" ]; then
   for candidate in \
-    "$APPDATA/npm/node_modules/opencode-ai/bin/opencode.exe" \
     "${APPDATA:-}/npm/node_modules/opencode-ai/bin/opencode.exe"; do
     if [ -f "$candidate" ]; then
       export UNTETHER_TEST_OPENCODE_EXE="$candidate"
