@@ -22,16 +22,29 @@ Authority: [[../plans/session-migration-product-correction]]. This is a work tra
 [[session-migration-asset-evidence]] records pinned OpenCode spill-file references,
 installed Pi truncated-shell spill references, and the observed Codex attachment
 add/list/restart probe. Original event/journal equality alone does not cover these
-external files or attachment membership rows. OpenCode byte collection is being
-implemented; destination reference usability and Pi spill carry remain mandatory
-open work. Codex's public attachment add API preserves payload and logical identity
-keys but mints new row IDs and timestamps across stores; the exact-preservation
-integration is unresolved. None of these gaps is a scope amendment or successful
-unsupported transfer.
+external files or attachment membership rows. Current implementation state:
+
+- **OpenCode**: export-side byte collection of referenced tool-output spill files
+  is implemented (`opencode_assets.py`): every reference is prevalidated
+  fail-closed before any read (pinned store path, regular non-symlink, hash/size
+  manifest, bounded total) and carried as archive records; asset-carrying import
+  refuses before any write (`TOOL_OUTPUT_IMPORT_NOT_IMPLEMENTED`) rather than
+  falsely certifying a silent drop (`test_session_migration_opencode_sync_adapter.py`).
+- **Pi**: export-side collection of `bashExecution`/`fullOutputPath` OS-tmp spill
+  logs is implemented (`pi_output_assets.py`, commit `c6aaf33`): direct-child-of-tmpdir
+  + `pi-bash-<16 hex>.log` name validation, fstat/lstat replacement guard, 64 MiB
+  total bound, canonical manifest; journals are never modified; asset-carrying
+  import and reclaim refuse before any store write
+  (`PI_OUTPUT_IMPORT_NOT_IMPLEMENTED`, `test_session_migration_pi_output_assets.py`).
+- **Codex attachments**: the public attachment add API preserves payload and logical
+  identity keys but mints new row IDs and timestamps across stores; exact-preservation
+  integration remains unresolved open work.
+
+None of these gaps is a scope amendment or successful unsupported transfer.
 
 ## Latest bounded controller evidence
 
-The expanded `bash scripts/check-engine-matrix.sh` gate includes runtime and coordinator suites for Pi, OMP, Codex and OpenCode; it passed 14 checks in 257.39 seconds under a 420-second deadline. Codex inbound binding is required unconditionally, not counted as success on refusal. The gate exercises native shell follow-ups and independent restart, not provider-generated model turns; coordinator tests use injected receiver transport and do not establish real SSH coverage. The full regression at this stage passed 4,539 tests, 54 skips and nine warnings. Source/test Ruff and migration Ty passed. Independent review subsequently identified Codex interrupted metadata publication as additional repair work; these results do not close that case or the attachment-fidelity rows below.
+The expanded `bash scripts/check-engine-matrix.sh` gate includes runtime and coordinator suites for Pi, OMP, Codex and OpenCode; its latest full run passed 15 checks in 266.05 seconds (all four installed engines, OpenCode enabled via `UNTETHER_TEST_OPENCODE_EXE`). Codex inbound binding is required unconditionally, not counted as success on refusal. The gate exercises native shell follow-ups and independent restart, not provider-generated model turns; coordinator tests use injected receiver transport and do not establish real SSH coverage. After the Codex interrupted-metadata recovery fix (`test_codex_coordinator_reclaim_crash_after_journal_before_metadata`, commit `c75e856`) and the Pi spill-carry work, the full regression passed 4,553 tests, 53 skips, nine warnings (runtime suites verified separately: 6 passed plus installed-OpenCode runtime 1 passed). Source/test Ruff, format and migration Ty passed.
 
 ## Engine coverage truth boundary
 
