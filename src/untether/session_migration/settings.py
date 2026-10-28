@@ -104,8 +104,64 @@ class OmpPersistenceProfile(BaseModel):
         return values
 
 
+class CodexRolloutProfile(BaseModel):
+    """Operator-declared Codex rollout store (``codex-rollout-v1``).
+
+    ``sessions_root`` is the ``sessions`` subtree of a disposable
+    ``CODEX_HOME``; ``app_server_executable`` is the installed
+    ``codex`` binary used for the resume/read restart proof.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    format: Literal["codex-rollout-v1"]
+    sessions_root: str
+    app_server_executable: str
+    resume_timeout_s: float = Field(default=120, gt=0, le=600)
+
+    @field_validator("sessions_root", "app_server_executable")
+    @classmethod
+    def paths_absolute(cls, value: str) -> str:
+        return _absolute_local_path(value)
+
+
+class OpenCodeSyncProfile(BaseModel):
+    """Operator-declared OpenCode sync store (``opencode-sync-v1``).
+
+    ``data_root`` holds per-endpoint isolated XDG/HOME trees; the adapter
+    serves the engine locally on ``hostname:port`` for sync/history export
+    and sync/replay import.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    format: Literal["opencode-sync-v1"]
+    executable: str
+    data_root: str
+    hostname: str = "127.0.0.1"
+    port: int = Field(default=18790, ge=1024, le=65535)
+    request_timeout_s: float = Field(default=30, gt=0, le=300)
+    serve_start_timeout_s: float = Field(default=30, gt=0, le=300)
+
+    @field_validator("executable", "data_root")
+    @classmethod
+    def paths_absolute(cls, value: str) -> str:
+        return _absolute_local_path(value)
+
+    @field_validator("hostname")
+    @classmethod
+    def hostname_safe(cls, value: str) -> str:
+        if not _SAFE_HOST.fullmatch(value):
+            raise ValueError("invalid hostname")
+        return value
+
+
 EngineProfile = Annotated[
-    EnginePersistenceProfile | ExecutablePersistenceProfile | OmpPersistenceProfile,
+    EnginePersistenceProfile
+    | ExecutablePersistenceProfile
+    | OmpPersistenceProfile
+    | CodexRolloutProfile
+    | OpenCodeSyncProfile,
     Field(discriminator="format"),
 ]
 
