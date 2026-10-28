@@ -669,7 +669,10 @@ class CodexRolloutPersistenceAdapter:
             raise CapabilityUnavailable("ARCHIVE_IDENTITY_INVALID")
         if not all(_safe_name(name) for name in archive.records):
             raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
-        if "session.jsonl" not in archive.records:
+        if "session.jsonl" not in archive.records or set(archive.records) - {
+            "session.jsonl",
+            _METADATA_RECORD,
+        }:
             raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
         if _METADATA_RECORD in archive.records:
             metadata = _decode_metadata(
@@ -778,7 +781,7 @@ class CodexRolloutPersistenceAdapter:
             raise CapabilityUnavailable("ENGINE_MISMATCH")
         if not all(_safe_name(name) for name in records):
             raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
-        if "session.jsonl" not in records or _METADATA_RECORD not in records:
+        if set(records) != {"session.jsonl", _METADATA_RECORD}:
             raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
         if "session.jsonl" not in expected_prior_records:
             raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")

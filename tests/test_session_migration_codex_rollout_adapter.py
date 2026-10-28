@@ -388,6 +388,22 @@ def test_import_roundtrip_preserves_identity_and_bytes(tmp_path):
         _adapter(dst, rpc_resume=_append_probe()).import_exact(archive)
 
 
+def test_import_refuses_unmaterialised_asset_record(tmp_path):
+    dst = _store(tmp_path, "dst")
+    sid = _session_id("d4")
+    archive = _archive(
+        sid,
+        _rollout_bytes(sid, "/work"),
+        lineage="codex-rollout-v1:2026/10/27/x.jsonl",
+    )
+    archive = replace(
+        archive, records={**archive.records, "assets/image.png": b"original asset"}
+    )
+    with pytest.raises(CapabilityUnavailable, match="RECORD_LAYOUT_REFUSED"):
+        _adapter(dst, rpc_resume=_append_probe()).import_exact(archive)
+    assert not list(dst.rglob("*.jsonl"))
+
+
 def test_import_refuses_wrong_engine(tmp_path):
     dst = _store(tmp_path, "dst")
     sid = _session_id("d1")
