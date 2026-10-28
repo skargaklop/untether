@@ -14,11 +14,15 @@ serve lifecycle itself (spawn/kill) is exercised only through refusal paths
 
 from __future__ import annotations
 
+import io
 import json
+import urllib.error
+import urllib.request
 from hashlib import sha256
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
+from pydantic import ValidationError
 
 from untether.session_migration.native_adapter import CapabilityUnavailable
 from untether.session_migration.native_archive import NativeArchive
@@ -389,7 +393,9 @@ def test_project_lookup_refuses_missing_or_malformed_binding(tmp_path, directory
     adapter = _adapter(_profile(tmp_path), http)
     with pytest.raises(CapabilityUnavailable, match="SESSION_PROJECT_REFUSED"):
         adapter.lookup_for_project(sid, PurePosixPath("/allowed"))
-    assert info == ({"id": sid} if directory is None else {"id": sid, "directory": directory})
+    assert info == (
+        {"id": sid} if directory is None else {"id": sid, "directory": directory}
+    )
 
 
 @pytest.mark.parametrize("project", ["/allowed", "/allowed/child", "/foreign"])
@@ -426,3 +432,52 @@ def test_lookup_refuses_unknown_session(tmp_path: Path) -> None:
     adapter = _adapter(_profile(tmp_path), _FakeHttp([(404, None)]))
     with pytest.raises(CapabilityUnavailable, match="SESSION_NOT_FOUND"):
         adapter.lookup_exact("ses_missing")
+
+
+@pytest.mark.parametrize("status", [200, 400])
+@pytest.mark.parametrize("oversized", [False, True])
+def test_http_response_size_bound(tmp_path, monkeypatch, status, oversized):
+    limit = 16
+    raw = b'{"ok":true}'.ljust(limit, b" ")
+    if oversized:
+        raw += b" " * 100
+    reads = []
+
+    class Response(io.BytesIO):
+        def read(self, size=-1):
+            reads.append(size)
+            assert size == limit + 1
+            return super().read(size)
+
+    response = Response(raw)
+
+    class Opener:
+        def open(self, request, *, timeout):
+            assert timeout == 30
+            if status != 200:
+                raise urllib.error.HTTPError(
+                    request.full_url, status, "Bad Request", {}, response
+                )
+            response.status = status
+            return response
+
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *args: Opener())
+    profile = OpenCodeSyncProfile.model_validate(
+        {**_profile(tmp_path).model_dump(), "max_response_bytes": limit}
+    )
+    adapter = OpenCodeSyncAdapter(engine=_ENGINE, profile=profile)
+    if oversized:
+        with pytest.raises(CapabilityUnavailable, match="ARCHIVE_TOO_LARGE"):
+            adapter._request("/sync/history", "POST", {})
+    else:
+        assert adapter._request("/sync/history", "POST", {}) == (status, {"ok": True})
+    assert reads == [limit + 1]
+    assert response.closed
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_response_size_limit_must_be_positive(tmp_path, limit):
+    with pytest.raises(ValidationError, match="max_response_bytes"):
+        OpenCodeSyncProfile.model_validate(
+            {**_profile(tmp_path).model_dump(), "max_response_bytes": limit}
+        )

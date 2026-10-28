@@ -131,6 +131,7 @@ class OpenCodeSyncAdapter:
             method=method,
             data=data,
             timeout_s=self.profile.request_timeout_s,
+            max_response_bytes=self.profile.max_response_bytes,
         )
 
     # -- helpers ---------------------------------------------------------
@@ -529,6 +530,7 @@ def _http_json(
     method: str,
     data: dict | None,
     timeout_s: float,
+    max_response_bytes: int,
 ) -> tuple[int, object]:
     """Bounded loopback JSON request to the local serve API."""
     url = f"http://{hostname}:{port}{path}"
@@ -542,10 +544,17 @@ def _http_json(
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         with opener.open(request, timeout=timeout_s) as res:
-            return res.status, json.load(res)
+            raw = res.read(max_response_bytes + 1)
+            if len(raw) > max_response_bytes:
+                raise CapabilityUnavailable("ARCHIVE_TOO_LARGE")
+            return res.status, json.loads(raw)
     except urllib.error.HTTPError as exc:
+        with exc:
+            raw = exc.read(max_response_bytes + 1)
+        if len(raw) > max_response_bytes:
+            raise CapabilityUnavailable("ARCHIVE_TOO_LARGE") from exc
         try:
-            body = json.load(exc)
+            body = json.loads(raw)
         except (ValueError, UnicodeError):
             body = None
         return exc.code, body

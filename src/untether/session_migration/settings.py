@@ -144,6 +144,7 @@ class OpenCodeSyncProfile(BaseModel):
     hostname: str = "127.0.0.1"
     port: int = Field(default=18790, ge=1024, le=65535)
     request_timeout_s: float = Field(default=30, gt=0, le=300)
+    max_response_bytes: int = Field(default=67108864, gt=0, le=1073741824)
     serve_start_timeout_s: float = Field(default=30, gt=0, le=300)
 
     @field_validator("executable", "data_root")
