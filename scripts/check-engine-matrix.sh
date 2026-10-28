@@ -33,4 +33,8 @@ exec "$PY" -m pytest \
   tests/test_session_migration_omp_runtime.py \
   tests/test_session_migration_codex_runtime.py \
   tests/test_session_migration_opencode_runtime.py \
+  tests/test_session_migration_pi_coordinator.py \
+  tests/test_session_migration_omp_coordinator.py \
+  tests/test_session_migration_codex_coordinator.py \
+  tests/test_session_migration_opencode_coordinator.py \
   -q -o addopts='' "${@}"
