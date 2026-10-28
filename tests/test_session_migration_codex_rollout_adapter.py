@@ -375,9 +375,10 @@ def test_import_roundtrip_preserves_identity_and_bytes(tmp_path):
     assert proof.restarted and proof.resumed
     on_disk = (dst / rel).read_bytes()
     assert on_disk.startswith(data)  # byte-exact prefix at the pinned path
-    assert json.loads(on_disk.splitlines()[-1])["payload"][
-        "type"
-    ] == "thread_settings_applied"  # the probe's own append
+    assert (
+        json.loads(on_disk.splitlines()[-1])["payload"]["type"]
+        == "thread_settings_applied"
+    )  # the probe's own append
     sidecar = dst / ".untether-migration" / (sid + ".json")
     assert json.loads(sidecar.read_bytes())["generation"] == 0
     # Re-export from the target preserves lineage/identity, then re-import
@@ -517,9 +518,7 @@ def test_import_overwrite_idempotent_retry_then_prior_mismatch_refusal(tmp_path)
         "generation": 1,
         "lineage": lineage,
     }
-    records = _records(
-        sid, evolved, generation=1, lineage=lineage, metadata=metadata
-    )
+    records = _records(sid, evolved, generation=1, lineage=lineage, metadata=metadata)
     # Divergent prior bytes refuse FIRST: the store still holds the prior
     # rollout, and the target bytes share only the header prefix — never
     # touched on refusal.
@@ -544,9 +543,12 @@ def test_import_overwrite_idempotent_retry_then_prior_mismatch_refusal(tmp_path)
     assert hashes["session.jsonl"] == hashlib.sha256(evolved).hexdigest()
     after_first = (dst / rel).read_bytes()
     assert after_first.startswith(evolved)  # probe appended the settings event
-    assert json.loads((dst / ".untether-migration" / (sid + ".json")).read_bytes())[
-        "generation"
-    ] == 1
+    assert (
+        json.loads((dst / ".untether-migration" / (sid + ".json")).read_bytes())[
+            "generation"
+        ]
+        == 1
+    )
     # Idempotent retry: current bytes carry the target as exact prefix.
     engine.import_overwrite(
         engine=_ENGINE,

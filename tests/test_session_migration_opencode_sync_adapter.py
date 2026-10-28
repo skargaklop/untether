@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 from hashlib import sha256
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
 
@@ -374,6 +374,52 @@ def test_reclaim_refuses_divergent_prior(tmp_path: Path, monkeypatch) -> None:
             generation=div_archive.generation,
             lineage=div_archive.lineage,
         )
+
+
+@pytest.mark.parametrize(
+    "directory",
+    [None, "", 42, [], {}, "relative/project", "/project/../allowed", "/allowed\x00"],
+)
+def test_project_lookup_refuses_missing_or_malformed_binding(tmp_path, directory):
+    sid = "ses_binding"
+    info = {"id": sid}
+    if directory is not None:
+        info["directory"] = directory
+    http = _FakeHttp([(200, info)])
+    adapter = _adapter(_profile(tmp_path), http)
+    with pytest.raises(CapabilityUnavailable, match="SESSION_PROJECT_REFUSED"):
+        adapter.lookup_for_project(sid, PurePosixPath("/allowed"))
+    assert info == ({"id": sid} if directory is None else {"id": sid, "directory": directory})
+
+
+@pytest.mark.parametrize("project", ["/allowed", "/allowed/child", "/foreign"])
+def test_project_lookup_requires_exact_directory(tmp_path, project):
+    sid = "ses_binding"
+    info = {"id": sid, "directory": "/allowed"}
+    http = _FakeHttp([(200, info)])
+    adapter = _adapter(_profile(tmp_path), http)
+    if project == "/allowed":
+        assert adapter.lookup_for_project(sid, PurePosixPath(project)) == sid
+    else:
+        with pytest.raises(CapabilityUnavailable, match="SESSION_PROJECT_REFUSED"):
+            adapter.lookup_for_project(sid, PurePosixPath(project))
+    assert info == {"id": sid, "directory": "/allowed"}
+    assert http.requests == [(f"/session/{sid}", "GET", None)]
+
+
+def test_project_lookup_preserves_windows_native_path(tmp_path):
+    sid = "ses_windows"
+    directory = "D:\\Projects\\Exact"
+    info = {"id": sid, "directory": directory}
+    adapter = _adapter(_profile(tmp_path), _FakeHttp([(200, info)]))
+    assert adapter.lookup_for_project(sid, PureWindowsPath("d:/Projects/Exact")) == sid
+    assert info["directory"] == directory
+
+
+def test_project_lookup_refuses_unknown_session(tmp_path):
+    adapter = _adapter(_profile(tmp_path), _FakeHttp([(404, None)]))
+    with pytest.raises(CapabilityUnavailable, match="SESSION_PROJECT_REFUSED"):
+        adapter.lookup_for_project("ses_missing", PurePosixPath("/allowed"))
 
 
 def test_lookup_refuses_unknown_session(tmp_path: Path) -> None:

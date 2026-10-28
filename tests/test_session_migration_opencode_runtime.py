@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from untether.session_migration.native_adapter import CapabilityUnavailable
 from untether.session_migration.opencode_sync_adapter import (
     OpenCodeSyncAdapter,
     _maybe_kill,
@@ -76,11 +77,19 @@ def test_installed_opencode_adapter_restore_restart(tmp_path, monkeypatch):
         )
 
     source, destination = adapter("source"), adapter("destination")
+    # Native serve binds sessions to its inherited cwd, not its isolated store.
+    # Keep the established runtime cwd: empty Windows non-repository directories
+    # currently stall native session creation. No project files are changed.
+    project = Path.cwd()
+    foreign_project = tmp_path / "foreign-project"
+    foreign_project.mkdir()
     admitted = "disposable adapter admitted input"
     initial = "adapter-original-shell-ok"
     followup = "adapter-followup-shell-ok"
     with _running(source):
-        sid = _ok(source, "/session", "POST", {"title": "adapter source"})["id"]
+        info = _ok(source, "/session", "POST", {"title": "adapter source"})
+        sid = info["id"]
+        assert Path(info["directory"]) == project
         status, body = source._request(
             f"/api/session/{sid}/prompt",
             "POST",
@@ -101,8 +110,13 @@ def test_installed_opencode_adapter_restore_restart(tmp_path, monkeypatch):
             event["type"] == "session.next.prompt.admitted.1" for event in events
         )
         assert any(initial in output for output in _tool_outputs(messages))
+    assert source.lookup_for_project(sid, project) == sid
+    with pytest.raises(CapabilityUnavailable, match="SESSION_PROJECT_REFUSED"):
+        source.lookup_for_project(sid, foreign_project)
     archive = source.export_exact(sid)
     assert json.loads(archive.records["sync-events.json"]) == events
+    created = next(event for event in events if event["type"] == "session.created.1")
+    assert created["data"]["info"]["directory"] == info["directory"]
 
     with _running(destination):
         keep = _ok(destination, "/session", "POST", {"title": "unrelated"})
@@ -131,7 +145,13 @@ def test_installed_opencode_adapter_restore_restart(tmp_path, monkeypatch):
     assert proof.native_id == sid
     assert proof.restarted and proof.resumed
 
+    # Restoring to a different store does not authorise that store as the source
+    # project, nor rewrite the native source-directory string.
+    assert destination.lookup_for_project(sid, project) == sid
+    with pytest.raises(CapabilityUnavailable, match="SESSION_PROJECT_REFUSED"):
+        destination.lookup_for_project(sid, destination.data_root)
     with _running(destination):
+        assert _ok(destination, f"/session/{sid}")["directory"] == info["directory"]
         assert _ok(destination, f"/session/{sid}")["id"] == sid
         assert destination._collect_events(sid) == events
         assert _ok(destination, f"/session/{sid}/message") == messages

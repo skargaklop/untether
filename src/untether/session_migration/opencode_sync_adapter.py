@@ -184,8 +184,8 @@ class OpenCodeSyncAdapter:
         _kill_proc_tree(proc)
         raise CapabilityUnavailable("RESTART_PROBE_FAILED")
 
-    def _lookup_session(self, session_id: str) -> None:
-        """Prove the session exists by listing sessions over the live API."""
+    def _lookup_session(self, session_id: str) -> dict:
+        """Read native session info, including its persisted directory binding."""
         code, body = self._request(f"/session/{session_id}")
         if (
             code != _HTTP_OK
@@ -193,6 +193,7 @@ class OpenCodeSyncAdapter:
             or body.get("id") != session_id
         ):
             raise CapabilityUnavailable("SESSION_NOT_FOUND")
+        return body
 
     def _verify_replay(self, session_id: str, expected: list[dict]) -> None:
         """Independent verification: read back the replayed history and
@@ -268,14 +269,26 @@ class OpenCodeSyncAdapter:
                 _maybe_kill(proc)
 
     def lookup_for_project(self, session_id: str, project_root: Path) -> str:
-        """OpenCode sessions carry a directory_id, not a cwd; project scoping
-        for OpenCode stays with the coordinator's enrollment (explicit
-        destination enrollment), so only identity is proven here."""
+        """Authorize the exact native Session.directory, never enrollment.
+
+        Installed 1.17.13 exposes this required field in GET /session/{id}
+        and session.created.1 data.info; no directory-ID lookup is needed.
+        Compare lexical keys only: never rewrite the persisted path or events.
+        """
+        from .file_bundle_adapter import _project_path_key
+
         proc = None
         try:
+            key = _project_path_key(str(project_root))
+            if key is None:
+                raise CapabilityUnavailable("SESSION_PROJECT_REFUSED")
             proc = self._serve("lookup")
-            self._lookup_session(session_id)
+            info = self._lookup_session(session_id)
+            if _project_path_key(info.get("directory")) != key:
+                raise CapabilityUnavailable("SESSION_PROJECT_REFUSED")
             return session_id
+        except (CapabilityUnavailable, OSError, ValueError):
+            raise CapabilityUnavailable("SESSION_PROJECT_REFUSED") from None
         finally:
             if proc is not None:
                 _maybe_kill(proc)
