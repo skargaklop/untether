@@ -688,9 +688,7 @@ def test_import_refuses_records_changed_by_restart_probe(
 ):
     src_sessions, src_blobs = make_store(tmp_path / "src")
     image = b"referenced-image"
-    digest = seed_journal(
-        src_sessions, src_blobs, "j.jsonl", "abc", "/work", image
-    )
+    digest = seed_journal(src_sessions, src_blobs, "j.jsonl", "abc", "/work", image)
     artifact = src_sessions / "j" / "sub" / "tool.txt"
     artifact.parent.mkdir(parents=True)
     artifact.write_bytes(b"artifact")
@@ -742,7 +740,9 @@ def test_import_refuses_records_changed_by_restart_probe(
 
 
 @pytest.mark.parametrize("overwrite", [False, True], ids=["exact", "overwrite"])
-def test_import_verifies_artifact_and_unreferenced_blob_after_probe(tmp_path, overwrite):
+def test_import_verifies_artifact_and_unreferenced_blob_after_probe(
+    tmp_path, overwrite
+):
     src_sessions, src_blobs = make_store(tmp_path / "src")
     seed_journal(src_sessions, src_blobs, "j.jsonl", "abc", "/work")
     artifact = src_sessions / "j" / "sub" / "tool.txt"

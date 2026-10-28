@@ -216,9 +216,7 @@ class OmpPersistenceAdapter:
                 raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
         except (CapabilityUnavailable, FidelityError, OSError) as exc:
             raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED") from exc
-        return {
-            name: hashlib.sha256(actual[name]).hexdigest() for name in records
-        }
+        return {name: hashlib.sha256(actual[name]).hexdigest() for name in records}
 
     def _metadata_path(self, native_id: str) -> Path:
         directory = self.sessions_dir / ".untether-migration"
