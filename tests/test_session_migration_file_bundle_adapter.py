@@ -6,7 +6,13 @@ from pathlib import Path, PurePosixPath
 
 import pytest
 
-from untether.session_migration.file_bundle_adapter import FileBundlePersistenceAdapter
+from untether.session_migration.file_bundle_adapter import (
+    FileBundlePersistenceAdapter,
+    _collect_parent_chain,
+    _layout_root_journal,
+    _parents_record_parse,
+    _safe_journal_basename,
+)
 from untether.session_migration.native_adapter import CapabilityUnavailable
 from untether.session_migration.settings import EnginePersistenceProfile
 
@@ -18,6 +24,10 @@ def configured_gate(tmp_path, monkeypatch):
 
 def _layout_bytes(name: str) -> bytes:
     return json.dumps({"version": 1, "root_journal": name}, sort_keys=True).encode()
+
+
+def _parents_bytes(*names: str) -> bytes:
+    return json.dumps({"version": 1, "journals": list(names)}, sort_keys=True).encode()
 
 
 def adapter(root):
@@ -435,6 +445,61 @@ def test_foreign_layout_record_in_reclaim_refused_before_writes(tmp_path):
     assert not (store.sessions_dir / "2026-OTHER-sid.jsonl").exists()
 
 
+class ParentsRecordValidation:
+    """parents.json archive record: parent journals validated fail-closed.
+
+    The default ``python_classes = Test*`` glob would skip this class, so it
+    opts in explicitly (pytest treats a truthy ``__test__`` as a nose-style
+    test class) while keeping the task-required name.
+    """
+
+    __test__ = True
+
+    def test_valid_two_parent_chain_parses(self):
+        names = ["2026-01-01T00-00-00-root.jsonl", "2026-01-02T00-00-00-mid.jsonl"]
+        assert _parents_record_parse(_parents_bytes(*names)) == names
+
+    def test_shared_safety_gate_is_the_layout_gate(self):
+        """The helper extracted from _layout_root_journal refuses the same
+        basenames the layout record validator refuses."""
+        for name in ("con.jsonl", "../x.jsonl", "a.txt", ".hidden.jsonl"):
+            assert not _safe_journal_basename(name)
+            with pytest.raises(CapabilityUnavailable, match="LAYOUT_RECORD_REFUSED"):
+                _layout_root_journal(_layout_bytes(name))
+        assert _safe_journal_basename("2026-01-01T00-00-00-root.jsonl")
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            pytest.param(_parents_bytes("a.jsonl") + b" " * 512, id="over-512-bytes"),
+            pytest.param(b"{", id="malformed-json"),
+            pytest.param(b'{"version":2,"journals":["a.jsonl"]}', id="wrong-version"),
+            pytest.param(
+                b'{"version":1,"journals":["a.jsonl"],"extra":1}', id="extra-key"
+            ),
+            pytest.param(
+                b'{"version":1,"version":1,"journals":["a.jsonl"]}',
+                id="duplicate-json-key",
+            ),
+            pytest.param(b'{"version":1,"journals":[]}', id="empty-journals"),
+            pytest.param(
+                _parents_bytes(*(f"p{i}.jsonl" for i in range(9))), id="nine-journals"
+            ),
+            pytest.param(_parents_bytes("a" * 201 + ".jsonl"), id="over-200-item"),
+            pytest.param(_parents_bytes("../../x.jsonl"), id="traversal"),
+            pytest.param(_parents_bytes("a\\b.jsonl"), id="backslash"),
+            pytest.param(_parents_bytes("a.jsonl:hidden"), id="ads-colon"),
+            pytest.param(_parents_bytes("con.jsonl"), id="reserved-stem"),
+            pytest.param(_parents_bytes("a.txt"), id="wrong-suffix"),
+            pytest.param(_parents_bytes("a.jsonl", "A.jsonl"), id="duplicate-basename"),
+            pytest.param(_parents_bytes("a\u0001b.jsonl"), id="control-char"),
+        ],
+    )
+    def test_parents_record_refused(self, data):
+        with pytest.raises(CapabilityUnavailable, match="PARENTS_RECORD_REFUSED"):
+            _parents_record_parse(data)
+
+
 @pytest.mark.parametrize(
     "data", [b"{}\n", b"{bad\n", b'{"type":"session","version":3,"id":"other"}\n']
 )
@@ -714,3 +779,190 @@ def test_lookup_candidate_bound(tmp_path, monkeypatch, count, accepted):
     else:
         with pytest.raises(CapabilityUnavailable, match="SESSION_LOOKUP_LIMIT"):
             engine.lookup_exact("sid")
+
+
+# --- ParentChainCollection -----------------------------------------------
+
+
+def _session_header(store: Path, session_id: str, **extra) -> bytes:
+    header = {"type": "session", "version": 3, "id": session_id}
+    header.update(extra)
+    return (json.dumps(header) + "\n{}\n").encode()
+
+
+def _write_journal(store: Path, name: str, session_id: str, **extra) -> Path:
+    path = store / name
+    path.write_bytes(_session_header(store, session_id, **extra))
+    return path
+
+
+def test_parent_chain_child_parent_grandparent_ordered(tmp_path):
+    store = tmp_path / "store"
+    store.mkdir(mode=0o700)
+    grandparent = _write_journal(store, "gp.jsonl", "gp")
+    parent = _write_journal(
+        store, "parent.jsonl", "parent", parentSession=str(grandparent)
+    )
+    child = _write_journal(store, "child.jsonl", "child", parentSession=str(parent))
+    profile = EnginePersistenceProfile(
+        format="pi-jsonl-v3",
+        sessions_dir=str(store),
+        session_record="pi",
+        restart_argv=("echo", "{session_id}"),
+    )
+    assert _collect_parent_chain(profile, store, child) == [parent, grandparent]
+
+
+def test_parent_chain_no_parent_session_is_empty(tmp_path):
+    store = tmp_path / "store"
+    store.mkdir(mode=0o700)
+    root = _write_journal(store, "root.jsonl", "root")
+    profile = EnginePersistenceProfile(
+        format="pi-jsonl-v3",
+        sessions_dir=str(store),
+        session_record="pi",
+        restart_argv=("echo", "{session_id}"),
+    )
+    assert _collect_parent_chain(profile, store, root) == []
+
+
+def test_parent_chain_missing_parent_refused(tmp_path):
+    store = tmp_path / "store"
+    store.mkdir(mode=0o700)
+    child = _write_journal(
+        store, "child.jsonl", "child", parentSession=str(store / "gone.jsonl")
+    )
+    profile = EnginePersistenceProfile(
+        format="pi-jsonl-v3",
+        sessions_dir=str(store),
+        session_record="pi",
+        restart_argv=("echo", "{session_id}"),
+    )
+    with pytest.raises(CapabilityUnavailable, match="PARENT_REF_MISSING"):
+        _collect_parent_chain(profile, store, child)
+
+
+def test_parent_chain_cycle_refused(tmp_path):
+    store = tmp_path / "store"
+    store.mkdir(mode=0o700)
+    parent = _write_journal(
+        store, "parent.jsonl", "parent", parentSession=str(store / "child.jsonl")
+    )
+    child = _write_journal(store, "child.jsonl", "child", parentSession=str(parent))
+    profile = EnginePersistenceProfile(
+        format="pi-jsonl-v3",
+        sessions_dir=str(store),
+        session_record="pi",
+        restart_argv=("echo", "{session_id}"),
+    )
+    with pytest.raises(CapabilityUnavailable, match="PARENT_REF_CYCLE"):
+        _collect_parent_chain(profile, store, child)
+
+
+def test_parent_chain_self_cycle_refused(tmp_path):
+    store = tmp_path / "store"
+    store.mkdir(mode=0o700)
+    root = _write_journal(
+        store, "root.jsonl", "root", parentSession=str(store / "root.jsonl")
+    )
+    profile = EnginePersistenceProfile(
+        format="pi-jsonl-v3",
+        sessions_dir=str(store),
+        session_record="pi",
+        restart_argv=("echo", "{session_id}"),
+    )
+    with pytest.raises(CapabilityUnavailable, match="PARENT_REF_CYCLE"):
+        _collect_parent_chain(profile, store, root)
+
+
+def test_parent_chain_depth_nine_refused(tmp_path):
+    store = tmp_path / "store"
+    store.mkdir(mode=0o700)
+    # A ten-journal lineage: nine parent hops, one over the cap of eight.
+    previous = _write_journal(store, "j9.jsonl", "j9")
+    for index in range(8, -1, -1):
+        previous = _write_journal(
+            store, f"j{index}.jsonl", f"j{index}", parentSession=str(previous)
+        )
+    profile = EnginePersistenceProfile(
+        format="pi-jsonl-v3",
+        sessions_dir=str(store),
+        session_record="pi",
+        restart_argv=("echo", "{session_id}"),
+    )
+    with pytest.raises(CapabilityUnavailable, match="PARENT_REF_DEPTH"):
+        _collect_parent_chain(profile, store, previous)
+
+
+def test_parent_chain_parent_outside_store_refused(tmp_path):
+    store = tmp_path / "store"
+    store.mkdir(mode=0o700)
+    other = tmp_path / "other"
+    other.mkdir()
+    parent = _write_journal(other, "parent.jsonl", "parent")
+    child = _write_journal(store, "child.jsonl", "child", parentSession=str(parent))
+    profile = EnginePersistenceProfile(
+        format="pi-jsonl-v3",
+        sessions_dir=str(store),
+        session_record="pi",
+        restart_argv=("echo", "{session_id}"),
+    )
+    with pytest.raises(CapabilityUnavailable, match="PARENTS_RECORD_REFUSED"):
+        _collect_parent_chain(profile, store, child)
+
+
+def test_parent_chain_traversal_basename_refused(tmp_path):
+    store = tmp_path / "store"
+    store.mkdir(mode=0o700)
+    child = _write_journal(
+        store,
+        "child.jsonl",
+        "child",
+        parentSession=str(store / "..\\x.jsonl"),
+    )
+    profile = EnginePersistenceProfile(
+        format="pi-jsonl-v3",
+        sessions_dir=str(store),
+        session_record="pi",
+        restart_argv=("echo", "{session_id}"),
+    )
+    with pytest.raises(CapabilityUnavailable, match="PARENTS_RECORD_REFUSED"):
+        _collect_parent_chain(profile, store, child)
+
+
+def test_parent_chain_symlink_parent_refused(tmp_path):
+    store = tmp_path / "store"
+    store.mkdir(mode=0o700)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    real = _write_journal(outside, "parent.jsonl", "parent")
+    link = store / "link.jsonl"
+    try:
+        link.symlink_to(real)
+    except OSError:
+        pytest.skip("symlink creation unavailable")
+    child = _write_journal(store, "child.jsonl", "child", parentSession=str(link))
+    profile = EnginePersistenceProfile(
+        format="pi-jsonl-v3",
+        sessions_dir=str(store),
+        session_record="pi",
+        restart_argv=("echo", "{session_id}"),
+    )
+    with pytest.raises(CapabilityUnavailable, match="SESSION_RECORD_UNSAFE"):
+        _collect_parent_chain(profile, store, child)
+
+
+def test_parent_chain_parent_header_without_id_refused(tmp_path):
+    store = tmp_path / "store"
+    store.mkdir(mode=0o700)
+    parent = store / "parent.jsonl"
+    parent.write_bytes(b'{"type":"session","version":3}\n{}\n')
+    child = _write_journal(store, "child.jsonl", "child", parentSession=str(parent))
+    profile = EnginePersistenceProfile(
+        format="pi-jsonl-v3",
+        sessions_dir=str(store),
+        session_record="pi",
+        restart_argv=("echo", "{session_id}"),
+    )
+    with pytest.raises(CapabilityUnavailable, match="SESSION_RECORD_MALFORMED"):
+        _collect_parent_chain(profile, store, child)

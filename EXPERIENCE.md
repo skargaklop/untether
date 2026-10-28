@@ -255,3 +255,7 @@ stores, agents, dependency installations, production edits, or commits used.
   - Strict-subset check `{"session.jsonl"} < set(records)` silently refuses every legacy single-record archive; it must be `<=`.
   - Reclaim rename-refusal test: drop the layout record from the INCOMING side (prior keeps it); dropping from both sides is a legal legacy reclaim, not a rename.
   - Inserting tests between an existing `@pytest.mark.parametrize` decorator and its function breaks collection — anchor edits on function defs, not decorators.
+
+- pytest `python_classes = Test*` skips non-Test-prefixed test classes — use `__test__ = True` (or Test prefix) or the class silently never runs; re-run collection after concurrent worker edits to shared test files (W1/W2 parents-record step, 2026-10-28).
+- Bash heredocs mangle backslash-containing literals (`..\x.jsonl`) into unicode escapes — write such test lines via edit calls, not heredoc (parent-chain step, 2026-10-28).
+- `_MAX_PARENTS = 8` allows 8 hops; the depth-refusal test must build 9 hops (10 journals) (parent-chain step, 2026-10-28).

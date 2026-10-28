@@ -42,6 +42,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -59,8 +60,10 @@ from .subprocess_adapter import ExecutablePersistenceAdapter
 _MAX_RECORDS = 64
 _MAX_RECORD_BYTES = 64 * 1024 * 1024
 _MAX_METADATA_BYTES = 4096
-_MAX_LAYOUT_BYTES = 512
+_MAX_LAYOUT_BYTES = 512  # shared small-record cap for layout.json/parents.json
 _LAYOUT_RECORD = "layout.json"
+_PARENTS_RECORD = "parents.json"
+_MAX_PARENTS = 8
 # Windows reserved device names cannot coexist with pi on Win32; pi itself
 # refuses them, so no engine-legitimate journal ever uses one.
 _RESERVED_BASENAMES = frozenset(
@@ -88,13 +91,35 @@ class _LayoutRecord(BaseModel):
     root_journal: str = Field(min_length=1, max_length=200)
 
 
+def _safe_journal_basename(name: str) -> bool:
+    """True only for one plain, non-hidden, ``.jsonl``-suffixed basename.
+
+    The shared safety gate for every archive record that names a journal in
+    the store: no directory component, no traversal or drive/alternate-stream
+    colon, no control character, no Windows device stem. A basename is never
+    authority for path resolution (the store path is operator-declared); it
+    must still be unable to smuggle traversal, alternate data streams, device
+    names, or symlink components into a store write.
+    """
+    stem, sep, suffix = name.rpartition(".")
+    return bool(
+        sep
+        and suffix == "jsonl"
+        and stem
+        and not name.startswith(".")
+        and ":" not in name
+        and Path(name).name == name
+        and "/" not in name
+        and "\\" not in name
+        and stem.casefold() not in _RESERVED_BASENAMES
+        and _safe_name(name)
+    )
+
+
 def _layout_root_journal(data: bytes) -> str:
     """Validate a layout archive record; refuse anything unsafe fail-closed.
 
-    The basename is never authority for path resolution (the store path is
-    operator-declared); it must still be one plain, non-hidden,
-    ``.jsonl``-suffixed filename so it can never smuggle traversal, alternate
-    data streams, device names, or symlink components into a store write.
+    See :func:`_safe_journal_basename` for the basename gate applied here.
     """
     try:
         if len(data) > _MAX_LAYOUT_BYTES:
@@ -103,23 +128,116 @@ def _layout_root_journal(data: bytes) -> str:
             json.loads(data, object_pairs_hook=_unique_pairs)
         )
         name = layout.root_journal
-        stem, sep, suffix = name.rpartition(".")
-        if (
-            not sep
-            or suffix != "jsonl"
-            or not stem
-            or name.startswith(".")
-            or ":" in name
-            or Path(name).name != name
-            or "/" in name
-            or "\\" in name
-            or stem.casefold() in _RESERVED_BASENAMES
-            or not _safe_name(name)
-        ):
+        if not _safe_journal_basename(name):
             raise ValueError("unsafe layout basename")
         return name
     except (ValueError, ValidationError) as exc:
         raise CapabilityUnavailable("LAYOUT_RECORD_REFUSED") from exc
+
+
+class _ParentsRecord(BaseModel):
+    """Versioned parents archive record: the parent journal basenames.
+
+    pi's session header ``parentSession`` names another journal in the same
+    store; the tree dangles if that journal is absent at restore.
+    """
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    version: int = Field(ge=1, le=1)
+    journals: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(
+        min_length=1, max_length=_MAX_PARENTS
+    )
+
+
+def _parents_record_parse(data: bytes) -> list[str]:
+    """Validate a parents archive record; refuse anything unsafe fail-closed.
+
+    Same 512-byte small-record cap and duplicated-key rejection as the layout
+    record, plus the shared basename gate on every entry: parent journals land
+    in the same store as the child, and a basename repeated under different
+    casing would describe one file in several parent slots.
+    """
+    try:
+        if len(data) > _MAX_LAYOUT_BYTES:
+            raise ValueError("parents record too large")
+        record = _ParentsRecord.model_validate(
+            json.loads(data, object_pairs_hook=_unique_pairs)
+        )
+        journals = record.journals
+        if len({name.casefold() for name in journals}) != len(journals):
+            raise ValueError("duplicate parent journal")
+        if not all(_safe_journal_basename(name) for name in journals):
+            raise ValueError("unsafe parent journal basename")
+        return journals
+    except (ValueError, ValidationError) as exc:
+        raise CapabilityUnavailable("PARENTS_RECORD_REFUSED") from exc
+
+
+def _read_bounded_header(record_path: Path) -> dict:
+    """Read one journal header under the same 64 KiB first-line bound as lookup."""
+    try:
+        with record_path.open("rb") as stream:
+            first = stream.readline(65537)
+    except OSError as exc:
+        raise CapabilityUnavailable("SESSION_RECORD_UNREADABLE") from exc
+    if len(first) > 65536:
+        raise CapabilityUnavailable("SESSION_RECORD_MALFORMED")
+    try:
+        header = json.loads(first)
+    except (ValueError, UnicodeError) as exc:
+        raise CapabilityUnavailable("SESSION_RECORD_MALFORMED") from exc
+    if not isinstance(header, dict):
+        raise CapabilityUnavailable("SESSION_RECORD_MALFORMED")
+    return header
+
+
+def _collect_parent_chain(
+    profile: EnginePersistenceProfile,
+    sessions_dir: Path,
+    root_record_path: Path,
+) -> list[Path]:
+    """Walk pi's ``parentSession`` lineage: pure reader, root-nearest first.
+
+    pi's header names its parent journal as an absolute path inside the same
+    declared store, so a restore that drops the parent dangles the tree. The
+    walk is path-based only (no directory scan, hence no lookup bound) and
+    fail-closed: same-store directory, one plain non-hidden ``.jsonl``
+    basename, no symlink, no missing file, no cycle (including self), and
+    never more than ``_MAX_PARENTS`` hops. Full record bytes stay unread here;
+    export performs the strict reads.
+    """
+    if profile.session_record != "pi":
+        raise CapabilityUnavailable("PERSISTENCE_FORMAT_UNSUPPORTED")
+    header = _read_bounded_header(root_record_path)
+    root_id = header.get("id")
+    if not isinstance(root_id, str) or not root_id:
+        root_id = root_record_path.name
+    seen = {root_id}
+    chain: list[Path] = []
+    parent = header.get("parentSession")
+    while isinstance(parent, str) and parent:
+        if len(chain) >= _MAX_PARENTS:
+            raise CapabilityUnavailable("PARENT_REF_DEPTH")
+        reference = Path(parent)
+        if reference.parent != sessions_dir or not _safe_journal_basename(
+            reference.name
+        ):
+            raise CapabilityUnavailable("PARENTS_RECORD_REFUSED")
+        if reference.is_symlink():
+            raise CapabilityUnavailable("SESSION_RECORD_UNSAFE")
+        if not reference.is_file():
+            raise CapabilityUnavailable("PARENT_REF_MISSING")
+        header = _read_bounded_header(reference)
+        parent_id = header.get("id")
+        if not isinstance(parent_id, str) or not parent_id:
+            raise CapabilityUnavailable("SESSION_RECORD_MALFORMED")
+        if parent_id in seen:
+            raise CapabilityUnavailable("PARENT_REF_CYCLE")
+        seen.add(parent_id)
+        chain.append(reference)
+        parent = header.get("parentSession")
+    return chain
 
 
 def _metadata_path(sessions_dir: Path, native_id: str) -> Path:
