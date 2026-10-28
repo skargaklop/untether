@@ -95,7 +95,7 @@ def seed_journal(
     sid: str,
     cwd: str,
     blob_bytes: bytes | None = None,
-) -> bytes | None:
+) -> str | None:
     digest = None
     entry: dict = {"type": "message", "id": "m1", "text": "hello"}
     if blob_bytes is not None:
@@ -676,6 +676,106 @@ def test_import_overwrite_refuses_foreign_engine_and_identity(tmp_path):
             generation=2,
             lineage=prior.lineage,
         )
+
+
+@pytest.mark.parametrize("overwrite", [False, True], ids=["exact", "overwrite"])
+@pytest.mark.parametrize(
+    "record", ["artifact", "blob", "unreferenced-blob", "metadata", "journal"]
+)
+@pytest.mark.parametrize("action", ["mutate", "delete"])
+def test_import_refuses_records_changed_by_restart_probe(
+    tmp_path, overwrite, record, action
+):
+    src_sessions, src_blobs = make_store(tmp_path / "src")
+    image = b"referenced-image"
+    digest = seed_journal(
+        src_sessions, src_blobs, "j.jsonl", "abc", "/work", image
+    )
+    artifact = src_sessions / "j" / "sub" / "tool.txt"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_bytes(b"artifact")
+    archive = omp_adapter(src_sessions, src_blobs).export_exact("abc")
+    orphan = b"unreferenced-image"
+    orphan_digest = hashlib.sha256(orphan).hexdigest()
+    archive = replace(
+        archive, records={**archive.records, "blobs/" + orphan_digest: orphan}
+    )
+    sessions, blobs = make_store(tmp_path / "dst")
+    paths = {
+        "artifact": sessions / "j" / "sub" / "tool.txt",
+        "blob": blobs / str(digest),
+        "unreferenced-blob": blobs / orphan_digest,
+        "metadata": sessions / ".untether-migration" / "abc.json",
+        "journal": sessions / "j.jsonl",
+    }
+    calls = []
+
+    def restart(argv):
+        calls.append(argv)
+        path = paths[record]
+        assert path.is_file()
+        if action == "delete":
+            path.unlink()
+        else:
+            path.write_bytes(path.read_bytes() + b"tampered")
+
+    engine = omp_adapter(sessions, blobs, restart_runner=restart)
+    with pytest.raises(CapabilityUnavailable, match="EXACT_RESTORE_UNVERIFIED"):
+        if overwrite:
+            seed_journal(sessions, blobs, "j.jsonl", "abc", "/work")
+            engine.import_overwrite(
+                engine="omp",
+                native_id="abc",
+                records=archive.records,
+                expected_prior_records={
+                    "session.jsonl": (sessions / "j.jsonl").read_bytes()
+                },
+                generation=archive.generation,
+                lineage=archive.lineage,
+            )
+        else:
+            engine.import_exact(archive)
+    assert len(calls) == 1
+    if not overwrite:
+        assert not (sessions / "j.jsonl").exists()
+        assert not (sessions / ".untether-migration" / "abc.json").exists()
+
+
+@pytest.mark.parametrize("overwrite", [False, True], ids=["exact", "overwrite"])
+def test_import_verifies_artifact_and_unreferenced_blob_after_probe(tmp_path, overwrite):
+    src_sessions, src_blobs = make_store(tmp_path / "src")
+    seed_journal(src_sessions, src_blobs, "j.jsonl", "abc", "/work")
+    artifact = src_sessions / "j" / "sub" / "tool.txt"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_bytes(b"artifact")
+    archive = omp_adapter(src_sessions, src_blobs).export_exact("abc")
+    orphan = b"unreferenced-image"
+    digest = hashlib.sha256(orphan).hexdigest()
+    archive = replace(archive, records={**archive.records, "blobs/" + digest: orphan})
+    sessions, blobs = make_store(tmp_path / "dst")
+    calls = []
+    engine = omp_adapter(sessions, blobs, restart_runner=calls.append)
+    if overwrite:
+        seed_journal(sessions, blobs, "j.jsonl", "abc", "/work")
+        hashes = engine.import_overwrite(
+            engine="omp",
+            native_id="abc",
+            records=archive.records,
+            expected_prior_records={
+                "session.jsonl": (sessions / "j.jsonl").read_bytes()
+            },
+            generation=archive.generation,
+            lineage=archive.lineage,
+        )
+        assert hashes == {
+            name: hashlib.sha256(data).hexdigest()
+            for name, data in archive.records.items()
+        }
+    else:
+        assert_exact_restore(archive, engine.import_exact(archive))
+    assert len(calls) == 1
+    assert (sessions / "j" / "sub" / "tool.txt").read_bytes() == b"artifact"
+    assert (blobs / digest).read_bytes() == orphan
 
 
 # -- helpers ---------------------------------------------------------

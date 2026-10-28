@@ -27,7 +27,7 @@ import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -38,7 +38,7 @@ from .native_adapter import (
     registered_adapter_engines,
 )
 from .native_archive import FidelityError, NativeArchive, _safe_name
-from .omp_bundle import _journal, collect_omp_bundle
+from .omp_bundle import _checked, _journal, collect_omp_bundle
 from .omp_restore import restore_omp_records
 from .settings import OmpPersistenceProfile, SessionMigrationSettings
 
@@ -187,6 +187,39 @@ class OmpPersistenceAdapter:
         except OSError as exc:
             raise CapabilityUnavailable("RESTORE_PROBE_FAILED") from exc
 
+    def _verified_restore_hashes(
+        self, native_id: str, journal_name: str, records: dict[str, bytes]
+    ) -> dict[str, str]:
+        """Certify destination bytes after the probe, never the input mapping.
+
+        The exact-restore contract permits no journal title/settings mutation.
+        The collector validates the tree and referenced blobs; also read imported
+        unreferenced blobs, which legitimately need not appear in that bundle.
+        """
+        try:
+            collected_name, actual = self._collect(native_id)
+            if collected_name != journal_name:
+                raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
+            for name, expected in records.items():
+                if name == _METADATA_RECORD:
+                    path = self._metadata_path(native_id)
+                elif name.startswith(_BLOBS_KEY) and name not in actual:
+                    digest = name[len(_BLOBS_KEY) :]
+                    if len(digest) != 64 or any(c not in _HEX for c in digest):
+                        raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
+                    path = self.blobs_dir / digest
+                else:
+                    continue
+                with _checked(path).open("rb") as stream:
+                    actual[name] = stream.read(len(expected) + 1)
+            if any(actual.get(name) != data for name, data in records.items()):
+                raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
+        except (CapabilityUnavailable, FidelityError, OSError) as exc:
+            raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED") from exc
+        return {
+            name: hashlib.sha256(actual[name]).hexdigest() for name in records
+        }
+
     def _metadata_path(self, native_id: str) -> Path:
         directory = self.sessions_dir / ".untether-migration"
         if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
@@ -203,14 +236,19 @@ class OmpPersistenceAdapter:
         return path
 
     def _write_metadata(
-        self, metadata: _OmpMigrationMetadata, *, replace_existing: bool = False
+        self,
+        metadata: _OmpMigrationMetadata,
+        *,
+        replace_existing: bool = False,
+        payload: bytes | None = None,
     ) -> None:
         """Create the sidecar O_EXCL, or atomically replace it for reclaim
         retry (the pending coordinator fence owns admission during the gap)."""
         path = self._metadata_path(metadata.native_id)
         path.parent.mkdir(mode=0o700, exist_ok=True)
         path = self._metadata_path(metadata.native_id)  # re-check after mkdir
-        payload = metadata.model_dump_json().encode()
+        if payload is None:
+            payload = metadata.model_dump_json().encode()
         if replace_existing and path.exists():
             try:
                 fd, tmp_name = tempfile.mkstemp(
@@ -281,7 +319,7 @@ class OmpPersistenceAdapter:
         self._lookup_journal(session_id)
         return session_id
 
-    def lookup_for_project(self, session_id: str, project_root: Path) -> str:
+    def lookup_for_project(self, session_id: str, project_root: PurePath) -> str:
         """Prove exact header cwd identity only; never export or gate."""
         from .file_bundle_adapter import _project_path_key
 
@@ -467,7 +505,10 @@ class OmpPersistenceAdapter:
             else:
                 from .omp_restore import _safe_relative
 
-                target = sibling_root / Path(*_safe_relative(name).parts)
+                if not name.startswith("artifacts/"):
+                    raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
+                relative = _safe_relative(name[len("artifacts/") :])
+                target = sibling_root / Path(*relative.parts)
             owned.append((target, data))
         for target, data in owned:
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -521,13 +562,18 @@ class OmpPersistenceAdapter:
         # next import_exact still collides instead of silently overwriting.
         metadata_owned = False
         try:
-            self._write_metadata(metadata)
+            self._write_metadata(
+                metadata, payload=archive.records.get(_METADATA_RECORD)
+            )
             metadata_owned = True
             # 1) re-read the journal bytes we restored
             if self._reread_journal(journal_path) != content["session.jsonl"]:
                 raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
             # 2) the operator's scoped restart probe against the declared store
             self._run_restart_probe(archive.native_id, journal_path)
+            hashes = self._verified_restore_hashes(
+                archive.native_id, journal_path.name, archive.records
+            )
         except (CapabilityUnavailable, OSError):
             # Failed proof removes only this import's journal and metadata.
             if metadata_owned:
@@ -541,10 +587,7 @@ class OmpPersistenceAdapter:
             native_id=archive.native_id,
             generation=archive.generation,
             lineage=archive.lineage,
-            record_hashes={
-                name: hashlib.sha256(blob).hexdigest()
-                for name, blob in archive.records.items()
-            },
+            record_hashes=hashes,
             restarted=True,
             resumed=True,
         )
@@ -617,15 +660,15 @@ class OmpPersistenceAdapter:
             if existing != data:
                 raise CapabilityUnavailable("RECLAIM_BLOB_GAP")
         restored = self._restore_overwrite(content, journal_name)
-        self._write_metadata(metadata, replace_existing=True)
+        self._write_metadata(
+            metadata, replace_existing=True, payload=records[_METADATA_RECORD]
+        )
         # 1) re-read; 2) scoped restart probe. Late failures refuse without
         # rollback: the pending coordinator fence keeps admission closed.
         if self._reread_journal(restored) != content["session.jsonl"]:
             raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
         self._run_restart_probe(native_id, restored)
-        return {
-            name: hashlib.sha256(blob).hexdigest() for name, blob in records.items()
-        }
+        return self._verified_restore_hashes(native_id, journal_name, records)
 
 
 def _validate_omp_store(sessions_dir: Path, blobs_dir: Path) -> None:
