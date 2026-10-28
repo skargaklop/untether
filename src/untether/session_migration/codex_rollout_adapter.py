@@ -41,18 +41,22 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PureWindowsPath
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .native_adapter import CapabilityUnavailable, RestoreProof
+from .native_adapter import CapabilityUnavailable, RestoreProof, assert_restored
 from .native_archive import NativeArchive, _safe_name
 
 _METADATA_RECORD = "untether.json"
 _LINEAGE_PREFIX = "codex-rollout-v1:"
 _MAX_METADATA_BYTES = 4096
 _MAX_JOURNAL_BYTES = 64 * 1024 * 1024
+# The engine appends one settings event per resume; bounded well above any
+# realistic resume count while still refusing an unbounded appendix.
+_MAX_APPENDIX_BYTES = 1 << 20
+_APPEND_EVENT_TYPE = "thread_settings_applied"
 _MAX_HEADER_BYTES = 65536
 _MAX_SCAN_ENTRIES = 10000
 _MAX_FILES_PER_DAY = 4096
@@ -163,6 +167,42 @@ def _header_from_journal(data: bytes, *, strict_id: str | None = None) -> dict |
     if strict_id is not None and payload.get("session_id") != strict_id:
         raise CapabilityUnavailable("SESSION_RECORD_FORMAT_REFUSED")
     return header
+
+
+def _journal_appendix_ok(stored_journal: bytes, original: bytes) -> bool:
+    """True only when ``stored_journal`` is ``original`` plus a bounded,
+    whole-line JSONL appendix of resume events (``event_msg`` records whose
+    payload type is ``thread_settings_applied``).
+
+    Everything else fails closed: a truncated or rewritten prefix, a suffix
+    that is not whole lines, any other record/history/metadata type, malformed
+    JSON and an oversized suffix are all refused by returning ``False``.
+    """
+    if not stored_journal.startswith(original):
+        return False
+    suffix = stored_journal[len(original) :]
+    if not suffix:
+        return True
+    if len(stored_journal) > _MAX_JOURNAL_BYTES or len(suffix) > _MAX_APPENDIX_BYTES:
+        return False
+    if not original.endswith(b"\n") or not suffix.endswith(b"\n"):
+        return False
+    for line in suffix.splitlines():
+        if not line.strip():
+            return False
+        try:
+            record = json.loads(line)
+        except (ValueError, UnicodeError):
+            return False
+        payload = record.get("payload") if isinstance(record, dict) else None
+        if (
+            not isinstance(record, dict)
+            or record.get("type") != "event_msg"
+            or not isinstance(payload, dict)
+            or payload.get("type") != _APPEND_EVENT_TYPE
+        ):
+            return False
+    return True
 
 
 def _digit_dirs(parent: Path, pattern: re.Pattern[str], limit: int) -> Iterator[Path]:
@@ -283,6 +323,61 @@ class CodexRolloutPersistenceAdapter:
         if self.resume_timeout_s <= 0:
             raise CapabilityUnavailable("PERSISTENCE_LIMIT_INVALID")
         _validate_rollout_store(self.sessions_root)
+
+    # -- read-only restore verification -----------------------------------
+
+    @staticmethod
+    def verify_restored_store(archive: NativeArchive, stored: NativeArchive) -> bool:
+        """Read-only comparison for the shared ``assert_restored`` gate.
+
+        The restored store must carry identical record keys and byte-identical
+        non-journal records; the rollout may only keep the archive's bytes as
+        an exact prefix followed by the bounded resume-events appendix. This
+        touches no files, locks nothing and never mutates state.
+        """
+        if set(stored.records) != set(archive.records):
+            return False
+        for name, content in archive.records.items():
+            if name != "session.jsonl" and stored.records[name] != content:
+                return False
+        return _journal_appendix_ok(
+            stored.records["session.jsonl"], archive.records["session.jsonl"]
+        )
+
+    def recoverable_restore(
+        self, archive: NativeArchive, prior: NativeArchive, current: NativeArchive
+    ) -> bool:
+        """Adapter-declared transitional store: the journal replace landed, the
+        identity sidecar has not.
+
+        Constructs the expected intermediate archive using the PRIOR metadata
+        bytes only (never ``current.records``, which the reclaim path must not
+        trust) plus the incoming journal, then requires the shared exact gate
+        to accept ``current``: identical identity, byte-identical non-journal
+        records and only the bounded ``thread_settings_applied`` appendix on
+        the incoming journal. Returns ``False`` for any other shape.
+        """
+        if (
+            prior.engine != archive.engine
+            or prior.native_id != archive.native_id
+            or prior.logical_id != archive.logical_id
+            or set(prior.records) != set(archive.records)
+            or _METADATA_RECORD not in archive.records
+        ):
+            return False
+        expected = replace(
+            archive,
+            generation=prior.generation,
+            records={
+                **archive.records,
+                _METADATA_RECORD: prior.records[_METADATA_RECORD],
+            },
+        )
+        try:
+            assert_restored(self, expected, current)
+        except CapabilityUnavailable:
+            return False
+        return True
 
     # -- restart probe ----------------------------------------------------
 
@@ -848,7 +943,7 @@ class CodexRolloutPersistenceAdapter:
         # retry) — where "already stored" tolerates the engine's own appended
         # events after a probe: a resume only ever appends.
         prior = expected_prior_records["session.jsonl"]
-        if current != prior and not current.startswith(data):
+        if current != prior and not _journal_appendix_ok(current, data):
             raise CapabilityUnavailable("OVERWRITE_PRIOR_MISMATCH")
         try:
             fd, tmp_name = tempfile.mkstemp(

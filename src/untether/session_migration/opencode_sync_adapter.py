@@ -42,11 +42,21 @@ from .native_adapter import (
     registered_adapter_engines,
 )
 from .native_archive import NativeArchive
+from .opencode_assets import (
+    MANIFEST_RECORD,
+    asset_record_name,
+    collect_assets,
+    manifest_record,
+    output_refs,
+    validate_asset_manifest,
+)
 from .settings import OpenCodeSyncProfile, SessionMigrationSettings
 
 _LINEAGE_PREFIX = "opencode-sync-v1:"
 _EVENTS_RECORD = "sync-events.json"
 _EVENT_IDS_MAX = 100000
+# Combined cap over all archive records (events + assets + manifest).
+_ARCHIVE_RECORDS_LIMIT = 64 * 1024 * 1024
 _HTTP_OK = 200
 _SERVE_READY_TIMEOUT_S = 30.0
 
@@ -298,25 +308,32 @@ class OpenCodeSyncAdapter:
         self._lookup_session(session_id)
         events = self._collect_events(session_id)
         data = _event_record(events)
+        records = {_EVENTS_RECORD: data}
+        refs = output_refs(events)
+        if refs:
+            assets = collect_assets(refs, self.data_root)
+            for ref, blob in assets.items():
+                records[asset_record_name(ref)] = blob
+            records[MANIFEST_RECORD] = manifest_record(assets)
+        if sum(len(blob) for blob in records.values()) > _ARCHIVE_RECORDS_LIMIT:
+            raise CapabilityUnavailable("ARCHIVE_TOO_LARGE")
         return NativeArchive(
             engine=self.engine,
             logical_id=session_id,
             native_id=session_id,
             generation=0,
             lineage=_LINEAGE_PREFIX + _EVENTS_RECORD,
-            records={_EVENTS_RECORD: data},
+            records=records,
             digest=sha256(data).hexdigest(),
         )
 
     def _check_archive_identity(
         self, archive: NativeArchive
-    ) -> tuple[list[dict], bytes]:
+    ) -> tuple[list[dict], bytes, dict[str, str]]:
         if archive.engine != self.engine:
             raise CapabilityUnavailable("ENGINE_MISMATCH")
         if archive.logical_id != archive.native_id or not archive.records:
             raise CapabilityUnavailable("ARCHIVE_IDENTITY_INVALID")
-        if set(archive.records) != {_EVENTS_RECORD}:
-            raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
         if not archive.lineage.startswith(_LINEAGE_PREFIX):
             raise CapabilityUnavailable("ARCHIVE_IDENTITY_INVALID")
         events = _events_from_record(archive.records[_EVENTS_RECORD])
@@ -335,10 +352,28 @@ class OpenCodeSyncAdapter:
             archive.native_id
         }:
             raise CapabilityUnavailable("ARCHIVE_IDENTITY_INVALID")
-        return events, archive.records[_EVENTS_RECORD]
+        refs = output_refs(events)
+        if not refs:
+            if set(archive.records) != {_EVENTS_RECORD}:
+                raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
+            return events, archive.records[_EVENTS_RECORD], {}
+        # Asset-carrying archive: manifest must list exactly the event refs
+        # and every listed record must hash-match before anything is trusted.
+        listing = validate_asset_manifest(archive.records, events)
+        if set(archive.records) != {
+            _EVENTS_RECORD,
+            MANIFEST_RECORD,
+            *listing.values(),
+        }:
+            raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
+        return events, archive.records[_EVENTS_RECORD], listing
 
     def import_exact(self, archive: NativeArchive) -> RestoreProof:
-        events, data = self._check_archive_identity(archive)
+        events, data, listing = self._check_archive_identity(archive)
+        if listing:
+            # Asset restore semantics are undecided; refuse before any replay
+            # rather than falsely certifying an asset-carrying archive.
+            raise CapabilityUnavailable("TOOL_OUTPUT_IMPORT_NOT_IMPLEMENTED")
         payload = [
             {
                 "id": event["id"],
@@ -405,7 +440,9 @@ class OpenCodeSyncAdapter:
             records=records,
             digest="",
         )
-        events, data = self._check_archive_identity(probe)
+        events, data, listing = self._check_archive_identity(probe)
+        if listing:
+            raise CapabilityUnavailable("TOOL_OUTPUT_IMPORT_NOT_IMPLEMENTED")
         prior_data = expected_prior_records.get(_EVENTS_RECORD)
         if prior_data is None:
             raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")

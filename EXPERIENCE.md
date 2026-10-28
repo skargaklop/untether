@@ -287,3 +287,19 @@ stores, agents, dependency installations, production edits, or commits used.
 - Keep model/assets/all-engine gaps open: Pi coordinator evidence is native-shell only with an injected transport;
   do not let a bounded Pi result close the all-engine or model-continuation rows. Do not refresh incidental
   suite totals in the same pass (no test run was performed).
+
+## 2026-10-28 Codex attachment RPC probe pitfalls (docs-only evidence refresh)
+
+- `thread/start` alone persists no rollout row; the attachment store's threads(id) FK only accepts after an
+  offline `thread/shellCommand` turn flushes it — budget one extra RPC round, not a model turn.
+- Repeat `thread/attachment/add` with the same identityKey returns `existing` and silently keeps the original
+  id/createdAt/payload; a mutated payload is not an update — assert idempotency, never assume echo.
+- The server mints `id` (UUIDv7) and `createdAt`; only attachmentType/identityKey/payload are stable across
+  homes — cross-home equality checks must expect exactly two differing fields.
+- Attachment RPCs interleave `turn/completed` notifications: use `strict=False` and match by response id
+  after draining notifications, or strict rpc asserts on the wrong frame.
+- `probe.py` writes `report.json` next to itself via `ROOT = Path(__file__).parent`, and `diag.py` does
+  `from probe import ...` — run from the probe folder, not the repo root, or the import fails.
+- Windows: wrap `codex.cmd` as `COMSPEC /c ...` and pin CODEX_HOME/HOME/USERPROFILE plus
+  APPDATA/LOCALAPPDATA/TEMP/XDG_* into probe-scratch subdirs, or the server writes into the real profile.
+Pitfall (session-migration asset review): a session-record-only audit can miss pi bash full-output spills — verify the engine's tmpdir output-file mechanism (pi 1.4.0 bash-executor/output-files), and never claim a spilled file is reread without caller-side proof; only the embedded absolute path string is proven.

@@ -30,6 +30,7 @@ from .intent import OperationConflict, OperationIntentStore
 from .native_adapter import (
     CapabilityUnavailable,
     assert_exact_restore,
+    assert_restored,
     registered_adapter_engines,
     require_persistence_adapter,
 )
@@ -547,8 +548,8 @@ def _push(
     return _result(record, peer_name)
 
 
-def _prior_pushed_records(ops: Path, prior_op_id: str, archive: NativeArchive):
-    return _reclaim._prior_pushed_records(
+def _prior_pushed_archive(ops: Path, prior_op_id: str, archive: NativeArchive):
+    return _reclaim._prior_pushed_archive(
         ops, prior_op_id, archive, read_record=_read, cached_package=_cached_package
     )
 
@@ -558,7 +559,6 @@ def _reclaim_import(**kwargs) -> tuple[str, NativeArchive]:
         **kwargs,
         read_record=_read,
         cached_package=_cached_package,
-        identity_sha256=_identity_sha256,
         refusal=TransferRefusal,
     )
 
@@ -570,7 +570,6 @@ def _finalize_reclaim(
         archive,
         record,
         digest,
-        identity_sha256=_identity_sha256,
         refusal=TransferRefusal,
         activate_fence=activate_source_fence,
     )
@@ -769,15 +768,10 @@ def _pull_unlocked(
                 project=project,
                 ops=ops,
             )
-        if (
-            reloaded.records != archive.records
-            or reloaded.engine != archive.engine
-            or reloaded.logical_id != archive.logical_id
-            or reloaded.native_id != archive.native_id
-            or reloaded.lineage != archive.lineage
-            or reloaded.generation != archive.generation
-        ):
-            raise TransferRefusal("RESTORE_IDENTITY_MISMATCH")
+        try:
+            assert_restored(importer, archive, reloaded)
+        except CapabilityUnavailable as exc:
+            raise TransferRefusal(str(exc) or "RESTORE_IDENTITY_MISMATCH") from exc
         try:
             ReceiptStore(root / "native" / "receipts").record(
                 Receipt(op_id, digest, "native-v1", native_id, "verified")

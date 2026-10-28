@@ -85,6 +85,35 @@ def require_persistence_adapter(engine: str) -> PersistenceAdapter:
     return adapter
 
 
+def assert_restored(
+    adapter: PersistenceAdapter, archive: NativeArchive, stored: NativeArchive
+) -> None:
+    """Prove the stored store restores ``archive`` exactly.
+
+    Identity (engine/logical/native/lineage/generation) is always exact, and
+    record bytes are exact by default. An adapter whose engine appends on
+    resume may expose a read-only ``verify_restored_store(archive, stored) ->
+    bool`` hook; the hook still requires identical record keys and
+    byte-identical non-journal records and may only tolerate a bounded,
+    validated journal appendix. Identity is never relaxed.
+    """
+    if (
+        stored.engine != archive.engine
+        or stored.logical_id != archive.logical_id
+        or stored.native_id != archive.native_id
+        or stored.lineage != archive.lineage
+        or stored.generation != archive.generation
+    ):
+        raise CapabilityUnavailable("RESTORE_IDENTITY_MISMATCH")
+    verifier = getattr(adapter, "verify_restored_store", None)
+    if callable(verifier):
+        if verifier(archive, stored):
+            return
+        raise CapabilityUnavailable("RESTORE_IDENTITY_MISMATCH")
+    if stored.records != archive.records:
+        raise CapabilityUnavailable("RESTORE_IDENTITY_MISMATCH")
+
+
 def assert_exact_restore(archive: NativeArchive, proof: RestoreProof) -> str:
     hashes = {
         name: hashlib.sha256(content).hexdigest()

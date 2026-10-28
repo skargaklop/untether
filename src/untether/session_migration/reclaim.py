@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .native_adapter import PersistenceAdapter, require_persistence_adapter
+from .native_adapter import (
+    CapabilityUnavailable,
+    PersistenceAdapter,
+    assert_restored,
+    require_persistence_adapter,
+)
 from .native_archive import FidelityError, NativeArchive, decode_native
 from .source_fence import (
     ReclaimRefused,
@@ -20,15 +26,15 @@ if TYPE_CHECKING:
     from .transfer import TransferRecord
 
 
-def _prior_pushed_records(
+def _prior_pushed_archive(
     ops: Path,
     prior_op_id: str,
     archive: NativeArchive,
     *,
     read_record: Callable[[Path, str], TransferRecord | None],
     cached_package: Callable[[Path, str, str, int], bytes],
-) -> dict[str, bytes] | None:
-    """Exact prior records from the push operation's durable package cache."""
+) -> NativeArchive | None:
+    """Exact prior pushed archive from the push operation's durable cache."""
     record = read_record(ops, prior_op_id)
     if record is None:
         return None
@@ -41,7 +47,50 @@ def _prior_pushed_records(
         return None
     if prior_archive.native_id != archive.native_id:
         return None
-    return prior_archive.records
+    return prior_archive
+
+
+def _restore_matches(
+    adapter: PersistenceAdapter, archive: NativeArchive, stored: NativeArchive
+) -> bool:
+    """Exact-or-adapter-verified store comparison shared with the coordinator."""
+    try:
+        assert_restored(adapter, archive, stored)
+    except CapabilityUnavailable:
+        return False
+    return True
+
+
+def _preoverwrite_matches(
+    importer: PersistenceAdapter,
+    archive: NativeArchive,
+    prior_archive: NativeArchive,
+    current: NativeArchive,
+) -> bool:
+    """May the pending reclaim overwrite ``current``?
+
+    Three states are admissible: the untouched prior pushed state, the fully
+    restored incoming state, or a partially applied incoming restore whose
+    journal landed before its identity metadata did (a crashed publication the
+    pending coordinator fence still keeps closed). The last case pins the
+    prior generation exactly; an adapter may additionally declare an
+    engine-specific recovery hook that reconstructs the expected transitional
+    archive from prior metadata plus the incoming journal. Without such an
+    explicit declaration nothing is relaxed.
+    """
+    if _restore_matches(importer, prior_archive, current):
+        return True
+    if _restore_matches(importer, archive, current):
+        return True
+    if current.generation != prior_archive.generation:
+        return False
+    stale = replace(archive, generation=prior_archive.generation)
+    if _restore_matches(importer, stale, current):
+        return True
+    recoverable = getattr(importer, "recoverable_restore", None)
+    if callable(recoverable):
+        return bool(recoverable(archive, prior_archive, current))
+    return False
 
 
 def _read_imported(importer: PersistenceAdapter, native_id: str) -> NativeArchive:
@@ -61,7 +110,6 @@ def _reclaim_import(
     ops: Path,
     read_record: Callable[[Path, str], TransferRecord | None],
     cached_package: Callable[[Path, str, str, int], bytes],
-    identity_sha256: Callable[[NativeArchive], str],
     refusal: type[Exception],
 ) -> tuple[str, NativeArchive]:
     """Reclaim a previously pushed local identity for a descendant pull.
@@ -104,11 +152,18 @@ def _reclaim_import(
     overwrite = getattr(importer, "import_overwrite", None)
     if not callable(overwrite):
         raise refusal("RECLAIM_ADAPTER_UNSUPPORTED")
-    prior_records = _prior_pushed_records(
+    prior_archive = _prior_pushed_archive(
         ops, prior_op, archive, read_record=read_record, cached_package=cached_package
     )
-    if prior_records is None:
+    if prior_archive is None:
         raise refusal("RECLAIM_REFUSED: pushed package unavailable")
+    if (
+        prior_archive.engine != prior_record.engine
+        or prior_archive.logical_id != archive.logical_id
+        or prior_archive.generation != prior_record.generation
+        or prior_archive.lineage != prior_record.lineage
+    ):
+        raise refusal("RECLAIM_REFUSED: pushed package identity mismatch")
     try:
         reactivate_source_fence(
             fences,
@@ -124,30 +179,23 @@ def _reclaim_import(
         )
         current = _read_imported(importer, native_id)
         file_retry = callable(getattr(importer, "export_locked", None))
-        if file_retry or identity_sha256(current) != identity_sha256(archive):
-            if (
-                identity_sha256(current) != prior_record.identity_sha256
-                and identity_sha256(current) != identity_sha256(archive)
-                and not (
-                    file_retry
-                    and current.records == archive.records
-                    and current.lineage == archive.lineage
-                    and current.generation == prior_record.generation
-                )
-            ):
+        matches_incoming = _restore_matches(importer, archive, current)
+        if file_retry or not matches_incoming:
+            if not _preoverwrite_matches(importer, archive, prior_archive, current):
                 raise refusal("RECLAIM_REFUSED: divergent local identity")
             overwrite(
                 engine=archive.engine,
                 native_id=native_id,
                 records=archive.records,
-                expected_prior_records=prior_records,
+                expected_prior_records=prior_archive.records,
                 generation=archive.generation,
                 lineage=archive.lineage,
             )
     except (ReclaimRefused, SourceFenceConflict) as exc:
         raise refusal(f"RECLAIM_REFUSED: {exc}") from exc
-    reloaded = _read_imported(require_persistence_adapter(archive.engine), native_id)
-    if identity_sha256(reloaded) != identity_sha256(archive):
+    adapter = require_persistence_adapter(archive.engine)
+    reloaded = _read_imported(adapter, native_id)
+    if not _restore_matches(adapter, archive, reloaded):
         raise refusal("RECLAIM_OVERWRITE_UNVERIFIED")
     return native_id, reloaded
 
@@ -157,7 +205,6 @@ def _finalize_reclaim(
     record: TransferRecord,
     digest: str,
     *,
-    identity_sha256: Callable[[NativeArchive], str],
     refusal: type[Exception],
     activate_fence: Callable[..., object],
 ) -> None:
@@ -174,10 +221,9 @@ def _finalize_reclaim(
         raise refusal("RECLAIM_NOT_VERIFIED")
     if fence.operation_id != record.operation_id or fence.package_sha256 != digest:
         raise refusal("RECLAIM_OWNER_MISMATCH")
-    reloaded = _read_imported(
-        require_persistence_adapter(archive.engine), archive.native_id
-    )
-    if identity_sha256(reloaded) != identity_sha256(archive):
+    adapter = require_persistence_adapter(archive.engine)
+    reloaded = _read_imported(adapter, archive.native_id)
+    if not _restore_matches(adapter, archive, reloaded):
         raise refusal("RESTORE_IDENTITY_MISMATCH")
     activate_fence(
         fences,

@@ -481,3 +481,161 @@ def test_response_size_limit_must_be_positive(tmp_path, limit):
         OpenCodeSyncProfile.model_validate(
             {**_profile(tmp_path).model_dump(), "max_response_bytes": limit}
         )
+
+
+# -- tool-output spill assets (contract pending implementation) ------------
+#
+# OpenCode bounds large tool results into engine-owned spill files at
+# ``<profile.data_root>/xdg_data_home/opencode/tool-output/tool_*`` and puts
+# only the paths in ``event.data.outputPaths``. The event stream is portable;
+# the bytes are not. The archive therefore MUST carry the referenced bytes,
+# and MUST refuse any reference that escapes that engine-owned directory
+# before it reads or replays anything. These regressions pin the required
+# behaviour; refusal is mandatory (a silent carry of the path alone is a
+# fidelity gap, not a pass).
+
+_TOOL_OUTPUT_REFUSED = "TOOL_OUTPUT_REFUSED"
+_TOOL_OUTPUT_MARKER = "TOOL_OUTPUT"
+
+
+def _spill_dir(profile: OpenCodeSyncProfile) -> Path:
+    return Path(profile.data_root) / "xdg_data_home" / "opencode" / "tool-output"
+
+
+def _history_with_output_paths(
+    sid: str, output_paths: list[str]
+) -> tuple[int, list[dict]]:
+    """Serve /sync/history raw form: a tool success event carrying spill refs."""
+    return (
+        200,
+        [
+            {
+                "id": "evt_0",
+                "aggregate_id": sid,
+                "seq": 0,
+                "type": "session.created.1",
+                "data": {},
+            },
+            {
+                "id": "evt_1",
+                "aggregate_id": sid,
+                "seq": 1,
+                "type": "session.next.tool.success.1",
+                "data": {"outputPaths": list(output_paths)},
+            },
+        ],
+    )
+
+
+def test_export_carries_tool_output_spill_bytes(tmp_path, monkeypatch) -> None:
+    sid = "ses_spill"
+    profile = _profile(tmp_path)
+    spill_dir = _spill_dir(profile)
+    spill_dir.mkdir(parents=True)
+    spill = spill_dir / "tool_01HQZZ"
+    blob = b"over-limit tool output: " + bytes(range(256)) * 8
+    spill.write_bytes(blob)
+
+    http = _FakeHttp(
+        [(200, {"id": sid}), _history_with_output_paths(sid, [str(spill)])]
+    )
+    adapter = _adapter(profile, http)
+    monkeypatch.setenv("UNTETHER_SESSION_GATE_ROOT", str(tmp_path / "gate"))
+    archive = adapter.export_exact(sid)
+
+    # The referenced bytes must travel with the archive, not just the path.
+    assert blob in archive.records.values()
+    assert set(archive.records) >= {_EVENTS_RECORD}
+    restored_events = json.loads(archive.records[_EVENTS_RECORD])
+    assert restored_events[1]["data"]["outputPaths"] == [str(spill)]
+
+
+@pytest.mark.parametrize("escape", ["foreign", "traversal", "missing"])
+def test_export_refuses_output_path_outside_managed_dir(
+    tmp_path, monkeypatch, escape
+) -> None:
+    sid = "ses_escape"
+    profile = _profile(tmp_path)
+    spill_dir = _spill_dir(profile)
+    spill_dir.mkdir(parents=True)
+    secret = b"must-never-reach-the-archive"
+    secrets = tmp_path / "secrets"
+    secrets.mkdir()
+    (secrets / "passwd").write_bytes(secret)
+    if escape == "foreign":
+        ref = str(secrets / "passwd")
+    elif escape == "traversal":
+        ref = str(spill_dir / ".." / ".." / ".." / ".." / "secrets" / "passwd")
+    else:
+        ref = str(spill_dir / "tool_absent")
+
+    http = _FakeHttp([(200, {"id": sid}), _history_with_output_paths(sid, [ref])])
+    adapter = _adapter(profile, http)
+    monkeypatch.setenv("UNTETHER_SESSION_GATE_ROOT", str(tmp_path / "gate"))
+
+    with pytest.raises(CapabilityUnavailable) as excinfo:
+        adapter.export_exact(sid)
+    assert _TOOL_OUTPUT_MARKER in str(excinfo.value)
+    assert secret not in str(excinfo.value).encode()
+
+
+def _unsafe_output_event_archive(sid: str, ref: str) -> NativeArchive:
+    events = [
+        {
+            "id": "evt_0",
+            "aggregateID": sid,
+            "seq": 0,
+            "type": "session.created.1",
+            "data": {},
+        },
+        {
+            "id": "evt_1",
+            "aggregateID": sid,
+            "seq": 1,
+            "type": "session.next.tool.success.1",
+            "data": {"outputPaths": [ref]},
+        },
+    ]
+    data = json.dumps(events, separators=(",", ":"), sort_keys=True).encode()
+    return NativeArchive(
+        engine=_ENGINE,
+        logical_id=sid,
+        native_id=sid,
+        generation=0,
+        lineage="opencode-sync-v1:" + _EVENTS_RECORD,
+        records={_EVENTS_RECORD: data},
+        digest="",
+    )
+
+
+@pytest.mark.parametrize("escape", ["foreign", "traversal"])
+def test_import_refuses_output_path_escape_before_replay(
+    tmp_path, monkeypatch, escape
+) -> None:
+    sid = "ses_import_escape"
+    (tmp_path / "dst").mkdir()
+    profile_b = OpenCodeSyncProfile(
+        format="opencode-sync-v1",
+        executable="C:/fake/opencode.exe",
+        data_root=str(tmp_path / "dst"),
+        port=18791,
+    )
+    spill_dir = _spill_dir(profile_b)
+    spill_dir.mkdir(parents=True)
+    if escape == "foreign":
+        ref = str(tmp_path / "secrets" / "passwd")
+    else:
+        ref = str(spill_dir / ".." / ".." / ".." / ".." / "secrets" / "passwd")
+    archive = _unsafe_output_event_archive(sid, ref)
+
+    http_b = _FakeHttp([])
+    adapter_b = _adapter(profile_b, http_b)
+    with pytest.raises(CapabilityUnavailable) as excinfo:
+        adapter_b.import_exact(archive)
+    assert _TOOL_OUTPUT_MARKER in str(excinfo.value)
+    # Refusal must happen before any store replay (read/write) request.
+    assert http_b.requests == []
+    # The caller's archive is not mutated by a refused import.
+    assert json.loads(archive.records[_EVENTS_RECORD])[1]["data"]["outputPaths"] == [
+        ref
+    ]

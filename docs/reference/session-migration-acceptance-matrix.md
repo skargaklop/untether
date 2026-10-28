@@ -17,6 +17,18 @@ Authority: [[../plans/session-migration-product-correction]]. This is a work tra
 | Optional Coolify and outbound pull | SSH peer configuration and pull path | Final portable setup documentation |
 | Reviewed local PR, no live changes | Existing working branch preserved; live process untouched; focused migration suite 464 passed/10 skipped; final full suite 4,260 passed/47 skipped/9 warnings; lint/format/migration types, whitespace and lockfile checks pass | Draft PR #1 updated; bounded review findings fixed and regression-verified; remote CI pending |
 
+## Asset-fidelity evidence boundary
+
+[[session-migration-asset-evidence]] records pinned OpenCode spill-file references,
+installed Pi truncated-shell spill references, and the observed Codex attachment
+add/list/restart probe. Original event/journal equality alone does not cover these
+external files or attachment membership rows. OpenCode byte collection is being
+implemented; destination reference usability and Pi spill carry remain mandatory
+open work. Codex's public attachment add API preserves payload and logical identity
+keys but mints new row IDs and timestamps across stores; the exact-preservation
+integration is unresolved. None of these gaps is a scope amendment or successful
+unsupported transfer.
+
 ## Latest bounded controller evidence
 
 The expanded `bash scripts/check-engine-matrix.sh` gate includes runtime and coordinator suites for Pi, OMP, Codex and OpenCode; it passed 14 checks in 257.39 seconds under a 420-second deadline. Codex inbound binding is required unconditionally, not counted as success on refusal. The gate exercises native shell follow-ups and independent restart, not provider-generated model turns; coordinator tests use injected receiver transport and do not establish real SSH coverage. The full regression at this stage passed 4,539 tests, 54 skips and nine warnings. Source/test Ruff and migration Ty passed. Independent review subsequently identified Codex interrupted metadata publication as additional repair work; these results do not close that case or the attachment-fidelity rows below.
