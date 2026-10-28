@@ -1,5 +1,9 @@
 # ACP Phase E Experience
 
+## OMP production lookup versus collector-only evidence
+
+The read-only compatibility scout found that production lookup parsed a title slot as the session header, while the SDK runtime test bypassed lookup through the bundle collector. The repair worker reproduced SESSION_NOT_FOUND, then reused collector validation to accept only the fixed 256-byte title slot followed immediately by a bounded native header. Controller rerun passed 45 checks with five Windows symlink privilege skips. Runtime now routes export/import through OmpPersistenceAdapter with independent SDK cold loading; neither this result nor SDK append establishes model continuation or full asset transfer.
+
 ## OpenCode replay verification boundary
 
 The runtime worker found that replay verification in the importing writer process did not establish independent persistence. Import now stops that owned child, launches another, and compares full canonical events again before certifying restart. Controller rerun passed 14 checks with one Windows symlink privilege skip, including original completed shell output, unrelated destination-session preservation, and a follow-up shell command surviving another restart. Fresh non-repository working directories timed out during worker diagnostics; repository-cwd evidence must not be generalised to arbitrary project authorization. Remaining source-scoping, duplicate-collision, port ownership and HTTP size limits need separate fixes. Native shell follow-up is not provider/model continuation.
