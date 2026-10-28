@@ -208,9 +208,9 @@ class OpenCodeSyncAdapter:
         if code != _HTTP_OK or not isinstance(events, list):
             raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
         actual = _replay_payload(session_id, events)
-        expected_sig = [(e["id"], e["seq"], e["type"]) for e in expected]
-        actual_sig = [(e["id"], e["seq"], e["type"]) for e in actual]
-        if actual_sig != expected_sig:
+        # Identity/order alone cannot prove fidelity: the original message
+        # and tool payloads must also survive the engine's replay unchanged.
+        if actual != expected:
             raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
 
     # -- PersistenceAdapter protocol --------------------------------------

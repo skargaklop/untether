@@ -208,7 +208,10 @@ def test_import_refuses_wrong_identity_echo(tmp_path: Path, monkeypatch) -> None
         adapter_b.import_exact(archive)
 
 
-def test_import_refuses_divergent_replay_order(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("tamper", ["order", "payload"])
+def test_import_refuses_divergent_replay(
+    tmp_path: Path, monkeypatch, tamper: str
+) -> None:
     sid = "ses_order"
     marks = ["one", "two"]
     http_a = _FakeHttp([(200, {"id": sid}), _history_response(sid, marks)])
@@ -217,10 +220,13 @@ def test_import_refuses_divergent_replay_order(tmp_path: Path, monkeypatch) -> N
     archive = adapter_a.export_exact(sid)
     (tmp_path / "dst").mkdir()
 
-    # verification history returns reordered events for the same aggregate
-    reordered = _history_response(sid, marks)[1]
-    reordered = list(reordered)
-    reordered.reverse()
+    # Preserve event identities when changing payload data: checking IDs
+    # alone must not certify a corrupted original message/tool record.
+    reordered = list(_history_response(sid, marks)[1])
+    if tamper == "order":
+        reordered.reverse()
+    else:
+        reordered[1]["data"] = {"text": "corrupted original content"}
     http_b = _FakeHttp(
         [
             (200, {"sessionID": sid}),
