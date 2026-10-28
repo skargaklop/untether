@@ -1,5 +1,9 @@
 # ACP Phase E Experience
 
+## Parent import and probe ownership review
+
+Controller reruns passed the installed-engine matrix (seven checks) and parent import/archive regression (143 passed, five platform skips), but review found two uncovered invariants: the parent loop wrote earlier missing journals before checking later collisions, and Windows taskkill cannot prove descendants dead once their leader has exited. Separate bounded Flash workers are correcting all-destination preflight and durable Windows process ownership. Passing these tests alone is not evidence those gaps are repaired; rerun new regressions and the matrix after integration. Parent reclaim remains separate work.
+
 ## Pi runtime follow-up boundary
 
 The Pi worker used documented RPC bash execution after restore, not a hand-written journal append. Both distinct sessions retain the native bashExecution output and original history across independent restart and evolved-archive return. Controller rerun passed the installed runtime check. RPC inspections must wait for the asynchronous bash response. Direct shell output is native session persistence evidence, not an LLM tool result or model-generated follow-up; do not label it coordinator or SSH evidence.
@@ -259,3 +263,23 @@ stores, agents, dependency installations, production edits, or commits used.
 - pytest `python_classes = Test*` skips non-Test-prefixed test classes — use `__test__ = True` (or Test prefix) or the class silently never runs; re-run collection after concurrent worker edits to shared test files (W1/W2 parents-record step, 2026-10-28).
 - Bash heredocs mangle backslash-containing literals (`..\x.jsonl`) into unicode escapes — write such test lines via edit calls, not heredoc (parent-chain step, 2026-10-28).
 - `_MAX_PARENTS = 8` allows 8 hops; the depth-refusal test must build 9 hops (10 journals) (parent-chain step, 2026-10-28).
+
+## 2026-10-28 Pi parent/coordinator evidence refresh (docs-only reviewer pitfalls)
+
+- There is no `pi_coordinator.py`; the coordinator is `src/untether/session_migration/transfer.py` and the Pi
+  round-trip evidence lives in `tests/test_session_migration_pi_coordinator.py`. Grepping for a guessed module
+  name returns nothing and invites a false "module missing" report — read the test file, not the parent module
+  the task named.
+- The coordinator test's receiver is an IN-PROCESS stand-in (`_receiver_call`: real protocol codec +
+  `NativeReceiver` + `ReceiverEndpoint`, swapped `native_adapter._ADAPTERS[ENGINE]`, `_REQUIRED_CHECKS` stubbed
+  true). Reviewers keep over-reading it as SSH-transport proof; the row must say "injected in-process transport".
+- Commit `23975e7` ("fix: verify immutable Pi parent bytes during reclaim") was already in history but
+  unreferenced anywhere under `docs/`, `src/` or `tests/`; docs claimed the parent/reclaim gap without citing it.
+  Check `git log`/`git cat-file` before writing prose that implies missing work.
+- The matrix row claimed "coordinator-integrated real-engine round trips remain unverified" while
+  `test_session_migration_pi_coordinator.py` already existed — stale-claim risk when a test file predates the doc
+  refresh. Cite concrete assertions (zero-write `calls == []`, unchanged `st_mtime_ns`, `state == "bound"`,
+  `messageCount == 3`) instead of the word "verified".
+- Keep model/assets/all-engine gaps open: Pi coordinator evidence is native-shell only with an injected transport;
+  do not let a bounded Pi result close the all-engine or model-continuation rows. Do not refresh incidental
+  suite totals in the same pass (no test run was performed).
