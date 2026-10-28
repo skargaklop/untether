@@ -1,5 +1,9 @@
 # ACP Phase E Experience
 
+## Pi runtime follow-up boundary
+
+The Pi worker used documented RPC bash execution after restore, not a hand-written journal append. Both distinct sessions retain the native bashExecution output and original history across independent restart and evolved-archive return. Controller rerun passed the installed runtime check. RPC inspections must wait for the asynchronous bash response. Direct shell output is native session persistence evidence, not an LLM tool result or model-generated follow-up; do not label it coordinator or SSH evidence.
+
 ## OMP production lookup versus collector-only evidence
 
 The read-only compatibility scout found that production lookup parsed a title slot as the session header, while the SDK runtime test bypassed lookup through the bundle collector. The repair worker reproduced SESSION_NOT_FOUND, then reused collector validation to accept only the fixed 256-byte title slot followed immediately by a bounded native header. Controller rerun passed 45 checks with five Windows symlink privilege skips. Runtime now routes export/import through OmpPersistenceAdapter with independent SDK cold loading; neither this result nor SDK append establishes model continuation or full asset transfer.
