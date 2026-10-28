@@ -652,6 +652,36 @@ def register_from_settings(settings: SessionMigrationSettings, *, engine: str) -
             ),
         )
         return
+    if profile.format == "codex-rollout-v1":
+        # Codex rollout journals under a disposable CODEX_HOME/sessions tree:
+        # the dedicated adapter owns store validation and the app-server
+        # resume proof.
+        if engine in registered_adapter_engines():
+            return
+        from .codex_rollout_adapter import CodexRolloutPersistenceAdapter
+
+        register_persistence_adapter(
+            engine,
+            lambda: CodexRolloutPersistenceAdapter(
+                engine=engine,
+                sessions_root=Path(profile.sessions_root),
+                app_server_executable=Path(profile.app_server_executable),
+                resume_timeout_s=profile.resume_timeout_s,
+            ),
+        )
+        return
+    if profile.format == "opencode-sync-v1":
+        # OpenCode durable sync events via the local serve API: the dedicated
+        # adapter owns isolation-root validation and the serve/replay proof.
+        if engine in registered_adapter_engines():
+            return
+        from .opencode_sync_adapter import OpenCodeSyncAdapter
+
+        register_persistence_adapter(
+            engine,
+            lambda: OpenCodeSyncAdapter(engine=engine, profile=profile),
+        )
+        return
     sessions_dir = Path(profile.sessions_dir)
     if engine in registered_adapter_engines():
         return

@@ -118,6 +118,9 @@ class CodexRolloutProfile(BaseModel):
     sessions_root: str
     app_server_executable: str
     resume_timeout_s: float = Field(default=120, gt=0, le=600)
+    resume_model: str | None = Field(default=None, max_length=128)
+    resume_model_provider: str | None = Field(default=None, max_length=128)
+    resume_approval_policy: str | None = Field(default=None, max_length=128)
 
     @field_validator("sessions_root", "app_server_executable")
     @classmethod
