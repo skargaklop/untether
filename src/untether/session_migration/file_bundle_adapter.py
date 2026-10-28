@@ -628,8 +628,8 @@ class FileBundlePersistenceAdapter:
                 {"version": 1, "journals": [p.name for p in parents]},
                 sort_keys=True,
             ).encode()
-        # Keep the original non-canonical root basename: native parentSession
-        # pointers reference journal paths and would dangle after a rename.
+        # Keep the original non-canonical root basename: parentSession pointers
+        # reference journal paths and would dangle after a rename.
         canonical = _record_name_for(self.profile, session_id)
         if record_path.name != canonical:
             records[_LAYOUT_RECORD] = json.dumps(
@@ -703,8 +703,7 @@ class FileBundlePersistenceAdapter:
             ).encode(),
             archive.native_id,
         )
-        # Preflight loop: every destination is validated before ANY write —
-        # reject symlinks/non-files, never adopt foreign bytes, and reuse a
+        # Preflight: validate every destination before ANY write; reuse a
         # parent only when byte-identical (the root never, collision instead).
         for basename, payload in parents:
             destination = self.sessions_dir / basename
@@ -735,8 +734,7 @@ class FileBundlePersistenceAdapter:
                     record_name=basename,
                 )
                 owned.append(destination)
-            # Parents first, then the root: a truncated restore never leaves a
-            # root whose lineage is missing.
+            # Parents first: a truncated restore never dangles the root lineage.
             _write_record(
                 self.profile,
                 self.sessions_dir,
@@ -761,8 +759,7 @@ class FileBundlePersistenceAdapter:
             self._run_restart_probe(archive.native_id, record_path)
             # 3) record still intact after the restart probe
             stored = _read_record_strict(self.profile, record_path, archive.native_id)
-            # 4) every parent re-read from disk for exact bytes: hashes are
-            # claimed only for parents that verifiably survived the restart.
+            # 4) every parent re-read: hashes only for parents that survived.
             for basename, payload in parents:
                 parent_path = self.sessions_dir / basename
                 if parent_path.is_symlink() or not parent_path.is_file():
@@ -829,9 +826,13 @@ class FileBundlePersistenceAdapter:
             raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
         if layout_name is not None and records[_LAYOUT_RECORD] != prior_layout:
             raise CapabilityUnavailable("OVERWRITE_PRIOR_MISMATCH")
+        allowed_parents = {_PARENTS_RECORD} | {
+            f"parent-{index}.jsonl" for index in range(1, _MAX_PARENTS + 1)
+        }
         record_names = {"session.jsonl"} | (
             {_LAYOUT_RECORD} if layout_name is not None else set()
         )
+        record_names |= allowed_parents & set(records)
         if set(records) != record_names or set(expected_prior_records) != record_names:
             raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
         data = records["session.jsonl"]
@@ -868,8 +869,11 @@ class FileBundlePersistenceAdapter:
         current = record_path.read_bytes()
         if current not in (prior, data):
             raise CapabilityUnavailable("OVERWRITE_PRIOR_MISMATCH")
-        # ponytail: prior-bytes pin reuses the digest above; records-level
-        # pinning is the file adapter's single-record specialty.
+        # Shared-parent preflight before ANY store write; re-run as postprobe.
+        from .pi_parent_reclaim import validate_reclaim_parents
+
+        parent_args = (self.sessions_dir, records, expected_prior_records)
+        validate_reclaim_parents(*parent_args, record_path.name, native_id)
         tmp_name: str | None = None
         try:
             fd, tmp_name = tempfile.mkstemp(
@@ -887,8 +891,7 @@ class FileBundlePersistenceAdapter:
         finally:
             if tmp_name is not None:
                 Path(tmp_name).unlink(missing_ok=True)
-        # The two atomic replacements are deliberately not claimed as one
-        # transaction. Pending ownership fences admission through any crash gap.
+        # Not one transaction: pending ownership fences any crash gap.
         metadata_path.parent.mkdir(mode=0o700, exist_ok=True)
         _metadata_path(self.sessions_dir, native_id)
         tmp_name = None
@@ -908,6 +911,8 @@ class FileBundlePersistenceAdapter:
             if tmp_name is not None:
                 Path(tmp_name).unlink(missing_ok=True)
         self._run_restart_probe(native_id, record_path)
+        # A restart that mutated a shared parent must refuse the same way.
+        validate_reclaim_parents(*parent_args, record_path.name, native_id)
         stored = _read_record_strict(self.profile, record_path, native_id)
         if _metadata_decode(metadata_path.read_bytes(), native_id) != metadata:
             raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
@@ -931,8 +936,7 @@ def register_from_settings(settings: SessionMigrationSettings, *, engine: str) -
     if profile is None:
         return
     if profile.format == "omp-v1":
-        # Route before any file-layout path math: the OMP adapter owns its own
-        # realdir validation at construction and never creates stores implicitly.
+        # Route before file-layout math: OMP owns its realdir validation.
         if engine in registered_adapter_engines():
             return
         register_persistence_adapter(
@@ -941,9 +945,8 @@ def register_from_settings(settings: SessionMigrationSettings, *, engine: str) -
         )
         return
     if profile.format == "executable-v1":
-        # Route before any file-layout path math: the executable adapter owns
-        # its own realdir/executable validation at call time and never creates
-        # stores implicitly.
+        # Route before file-layout math: the executable adapter owns its own
+        # realdir/executable validation at call time.
         if engine in registered_adapter_engines():
             return
         register_persistence_adapter(
@@ -958,9 +961,8 @@ def register_from_settings(settings: SessionMigrationSettings, *, engine: str) -
         )
         return
     if profile.format == "codex-rollout-v1":
-        # Codex rollout journals under a disposable CODEX_HOME/sessions tree:
-        # the dedicated adapter owns store validation and the app-server
-        # resume proof.
+        # Codex rollout journals: the dedicated adapter owns store validation
+        # and the app-server resume proof.
         if engine in registered_adapter_engines():
             return
         from .codex_rollout_adapter import CodexRolloutPersistenceAdapter
@@ -976,8 +978,7 @@ def register_from_settings(settings: SessionMigrationSettings, *, engine: str) -
         )
         return
     if profile.format == "opencode-sync-v1":
-        # OpenCode durable sync events via the local serve API: the dedicated
-        # adapter owns isolation-root validation and the serve/replay proof.
+        # OpenCode sync events: the adapter owns isolation and serve/replay proof.
         if engine in registered_adapter_engines():
             return
         from .opencode_sync_adapter import OpenCodeSyncAdapter
