@@ -5,7 +5,10 @@ Requirement under test: ``FileBundlePersistenceAdapter`` for the declared
 byte-exactly into a disposable store, after which an *independent installed
 Pi subprocess* in RPC mode cold-loads the restored store via the engine's own
 exact-id selection (``--session-dir`` + ``--session``) and reports the
-historical user text through ``get_state`` / ``get_messages``.
+historical user text through ``get_state`` / ``get_messages``. Both restored
+sessions then execute a harmless native RPC ``bash`` echo offline, persist its
+``bashExecution`` message, independently restart, and return evolved archives
+byte-exactly to another disposable store. No LLM follow-up is claimed.
 
 No network, no API keys, no model calls: the child is started offline
 (``--offline``, ``PI_OFFLINE=1``) with a temp ``PI_CODING_AGENT_DIR`` and
@@ -115,7 +118,9 @@ def _child_env(root: Path) -> dict[str, str]:
     return env
 
 
-def _rpc_coldload(pi_cmd: Path, argv_rest: list[str], root: Path) -> tuple[dict, list]:
+def _rpc_coldload(
+    pi_cmd: Path, argv_rest: list[str], root: Path, *, bash_command: str | None = None
+) -> tuple[dict, list]:
     """Bounded coldload: start installed pi in RPC mode against the restored
     store, send get_state + get_messages, collect both responses, kill/reap.
 
@@ -154,11 +159,21 @@ def _rpc_coldload(pi_cmd: Path, argv_rest: list[str], root: Path) -> tuple[dict,
     responses: dict[str, dict] = {}
     stderr_tail: list[str] = []
     try:
-        for request_id, command in (("gs", "get_state"), ("gm", "get_messages")):
-            assert proc.stdin is not None
-            proc.stdin.write(json.dumps({"id": request_id, "type": command}) + "\n")
+        inspections = [
+            {"id": "gs", "type": "get_state"},
+            {"id": "gm", "type": "get_messages"},
+        ]
+        requests = (
+            [{"id": "bash", "type": "bash", "command": bash_command}]
+            if bash_command is not None
+            else inspections
+        )
+        assert proc.stdin is not None
+        for request in requests:
+            proc.stdin.write(json.dumps(request) + "\n")
         proc.stdin.flush()
-        while len(responses) < 2 and time.monotonic() < deadline:
+        expected_ids = {"gs", "gm"} | ({"bash"} if bash_command is not None else set())
+        while responses.keys() != expected_ids and time.monotonic() < deadline:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
@@ -172,8 +187,13 @@ def _rpc_coldload(pi_cmd: Path, argv_rest: list[str], root: Path) -> tuple[dict,
                 record = json.loads(line)
             except ValueError:
                 continue
-            if record.get("type") == "response" and record.get("id") in ("gs", "gm"):
+            if record.get("type") == "response" and record.get("id") in expected_ids:
                 responses[record["id"]] = record
+                # RPC commands are asynchronous: inspect only after bash completes.
+                if record["id"] == "bash":
+                    for request in inspections:
+                        proc.stdin.write(json.dumps(request) + "\n")
+                    proc.stdin.flush()
     finally:
         stderr_tail.clear()
         try:
@@ -191,16 +211,20 @@ def _rpc_coldload(pi_cmd: Path, argv_rest: list[str], root: Path) -> tuple[dict,
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:  # pragma: no cover - reap fallback
             proc.kill()
-            proc.wait()
+            proc.wait(timeout=5)
 
     diag = (
         f"rc={proc.returncode} stderr={''.join(stderr_tail)[:600]!r} "
         f"responses={sorted(responses)}"
     )
-    assert len(responses) == 2, f"pi RPC did not answer get_state+get_messages: {diag}"
-    for request_id in ("gs", "gm"):
+    assert responses.keys() == expected_ids, f"pi RPC did not answer commands: {diag}"
+    for request_id in expected_ids:
         record = responses[request_id]
         assert record.get("success") is True, f"{request_id} failed: {record}"
+    if bash_command is not None:
+        result = responses["bash"]["data"]
+        assert result["exitCode"] == 0, result
+        assert result["cancelled"] is False and result["truncated"] is False
     return responses["gs"]["data"], responses["gm"]["data"]["messages"]
 
 
@@ -324,3 +348,80 @@ def test_pi_rpc_coldload_after_file_bundle_restore(tmp_path: Path, monkeypatch) 
     assert set(return_dir.glob("*.jsonl")) == {
         return_dir / f"{session_id}.jsonl" for session_id in originals
     }
+
+    # Public docs/rpc-commands.md#bash: native, credential-free execution stores
+    # a BashExecutionMessage. This is runtime follow-up, NOT an LLM toolResult
+    # or the model-driven RPC follow_up command. Never append JSON ourselves.
+    evolved_return_dir = tmp_path / "evolved-a-return-sessions"
+    evolved_return_dir.mkdir(mode=0o700)
+    for session_id, original in originals.items():
+        marker = f"pi-offline-followup-{session_id}"
+        command = f"echo {marker}"
+        rest = [
+            arg.format(sessions_dir=str(child_dir), session_id=session_id)
+            for arg in profile.restart_argv[1:]
+        ]
+        state, messages = _rpc_coldload(PI_CMD, rest, tmp_path, bash_command=command)
+        assert state["sessionId"] == session_id
+        assert state["messageCount"] == 3
+        historical = [
+            entry["message"]
+            for line in original.splitlines()
+            if (entry := json.loads(line)).get("type") == "message"
+        ]
+        assert messages[:2] == historical
+        assert len(messages) == 3
+        bash_message = messages[2]
+        assert bash_message["role"] == "bashExecution"
+        assert bash_message["command"] == command
+        assert bash_message["output"].strip() == marker
+        assert bash_message["exitCode"] == 0
+        assert bash_message["cancelled"] is False
+        assert bash_message["truncated"] is False
+        evolved = (child_dir / f"{session_id}.jsonl").read_bytes()
+        assert evolved.startswith(original) and len(evolved) > len(original)
+        appended = [json.loads(line) for line in evolved[len(original) :].splitlines()]
+        assert len(appended) == 1
+        assert appended[0]["type"] == "message"
+        assert appended[0]["parentId"] == "ccc03333"
+        assert appended[0]["message"] == bash_message
+
+        # Independent restart must recover the exact native messages, not just
+        # the live process's in-memory result. Reading must not mutate bytes.
+        restarted_state, restarted_messages = _rpc_coldload(PI_CMD, rest, tmp_path)
+        assert restarted_state["sessionId"] == session_id
+        assert restarted_state["messageCount"] == 3
+        assert restarted_messages == messages
+        assert (child_dir / f"{session_id}.jsonl").read_bytes() == evolved
+
+        def evolved_restart(
+            argv: tuple[str, ...],
+            session_id: str = session_id,
+            messages: list = messages,
+        ) -> None:
+            returned_state, returned_messages = _rpc_coldload(
+                Path(argv[0]), list(argv[1:]), tmp_path
+            )
+            assert returned_state["sessionId"] == session_id
+            assert Path(returned_state["sessionFile"]) == (
+                evolved_return_dir / f"{session_id}.jsonl"
+            )
+            assert returned_state["messageCount"] == 3
+            assert returned_messages == messages
+
+        evolved_returner = FileBundlePersistenceAdapter(
+            engine="pi",
+            profile=profile,
+            sessions_dir=evolved_return_dir,
+            restart_runner=evolved_restart,
+        )
+        evolved_archive = importer.export_exact(session_id)
+        assert evolved_archive.records == {"session.jsonl": evolved}
+        proof = evolved_returner.import_exact(evolved_archive)
+        assert proof.native_id == session_id
+        assert proof.restarted is True and proof.resumed is True
+        assert evolved_returner.export_exact(session_id) == evolved_archive
+        assert (evolved_return_dir / f"{session_id}.jsonl").read_bytes() == evolved
+        # Source and the earlier unmodified A-return remain untouched.
+        for store in (src_dir, return_dir):
+            assert (store / f"{session_id}.jsonl").read_bytes() == original
