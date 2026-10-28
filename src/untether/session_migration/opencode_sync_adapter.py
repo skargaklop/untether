@@ -158,15 +158,15 @@ class OpenCodeSyncAdapter:
         ]
         log_path = self.data_root / ".untether-serve.log"
         try:
-            stream = log_path.open("ab")
-            proc = subprocess.Popen(
-                argv,
-                stdin=subprocess.DEVNULL,
-                stdout=stream,
-                stderr=stream,
-                env=env,
-                shell=False,  # nosec B603 operator-declared executable
-            )
+            with log_path.open("ab") as stream:
+                proc = subprocess.Popen(
+                    argv,
+                    stdin=subprocess.DEVNULL,
+                    stdout=stream,
+                    stderr=stream,
+                    env=env,
+                    shell=False,  # nosec B603 operator-declared executable
+                )
         except OSError as exc:
             raise CapabilityUnavailable("RESTART_PROBE_FAILED") from exc
         deadline = time.monotonic() + self.profile.serve_start_timeout_s
@@ -347,6 +347,10 @@ class OpenCodeSyncAdapter:
                 raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
             if body.get("sessionID") != archive.native_id:
                 raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
+            self._verify_replay(archive.native_id, events)
+            _maybe_kill(proc)
+            proc = None
+            proc = self._serve("restart-verify")
             self._verify_replay(archive.native_id, events)
         finally:
             if proc is not None:

@@ -161,6 +161,8 @@ def test_import_replays_and_verifies(tmp_path: Path, monkeypatch) -> None:
             (200, {"sessionID": sid}),  # /sync/replay
             (200, {"id": sid}),  # /session/{id}
             _history_response(sid, marks),  # /sync/history
+            (200, {"id": sid}),  # independent restart identity
+            _history_response(sid, marks),  # independent restart full payload
         ]
     )
     adapter_b = _adapter(
@@ -209,8 +211,9 @@ def test_import_refuses_wrong_identity_echo(tmp_path: Path, monkeypatch) -> None
 
 
 @pytest.mark.parametrize("tamper", ["order", "payload"])
+@pytest.mark.parametrize("after_restart", [False, True])
 def test_import_refuses_divergent_replay(
-    tmp_path: Path, monkeypatch, tamper: str
+    tmp_path: Path, monkeypatch, tamper: str, after_restart: bool
 ) -> None:
     sid = "ses_order"
     marks = ["one", "two"]
@@ -227,13 +230,11 @@ def test_import_refuses_divergent_replay(
         reordered.reverse()
     else:
         reordered[1]["data"] = {"text": "corrupted original content"}
-    http_b = _FakeHttp(
-        [
-            (200, {"sessionID": sid}),
-            (200, {"id": sid}),
-            (200, reordered),
-        ]
-    )
+    responses = [(200, {"sessionID": sid})]
+    if after_restart:
+        responses.extend([(200, {"id": sid}), _history_response(sid, marks)])
+    responses.extend([(200, {"id": sid}), (200, reordered)])
+    http_b = _FakeHttp(responses)
     adapter_b = _adapter(
         OpenCodeSyncProfile(
             format="opencode-sync-v1",
