@@ -9,7 +9,7 @@ The operator clarified on 2026-10-29 that a fixed Pi/OMP/Codex/OpenCode roster i
 | Goal | Required evidence | Current status |
 |---|---|---|
 | G1 | Pinned ACP/acpx/hydra-acp/alternative capability comparison and empty-store probes | Pinned source findings plus one EXECUTED empty-destination probe: acpx 0.21.0 `sessions export`→`import` against a disposable ACP agent leaves the destination native store empty and the follow-up turn fails (`native restore did not happen`) — client-record transfer, not native restoration ([[session-migration-acp-foundation-research]] §Executed probe). Hydra takeover semantics and acpx client-store interface confirmed from pinned sources. Remaining: hydra-acp runtime probe and additional alternative review |
-| G2 | Evidence-backed reuse/wrapper/extension foundation decision | Open; no candidate selected by this clarification |
+| G2 | Evidence-backed reuse/wrapper/extension foundation decision | Decision recorded: extend Untether's persistence seam ([[session-migration-foundation-decision]]), three-approach comparison against executed evidence — acpx fails native restoration by probe, hydra admits text-level handover, Untether seam already proves byte-exact native transfer for four engines. Remaining protocol gaps listed (model follow-up, real-SSH transport) |
 | G3 | Negotiated provider-neutral path plus independent additional extension without central engine dispatch edits | Open; registry extensibility alone is insufficient |
 | G4 | Complete records/tools/assets and identity fidelity | Partial adapter evidence only; omissions remain open |
 | G5 | Both directions, two sessions, round trip, restart/follow-up, binding and recovery | Existing bounded tests retained; final architecture verification open |
