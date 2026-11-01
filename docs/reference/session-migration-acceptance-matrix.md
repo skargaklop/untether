@@ -1,6 +1,22 @@
 # Session transfer acceptance matrix
 
-Authority: [[../plans/session-migration-product-correction]]. This is a work tracker, not evidence of delivery.
+Authority: [[../plans/session-migration-product-correction]] and [[../plans/session-migration-acp-wide-goals]]. This is a work tracker, not evidence of delivery.
+
+## ACP-wide delivery gate
+
+The operator clarified on 2026-10-29 that a fixed Pi/OMP/Codex/OpenCode roster is not the product scope. Engine-specific rows below are subordinate evidence, not a substitute for a general ACP-facing system. Current adapter and installed-engine results do not satisfy this gate.
+
+| Goal | Required evidence | Current status |
+|---|---|---|
+| G1 | Pinned ACP/acpx/hydra-acp/alternative capability comparison and empty-store probes | Pinned source findings plus one EXECUTED empty-destination probe: acpx 0.21.0 `sessions export`→`import` against a disposable ACP agent leaves the destination native store empty and the follow-up turn fails (`native restore did not happen`) — client-record transfer, not native restoration ([[session-migration-acp-foundation-research]] §Executed probe). Hydra takeover semantics and acpx client-store interface confirmed from pinned sources. Remaining: hydra-acp runtime probe and additional alternative review |
+| G2 | Evidence-backed reuse/wrapper/extension foundation decision | Open; no candidate selected by this clarification |
+| G3 | Negotiated provider-neutral path plus independent additional extension without central engine dispatch edits | Open; registry extensibility alone is insufficient |
+| G4 | Complete records/tools/assets and identity fidelity | Partial adapter evidence only; omissions remain open |
+| G5 | Both directions, two sessions, round trip, restart/follow-up, binding and recovery | Existing bounded tests retained; final architecture verification open |
+| G6 | Reproducible discovery-derived breadth matrix, not a fixed installed roster | Open; installed-engine command is supplemental evidence |
+| G7 | Reconciled documentation, scoped reviewed PR and final quality gates | Open; no merge/deployment/live restart authorized |
+
+## Existing implementation evidence
 
 | Required behaviour | Current implementation/evidence | Outstanding verification |
 |---|---|---|
@@ -33,16 +49,57 @@ external files or attachment membership rows. Current implementation state:
 - **Pi**: export-side collection of `bashExecution`/`fullOutputPath` OS-tmp spill
   logs is implemented (`pi_output_assets.py`, commit `c6aaf33`): direct-child-of-tmpdir
   + `pi-bash-<16 hex>.log` name validation, fstat/lstat replacement guard, 64 MiB
-  total bound, canonical manifest; journals are never modified; asset-carrying
-  import and reclaim refuse before any store write
-  (`PI_OUTPUT_IMPORT_NOT_IMPLEMENTED`, `test_session_migration_pi_output_assets.py`).
+  total bound, canonical manifest; journals are never modified. Import of an
+  asset-carrying archive is implemented in `import_exact`: validated manifest,
+  strict record set, tmpdir preflight, O_EXCL restore with rollback, post-probe
+  asset reread, and materialization of absent spill files on a disjoint
+  destination verified by `test_import_materializes_absent_spill_before_probe`
+  (`test_session_migration_pi_asset_import.py`). Asset-bearing reclaim
+  (`import_overwrite`) is implemented via `reclaim_asset_plan`
+  (`pi_output_assets.py`): per-side strict record validation with orphan
+  refusal, preflight before any write, byte-reuse of existing spill files,
+  atomic journal replace, restart probe and post-probe asset re-preflight;
+  A→B evolved reclaim, back-reclaim leaving foreign prior-only assets
+  untouched, collision refusal with zero store writes, retry after interrupted
+  metadata publication and orphan/legacy refusal are covered by
+  `test_session_migration_pi_asset_reclaim.py` (6 tests). Only the legacy
+  manifest-less-prior combination still refuses (`PI_OUTPUT_IMPORT_NOT_IMPLEMENTED`)
+  by contract.
 - **Codex attachments**: the public attachment add API preserves payload and logical
   identity keys but mints new row IDs and timestamps across stores; exact-preservation
   integration remains unresolved open work.
 
 None of these gaps is a scope amendment or successful unsupported transfer.
 
-## Latest bounded controller evidence
+## Current resynchronization check (2026-10-29)
+
+The prior full-matrix result below is historical, not a fresh passing gate.
+Current reruns exceeded outer bounds of 180 seconds and 100 seconds; the verbose
+second run reached the installed OpenCode runtime after six native-runtime
+checks passed. A separate Pi/OMP/Codex coordinator subset passed seven checks.
+The transfer/reclaim suite passed 36 checks, and file-bundle/registration/profile
+regression passed 143 with four skips after the bounded responsibility extraction.
+Follow-up diagnosis found cumulative lifecycle cost exceeded those outer bounds;
+no unbounded wait was established. The isolated OpenCode runtime passed in 59.46
+seconds. A subsequent full supplemental installed-engine run, bounded at 420
+seconds, passed all 15 checks without skips in 256.62 seconds
+(`bash scripts/check-engine-matrix.sh -vv --tb=short`). This verifies the named
+installed profiles only, not ACP ecosystem breadth, model continuation or complete
+asset portability. The earlier timeout is not by itself proof of a runtime bug.
+
+## Earlier bounded controller evidence
+
+Controller rerun on the current working revision: `bash scripts/check-engine-matrix.sh`
+passed all 15 runtime/coordinator checks with no skips (248.27 seconds). A separate
+`uv run --no-sync pytest -q -o addopts='' --tb=short` passed 4,599 tests with
+54 skips and nine warnings; this disables the default coverage gate and is a
+regression execution result, not a coverage claim. Ruff check, formatting,
+source-and-test Ty, configured Bandit (`-c pyproject.toml`) and lockfile checks
+passed. Subsequent manifest-boundary tests also accept Windows and POSIX source
+path metadata without destination filesystem access and reject traversal and
+basename/record mismatches (43 passed). These results do not close asset-import,
+model-continuation or real-SSH acceptance gaps. Older measurements below are
+historical, not the current verification baseline.
 
 The expanded `bash scripts/check-engine-matrix.sh` gate includes runtime and coordinator suites for Pi, OMP, Codex and OpenCode; its latest full run passed 15 checks in 266.05 seconds (all four installed engines, OpenCode enabled via `UNTETHER_TEST_OPENCODE_EXE`). Codex inbound binding is required unconditionally, not counted as success on refusal. The gate exercises native shell follow-ups and independent restart, not provider-generated model turns; coordinator tests use injected receiver transport and do not establish real SSH coverage. After the Codex interrupted-metadata recovery fix (`test_codex_coordinator_reclaim_crash_after_journal_before_metadata`, commit `c75e856`) and the Pi spill-carry work, the full regression passed 4,553 tests, 53 skips, nine warnings (runtime suites verified separately: 6 passed plus installed-OpenCode runtime 1 passed). Source/test Ruff, format and migration Ty passed.
 
