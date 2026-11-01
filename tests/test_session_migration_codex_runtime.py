@@ -467,6 +467,7 @@ def test_codex_app_server_resume_after_adapter_restore(
 
     # A separate app-server must reconstruct the actual completed result.
     cold = importer._default_rpc_resume(session_id, restored, 30.0)
+    assert isinstance(cold, dict)
     assert cold["thread"]["id"] == session_id
     assert cold["thread"]["turns"][: len(thread["turns"])] == thread["turns"]
     assert _persisted_shell(cold, completed["id"], tmp_path, marker) == live_item
@@ -488,6 +489,7 @@ def test_codex_app_server_resume_after_adapter_restore(
     returned = return_root / rel
     assert returned.read_bytes().startswith(returned_archive.records["session.jsonl"])
     returned_read = receiver._default_rpc_resume(session_id, returned, 30.0)
+    assert isinstance(returned_read, dict)
     assert returned_read["thread"]["id"] == session_id
     assert returned_read["thread"]["turns"] == cold["thread"]["turns"]
     assert (

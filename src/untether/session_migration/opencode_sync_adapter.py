@@ -33,7 +33,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from hashlib import sha256
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from .native_adapter import (
     CapabilityUnavailable,
@@ -279,7 +279,7 @@ class OpenCodeSyncAdapter:
             if proc is not None:
                 _maybe_kill(proc)
 
-    def lookup_for_project(self, session_id: str, project_root: Path) -> str:
+    def lookup_for_project(self, session_id: str, project_root: PurePath) -> str:
         """Authorize the exact native Session.directory, never enrollment.
 
         Installed 1.17.13 exposes this required field in GET /session/{id}
@@ -545,7 +545,7 @@ def _kill_proc_tree(proc: subprocess.Popen) -> None:
     if proc.poll() is None:
         if os.name == "nt":
             with suppress(subprocess.TimeoutExpired, OSError):
-                subprocess.run(
+                subprocess.run(  # nosec B603, B607 taskkill of owned child by PID
                     ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
                     capture_output=True,
                     timeout=5,

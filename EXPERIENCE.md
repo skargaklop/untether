@@ -1,5 +1,69 @@
 # ACP Phase E Experience
 
+## Registration extraction and runtime verification (2026-10-29)
+
+The bounded registration worker preserved routing and public imports but moving
+registration alone left `file_bundle_adapter.py` at 1017 lines. Controller moved
+the already-shared lexical project-path validator unchanged to `project_path.py`,
+retaining the old imported symbol for existing callers; the adapter is now 985
+lines. Scoped tests: 143 passed, four skipped; touched types/lint pass. Recovery
+regression: 36 passed. These are bounded regression results, not ACP-wide proof.
+
+The engine matrix exceeded bounded runs (180 seconds and 100 seconds). The
+verbose second run isolated its progress stop to installed OpenCode runtime after
+six native-runtime checks passed. Pi/OMP/Codex coordinator subset separately
+passed seven checks. Do not run another full matrix until the OpenCode lifecycle
+and failure evidence have been diagnosed. ACP protocol research distinguished v2
+`session/resume` from v1 `session/load`; do not conflate their method names or
+promote an unspecified transfer format into a universal impossibility claim.
+
+## Bounded follow-up correction (2026-10-29)
+
+The isolated OpenCode runtime passed in 59.46 seconds and the full named-profile
+matrix passed 15 checks in 256.62 seconds with a 420-second outer budget. The
+shorter outer timeouts did not establish a hung process or justify changing
+per-operation lifecycle limits. These four profiles still do not prove ACP-wide
+coverage or model-generated continuation.
+
+Restart recovery lost both workers from the in-process registry; their partial
+transcripts were recovered before narrow replacements were launched. Partial
+research and planned edits are not implementation evidence. A Pi import test now
+removes the source spill before destination import and checks materialization
+before the restart probe; previous successful-import tests reused existing bytes
+and did not cover that essential empty-destination path.
+
+## ACP-wide foundation research boundaries
+
+The extension-seam scout missed the existing fixture executable and protocol
+suite; controller inspected `test_session_migration_subprocess_adapter.py` and
+reran it successfully. Do not turn a bounded scout's absence claim into a new
+implementation task. Registry extensibility is reusable architecture, not native
+fidelity. The upstream scout overclaimed that acpx retains no tools (raw event
+history may contain inline payloads) and that a custom extension is mandatory;
+controller requested correction and separately confirmed Hydra's documented
+text-level takeover at its pinned README revision. Neither finding proves all
+ACP-native persistence impossible. The Pi import worker left one obsolete test
+expecting blanket refusal; controller replaced it with byte-exact export identity
+verification and reran the scoped import/protocol checks (37 passed). Pi reclaim
+with assets remains distinct unfinished work. The adapter module is already over
+the 1000-line cap; any further implementation must extract a coherent existing
+responsibility rather than grow that module.
+
+## Manifest review and controller verification pitfalls
+
+The manifest-test worker exhausted its bounded run with malformed positive fixtures:
+multiple spill references shared one default record name, and an already canonical
+JSON serialization was incorrectly expected to refuse. Controller repaired those
+fixtures without relaxing the security cases; 43 manifest checks pass, including
+foreign-platform path metadata acceptance and traversal rejection. Source paths
+are metadata during manifest validation, never permission to write outside a
+trusted destination-managed directory. The asset review proposed reusing an
+existing-file validator for restoration; that helper refuses missing files, so
+creation needs a separate all-destination preflight. Its cross-platform limitation
+claim is not primary-source protocol-impossibility evidence. The controller's
+4,599-pass regression invocation disabled default addopts and therefore did not
+prove the configured 81% coverage gate; retain that distinction in delivery claims.
+
 ## Codex resume and asset-research boundaries
 
 Controller expanded installed-engine gate passed 14 checks in 257.39 seconds; full regression passed 4,539 with 54 skips before the additional metadata-crash repair. Native resumes append settings events, so original prefixes must remain exact while only bounded validated appendices are admitted. Review found a separate interrupted metadata-publication case: incoming journal plus prior sidecar must be pinned to the cached prior metadata, not trusted from current bytes. Its targeted repair is still being verified. Asset scouts initially overgeneralized inline images from opaque journals; tagged Codex source proves separately persisted thread attachments and opaque file IDs. Do not confuse thread-attachment metadata RPCs with an attachment-byte resolver. Untagged upstream schemas do not establish installed-version behavior. Repository-wide Ruff includes untracked diagnostic fragments under `trash/`; the production `src tests` gate passes without modifying those unrelated diagnostic files.
@@ -303,3 +367,18 @@ stores, agents, dependency installations, production edits, or commits used.
 - Windows: wrap `codex.cmd` as `COMSPEC /c ...` and pin CODEX_HOME/HOME/USERPROFILE plus
   APPDATA/LOCALAPPDATA/TEMP/XDG_* into probe-scratch subdirs, or the server writes into the real profile.
 Pitfall (session-migration asset review): a session-record-only audit can miss pi bash full-output spills — verify the engine's tmpdir output-file mechanism (pi 1.4.0 bash-executor/output-files), and never claim a spilled file is reread without caller-side proof; only the embedded absolute path string is proven.
+
+## Pi asset-bearing reclaim (2026-10-29, worker b211093a)
+
+1. Ruff `combine-as-imports` is off: per-name `from X import (...)` blocks stay
+   fragmented; merging fails I001 silently after `--fix` re-splits. Line-budget
+   work must target comments/docstrings instead.
+2. `preflight_assets` is manifest-mandatory by design — calling it on a
+   manifest-less reclaim archive fails even with zero refs. Gate callers on
+   `MANIFEST_RECORD in records`.
+3. Spill bytes must be captured BEFORE mutating the fixture file: exporting
+   after writing collision bytes bakes them into the archive and the collision
+   test silently passes for the wrong reason.
+4. Adapter fixtures need an explicit no-op `restart_runner` — the default
+   subprocess path cannot execute `"fixture-restart-probe"` (fails
+   RESTART_PROBE_FAILED), same trap as existing suites.

@@ -965,7 +965,8 @@ def test_export_ignores_parent_migration_metadata(tmp_path):
     parent = _write_journal(store, "parent.jsonl", "parent")
     child = _write_journal(store, "child.jsonl", "child", parentSession=str(parent))
     metadata = store / ".untether-migration" / "parent.json"
-    metadata.parent.mkdir()
+    metadata.parent.mkdir(mode=0o700)
+    metadata.parent.chmod(0o700)
     # Any well-formed metadata for the parent id; export must ignore it.
     metadata.write_text(
         '{"logical_id":"parent","native_id":"parent",'

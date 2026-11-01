@@ -42,7 +42,7 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
-from pathlib import Path, PureWindowsPath
+from pathlib import Path, PurePath, PureWindowsPath
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -292,7 +292,9 @@ def _assert_read_history(data: bytes, result: object) -> None:
 
 def _validate_rollout_store(sessions_root: Path) -> None:
     """Fail closed unless the declared root is a real, link-free directory."""
-    if not sessions_root.is_dir() or sessions_root.is_symlink():
+    if sessions_root.is_symlink():
+        raise CapabilityUnavailable("PERSISTENCE_STORE_SYMLINK") from None
+    if not sessions_root.is_dir():
         raise CapabilityUnavailable("PERSISTENCE_STORE_NOT_READY")
     try:
         resolved = sessions_root.resolve(strict=True)
@@ -471,7 +473,7 @@ class CodexRolloutPersistenceAdapter:
                     "feedback.enabled=false",
                     "app-server",
                 ],
-                cwd=str(home),
+                cwd=str(home),  # nosec B603 operator-declared app-server argv
                 env=env,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
@@ -678,7 +680,7 @@ class CodexRolloutPersistenceAdapter:
         self._lookup_rollout(session_id)
         return session_id
 
-    def lookup_for_project(self, session_id: str, project_root: Path) -> str:
+    def lookup_for_project(self, session_id: str, project_root: PurePath) -> str:
         """Prove exact header cwd identity only; never export or gate."""
         from .file_bundle_adapter import _project_path_key
 

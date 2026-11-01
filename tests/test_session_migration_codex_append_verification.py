@@ -15,6 +15,7 @@ import json
 import os
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -25,6 +26,7 @@ from untether.session_migration.codex_rollout_adapter import (
 )
 from untether.session_migration.native_adapter import (
     CapabilityUnavailable,
+    PersistenceAdapter,
     assert_restored,
 )
 from untether.session_migration.native_archive import NativeArchive
@@ -97,6 +99,8 @@ def _stored(archive: NativeArchive, journal: bytes) -> NativeArchive:
 def _store(tmp_path: Path, name: str = "store") -> Path:
     root = tmp_path / name
     root.mkdir()
+    if os.name == "posix":  # adapter requires a private store root (0o700)
+        root.chmod(0o700)
     return Path(os.path.realpath(root))
 
 
@@ -141,8 +145,12 @@ def test_default_adapter_without_hook_stays_exact():
     archive = _archive(_rollout_bytes())
     grown = _stored(archive, _rollout_bytes() + _settings_line(9))
     with pytest.raises(CapabilityUnavailable, match="RESTORE_IDENTITY_MISMATCH"):
-        assert_restored(_HooklessAdapter(), archive, grown)
-    assert_restored(_HooklessAdapter(), archive, _stored(archive, _rollout_bytes()))
+        assert_restored(cast(PersistenceAdapter, _HooklessAdapter()), archive, grown)
+    assert_restored(
+        cast(PersistenceAdapter, _HooklessAdapter()),
+        archive,
+        _stored(archive, _rollout_bytes()),
+    )
 
 
 # -- refusal cases ----------------------------------------------------------

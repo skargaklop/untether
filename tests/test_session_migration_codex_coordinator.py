@@ -45,7 +45,9 @@ import hashlib
 import json
 import os
 import uuid
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any, cast
 
 import anyio
 import pytest
@@ -101,7 +103,9 @@ def _isolate_adapter_registry():
 def _home(root: Path) -> tuple[Path, Path]:
     """Disposable CODEX_HOME carrying only the sessions tree."""
     sessions = root / "sessions"
-    sessions.mkdir(parents=True, exist_ok=True)
+    sessions.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name == "posix":
+        sessions.chmod(0o700)
     for forbidden in ("auth.json", "config.toml", "installation_id"):
         assert not (root / forbidden).exists()
     return root, sessions
@@ -282,9 +286,17 @@ def _codex_ids(
     return ids, cwd, rel
 
 
-def _recording_rpc(monkeypatch) -> tuple[list[tuple[str, Path]], object]:
+def _recording_rpc(
+    monkeypatch,
+) -> tuple[
+    list[tuple[str, Path]],
+    Callable[[CodexRolloutPersistenceAdapter, str, Path, float], dict],
+]:
     """Record only production import probes; direct reads stay unpatched."""
-    real_rpc = CodexRolloutPersistenceAdapter._default_rpc_resume
+    real_rpc: Callable[[CodexRolloutPersistenceAdapter, str, Path, float], dict] = cast(
+        Callable[[CodexRolloutPersistenceAdapter, str, Path, float], dict],
+        CodexRolloutPersistenceAdapter._default_rpc_resume,
+    )
     probes: list[tuple[str, Path]] = []
 
     def recording(adapter, native_id, journal_path, timeout_s):
@@ -527,11 +539,14 @@ def test_codex_coordinator_pull_roundtrip_binds_appended_resume(
     # Destination bytes alone carry the native session: a cold app-server read
     # of C recovers id, cwd and literal history.
     _assert_history(
-        CodexRolloutPersistenceAdapter._default_rpc_resume(
-            _adapter(return_sessions),
-            ids[0],
-            return_sessions / rel[ids[0]],
-            RESUME_TIMEOUT_S,
+        cast(
+            dict,
+            CodexRolloutPersistenceAdapter._default_rpc_resume(
+                _adapter(return_sessions),
+                ids[0],
+                return_sessions / rel[ids[0]],
+                RESUME_TIMEOUT_S,
+            ),
         ),
         ids[0],
         cwd[ids[0]],
@@ -638,7 +653,7 @@ def test_codex_coordinator_reclaim_crash_after_journal_before_metadata(
     package = transfer.build_inbound_package(local_cfg, incoming)
     incoming_journal = incoming.records["session.jsonl"]
 
-    common: dict[str, object] = {
+    common: dict[str, Any] = {
         "direction": "from",
         "peer_name": "vps",
         "project": "demo",

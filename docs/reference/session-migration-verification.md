@@ -1,8 +1,9 @@
 # Session-migration engine-compatibility verification
 
-Runs the installed-engine native restore/restart/follow-up matrix locally.
-Every engine is exercised on disposable stores through its registered
-production persistence adapter; nothing touches live sessions or stores.
+Runs the four named installed-engine native restore/restart/shell-follow-up
+profiles locally. This supplemental roster is not ACP-wide compatibility
+coverage. Each named engine uses disposable stores through its registered
+persistence adapter; nothing touches live sessions or stores.
 
 ## Command (Windows PowerShell, from the repository root)
 
@@ -36,11 +37,11 @@ Limits stated honestly: these are native shell persistence proofs, not
 LLM/model continuation; coordinator-integrated SSH round trips are covered by
 the separate transfer suites (`tests/test_session_migration_transfer_end_to_end.py`).
 
-Controller rerun of `bash scripts/check-engine-matrix.sh`, bounded to 420
-seconds, passed with all four engines installed: `14 passed in 257.39s`.
-This includes the unconditional Codex inbound binding check and each engine's
-coordinator suite. The separate Codex appendix-validation suite passed 14 tests;
-Codex coordinator plus reclaim recovery passed 7 tests.
+A later bounded run of `bash scripts/check-engine-matrix.sh -vv --tb=short`
+passed all 15 named-profile checks without skips in 256.62 seconds (420-second
+outer bound). The earlier 14-check result was on a prior revision. This covers
+native shell persistence and coordinator tests, not independent model-generated
+continuation, every ACP-compatible engine, or a real remote SSH migration.
 
 Skips are explicit and environmental (missing engine executable, Windows
 symlink/gate privileges). A passing row requires the installed engine; absence

@@ -72,6 +72,8 @@ def _store(tmp_path: Path, name: str) -> Path:
     names and /tmp symlink setups alike)."""
     root = tmp_path / name
     root.mkdir()
+    if os.name == "posix":  # adapter requires a private store root (0o700)
+        root.chmod(0o700)
     return Path(os.path.realpath(root))
 
 

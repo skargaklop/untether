@@ -14,6 +14,7 @@ serve lifecycle itself (spawn/kill) is exercised only through refusal paths
 
 from __future__ import annotations
 
+import email.message
 import io
 import json
 import urllib.error
@@ -234,7 +235,7 @@ def test_import_refuses_divergent_replay(
         reordered.reverse()
     else:
         reordered[1]["data"] = {"text": "corrupted original content"}
-    responses = [(200, {"sessionID": sid})]
+    responses: list[tuple[int, object]] = [(200, {"sessionID": sid})]
     if after_restart:
         responses.extend([(200, {"id": sid}), _history_response(sid, marks)])
     responses.extend([(200, {"id": sid}), (200, reordered)])
@@ -444,11 +445,15 @@ def test_http_response_size_bound(tmp_path, monkeypatch, status, oversized):
     reads = []
 
     class Response(io.BytesIO):
+        status: int = 200
+
         def read(self, size=-1):
             reads.append(size)
             assert size == limit + 1
             return super().read(size)
 
+    headers = email.message.Message()
+    headers["Content-Type"] = "application/json"
     response = Response(raw)
 
     class Opener:
@@ -456,7 +461,7 @@ def test_http_response_size_bound(tmp_path, monkeypatch, status, oversized):
             assert timeout == 30
             if status != 200:
                 raise urllib.error.HTTPError(
-                    request.full_url, status, "Bad Request", {}, response
+                    request.full_url, status, "Bad Request", headers, response
                 )
             response.status = status
             return response

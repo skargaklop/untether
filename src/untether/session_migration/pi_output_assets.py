@@ -15,12 +15,14 @@ carried asset records. No original journal is ever modified.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
 import stat
+import tempfile
 from hashlib import sha256
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from .native_adapter import CapabilityUnavailable
 
@@ -35,6 +37,16 @@ _MANIFEST_MAX_BYTES = 4 * 1024 * 1024
 # Binary read, never following a symlink at open time (POSIX); Windows has
 # no O_NOFOLLOW, so replacement is caught by the fstat/lstat identity check.
 _READ_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+# Collision-safe create at a trusted-tmpdir child: never overwrites, never
+# follows a symlink at open time, mode 0600 (POSIX; mode is advisory on
+# Windows where the platform ACLs govern).
+_WRITE_FLAGS = (
+    os.O_WRONLY
+    | os.O_CREAT
+    | os.O_EXCL
+    | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_BINARY", 0)
+)
 
 
 def _refuse() -> CapabilityUnavailable:
@@ -212,6 +224,24 @@ def manifest_record(assets: dict[str, bytes]) -> bytes:
     return json.dumps(manifest, separators=(",", ":"), sort_keys=True).encode()
 
 
+def _portable_spill_name(ref: str) -> str:
+    """Validate a source spill reference without accessing destination paths."""
+    if "\x00" in ref or ("\\" in ref and not PureWindowsPath(ref).is_absolute()):
+        raise _refuse()
+    path = (
+        PureWindowsPath(ref)
+        if "\\" in ref or re.match(r"^[a-zA-Z]:", ref)
+        else PurePosixPath(ref)
+    )
+    if (
+        not path.is_absolute()
+        or ".." in path.parts
+        or not _LOG_NAME.fullmatch(path.name)
+    ):
+        raise _refuse()
+    return path.name
+
+
 def validate_asset_manifest(
     records: dict[str, bytes], journals: list[bytes]
 ) -> dict[str, str]:
@@ -239,8 +269,9 @@ def validate_asset_manifest(
         raise _refuse()  # non-canonical or structurally invalid manifest
     listing: dict[str, str] = {}
     for ref, entry in manifest.items():
-        if not isinstance(ref, str) or not ref or "\x00" in ref:
+        if not isinstance(ref, str) or not ref:
             raise _refuse()
+        basename = _portable_spill_name(ref)
         if not isinstance(entry, dict):
             raise _refuse()
         record = entry.get("record")
@@ -248,7 +279,7 @@ def validate_asset_manifest(
         size = entry.get("size")
         if not isinstance(record, str) or not record.startswith(RECORD_PREFIX):
             raise _refuse()
-        if not _LOG_NAME.fullmatch(record[len(RECORD_PREFIX) :]):
+        if record != RECORD_PREFIX + basename:
             raise _refuse()
         if not isinstance(digest, str) or not _SHA256.fullmatch(digest):
             raise _refuse()
@@ -265,3 +296,185 @@ def validate_asset_manifest(
     if set(listing) != set(full_output_refs(journals)):
         raise _refuse()  # manifest must match the journal refs exactly
     return listing
+
+
+def _read_exact(path: Path, prior: os.stat_result, expected_size: int) -> bytes:
+    """Read a validated regular file, refusing replacement after validation."""
+    try:
+        fd = os.open(path, _READ_FLAGS)
+    except OSError as exc:
+        raise _refuse() from exc
+    try:
+        with os.fdopen(fd, "rb") as stream:
+            current = os.fstat(stream.fileno())
+            if (current.st_dev, current.st_ino) != (prior.st_dev, prior.st_ino):
+                raise _refuse()  # replaced after validation
+            return stream.read(expected_size + 1)
+    except OSError as exc:
+        raise _refuse() from exc
+
+
+def preflight_assets(
+    records: dict[str, bytes], journals: list[bytes], tmpdir: Path
+) -> list[tuple[Path, bytes]]:
+    """Validate a manifest archive against the local trusted tmpdir for restore.
+
+    The manifest itself is validated by :func:`validate_asset_manifest` (byte
+    hashes, journal-ref set equality). Each original absolute reference must
+    then resolve to a DIRECT child of the supplied trusted ``tmpdir``
+    (resolved real paths on both sides), carry the strict
+    ``pi-bash-<16 hex>.log`` basename, and be traversal-free lexically
+    (portable validation stays lexical; only the destination membership is
+    checked against the native filesystem). An existing destination must be a
+    regular non-symlink file whose bytes match the carried record exactly —
+    mismatching bytes refuse. A NONEXISTENT destination is allowed and yields
+    a restore plan entry. Every path is preflighted before any write happens:
+    the returned plan is all-or-nothing.
+
+    Returns the ordered plan of ``(destination path, expected bytes)`` for
+    absent files only; byte-identical existing files are reused (no entry).
+    """
+    listing = validate_asset_manifest(records, journals)
+    managed = _checked_tmpdir(tmpdir)
+    plan: list[tuple[Path, bytes]] = []
+    for ref in sorted(listing):
+        # Lexical gate first (absolute, no dot-dot, strict log basename) so a
+        # traversal ref never reaches a native filesystem check.
+        _portable_spill_name(ref)
+        path = Path(ref)
+        if not path.is_absolute() or ".." in path.parts:
+            raise _refuse()
+        try:
+            parent_real = Path(os.path.realpath(path.parent))
+        except (OSError, ValueError) as exc:
+            raise _refuse() from exc
+        if _key(parent_real) != _key(managed):
+            raise _refuse()  # foreign directory or symlink escape
+        payload = records[listing[ref]]
+        try:
+            prior = os.lstat(path)
+        except FileNotFoundError:
+            plan.append((path, payload))
+            continue
+        except OSError as exc:
+            raise _refuse() from exc
+        if not stat.S_ISREG(prior.st_mode):
+            raise _refuse()  # symlink, directory, or special file
+        if _read_exact(path, prior, len(payload)) != payload:
+            raise _refuse()  # mismatching existing bytes at the destination
+    return plan
+
+
+_PARENT_RECORD = re.compile(r"parent-\d+\.jsonl\Z")
+
+
+def _reclaim_journals(records: dict[str, bytes]) -> list[bytes]:
+    """One archive's journal blobs: the root plus every declared parent slot."""
+    journals = []
+    root = records.get("session.jsonl")
+    if root is not None:
+        journals.append(root)
+    journals.extend(
+        records[name] for name in sorted(records) if _PARENT_RECORD.fullmatch(name)
+    )
+    return journals
+
+
+def _strict_asset_records(records: dict[str, bytes], journals: list[bytes]) -> None:
+    """Manifest/journal pairing plus the strict manifest-listed record set."""
+    listing = validate_asset_manifest(records, journals)
+    asset_names = {name for name in records if name.startswith(RECORD_PREFIX)}
+    if asset_names != set(listing.values()):
+        raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
+
+
+def reclaim_asset_plan(
+    records: dict[str, bytes],
+    expected_prior_records: dict[str, bytes],
+    journal_names: set[str],
+) -> tuple[list[tuple[Path, bytes]], list[bytes]]:
+    """Asset-side gate and restore plan for reclaiming a spill archive.
+
+    Pure apart from preflight reads of the trusted temp directory. Each side
+    is checked independently: the strict declared record set (no undeclared
+    record, no orphan ``pi-output/`` record without a manifest), a spill
+    manifest mandatory whenever that side's journals reference spill output,
+    and only manifest-listed ``pi-output/`` records riding along. A prior
+    package without a manifest cannot describe a store journal referencing
+    spill output (``import_exact`` would have refused it), so reclaiming onto
+    such a legacy baseline refuses closed. Asset-set equality between the
+    evolved and prior journal is deliberately NOT required: new spill
+    references restore on top of unchanged ones, prior-only spill files stay
+    foreign bytes nobody touches.
+
+    Returns ``(plan, incoming_journals)``: the ordered restore plan of absent
+    asset destinations (byte-identical existing files are reused, mismatching
+    bytes refuse before any write), plus the incoming journal blobs for a
+    post-probe re-preflight by the caller.
+    """
+    incoming_journals: list[bytes] | None = None
+    if MANIFEST_RECORD in records and MANIFEST_RECORD not in expected_prior_records:
+        # Legacy prior package predating asset carriage: the store's asset
+        # baseline is unverifiable, so the reclaim refuses closed.
+        raise CapabilityUnavailable("PI_OUTPUT_IMPORT_NOT_IMPLEMENTED")
+    for side in (expected_prior_records, records):
+        extra = {name for name in side if name.startswith(RECORD_PREFIX)}
+        if MANIFEST_RECORD in side:
+            extra.add(MANIFEST_RECORD)
+        elif extra:
+            raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
+        if set(side) != journal_names | extra:
+            raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
+        journals = _reclaim_journals(side)
+        if MANIFEST_RECORD not in side:
+            # A spill-referencing journal without a manifest cannot describe a
+            # store record import_exact would ever have produced.
+            if full_output_refs(journals):
+                raise CapabilityUnavailable("PI_OUTPUT_REFUSED")
+            continue
+        _strict_asset_records(side, journals)
+        if side is not expected_prior_records:
+            incoming_journals = journals
+    if incoming_journals is None:
+        incoming_journals = []
+    plan = (
+        preflight_assets(records, incoming_journals, Path(tempfile.gettempdir()))
+        if MANIFEST_RECORD in records
+        else []
+    )
+    return plan, incoming_journals
+
+
+def restore_assets(plan: list[tuple[Path, bytes]]) -> list[Path]:
+    """Create the planned asset files; never modify journals or foreign paths.
+
+    Each entry is created O_EXCL|O_NOFOLLOW with mode 0600 and fsynced before
+    the handle closes. A destination that appeared between preflight and
+    restore is reused only when byte-identical; mismatching bytes refuse. On
+    any failure the files THIS call created are rolled back (pre-existing
+    files are never touched) and the error propagates.
+    """
+    created: list[Path] = []
+    try:
+        for path, blob in plan:
+            try:
+                fd = os.open(path, _WRITE_FLAGS, 0o600)
+            except FileExistsError:
+                # Appeared after preflight: reuse only byte-identical bytes.
+                prior = os.lstat(path)
+                if not stat.S_ISREG(prior.st_mode):
+                    raise _refuse() from None
+                if _read_exact(path, prior, len(blob)) != blob:
+                    raise _refuse() from None
+                continue
+            created.append(path)
+            with os.fdopen(fd, "wb") as out:
+                out.write(blob)
+                out.flush()
+                os.fsync(out.fileno())
+    except (OSError, CapabilityUnavailable):
+        for path in created:
+            with contextlib.suppress(OSError):
+                path.unlink()
+        raise
+    return created

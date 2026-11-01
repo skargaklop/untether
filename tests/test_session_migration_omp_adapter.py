@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 import tempfile
 from dataclasses import replace
@@ -54,6 +55,9 @@ def make_store(root: Path):
     blobs = root / "agent" / "blobs" / "data"
     sessions.mkdir(parents=True)
     blobs.mkdir(parents=True)
+    if os.name == "posix":  # adapter requires private store roots (0o700)
+        sessions.chmod(0o700)
+        blobs.chmod(0o700)
     return sessions, blobs
 
 

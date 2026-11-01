@@ -210,10 +210,12 @@ def _rpc(
                     return frame["data"]
 
         def request(kind: str, **payload) -> dict:
-            child.stdin.write(
+            stdin = child.stdin
+            assert stdin is not None
+            stdin.write(
                 (json.dumps({"id": kind, "type": kind, **payload}) + "\n").encode()
             )
-            child.stdin.flush()
+            stdin.flush()
             return receive(kind)
 
         try:
@@ -340,7 +342,8 @@ def test_omp_adapter_export_import_sdk_coldload(
 
     if not injected:
         monkeypatch.setattr(omp_adapter, "run_probe", recording_probe)
-    target_kwargs = {} if injected else {"restart_probe_argv": _probe_argv(verify_root)}
+    # Explicit keywords instead of a dict-splat: keep literal-key checking so
+    # the probe argv and injected runner types stay statically verifiable.
     target = OmpPersistenceAdapter(
         engine="omp",
         profile=OmpPersistenceProfile(
@@ -348,9 +351,9 @@ def test_omp_adapter_export_import_sdk_coldload(
             sessions_dir=str(sessions),
             blobs_dir=str(target_blobs),
             restart_argv=("offline-sdk-read", "{session_path}"),
-            **target_kwargs,
+            restart_probe_argv=() if injected else _probe_argv(verify_root),
         ),
-        **({} if not injected else {"restart_runner": restart}),
+        restart_runner=restart if injected else None,
     )
     proof = target.import_exact(archive)
     assert_exact_restore(archive, proof)
@@ -433,9 +436,6 @@ def test_omp_adapter_export_import_sdk_coldload(
 
     if not injected:
         monkeypatch.setattr(omp_adapter, "run_probe", recording_returned_probe)
-    returned_kwargs = (
-        {} if injected else {"restart_probe_argv": _probe_argv(returned_root)}
-    )
     returned = OmpPersistenceAdapter(
         engine="omp",
         profile=OmpPersistenceProfile(
@@ -443,9 +443,9 @@ def test_omp_adapter_export_import_sdk_coldload(
             sessions_dir=str(returned_sessions),
             blobs_dir=str(returned_blobs),
             restart_argv=("offline-native-rpc", "{session_path}"),
-            **returned_kwargs,
+            restart_probe_argv=() if injected else _probe_argv(returned_root),
         ),
-        **({} if not injected else {"restart_runner": restart_returned}),
+        restart_runner=restart_returned if injected else None,
     )
     assert_exact_restore(evolved, returned.import_exact(evolved))
     returned_restored = returned_sessions / Path(written["file"]).name

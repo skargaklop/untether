@@ -136,7 +136,7 @@ def test_missing_spill_file_refused(tmp_path, monkeypatch):
         engine.export_exact("s1")
 
 
-def test_import_with_manifest_refuses_before_writes(tmp_path, spill):
+def test_import_with_manifest_restores_original_records(tmp_path, spill):
     log = spill("pi-bash-0123456789abcdef.log")
     store = tmp_path / "store"
     engine = adapter(store)
@@ -145,10 +145,10 @@ def test_import_with_manifest_refuses_before_writes(tmp_path, spill):
 
     fresh = tmp_path / "fresh-store"
     target = adapter(fresh)
-    with pytest.raises(CapabilityUnavailable, match="PI_OUTPUT_IMPORT_NOT_IMPLEMENTED"):
-        target.import_exact(archive)
-    # Refusal happened before ANY store write.
-    assert list(fresh.iterdir()) == []
+    proof = target.import_exact(archive)
+    assert proof.native_id == archive.native_id
+    assert target.export_exact("s1").records == archive.records
+    assert (fresh / "s1.jsonl").read_bytes() == (store / "s1.jsonl").read_bytes()
 
 
 def test_overwrite_with_manifest_refused(tmp_path, spill):

@@ -380,7 +380,8 @@ def test_opencode_coordinator_push_pull_roundtrip(tmp_path: Path, monkeypatch) -
                 root=ops,
                 config_path=config_file,
                 receiver_call=pull_call,
-                **destination,
+                destination_chat=destination["destination_chat"],
+                destination_topic=destination["destination_topic"],
             )
             for sid, destination in zip(ids, destinations, strict=True)
         ]

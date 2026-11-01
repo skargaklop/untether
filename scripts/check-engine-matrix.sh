@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Reproducible all-engine session-migration compatibility check.
+# Supplemental installed-profile session-migration compatibility check.
 #
-# Runs the installed-engine native restore/restart/follow-up matrix on
-# disposable stores through the registered production persistence adapters.
+# Runs Pi, OMP, Codex and OpenCode persistence checks on disposable stores
+# through registered production adapters. This fixed roster does not prove
+# ACP-wide coverage; SDK reads and shell appends are not model follow-up turns.
 # Docs: docs/reference/session-migration-verification.md
 #
 # Usage: scripts/check-engine-matrix.sh [-k selection]

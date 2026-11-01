@@ -947,7 +947,9 @@ class OmpPersistenceAdapter:
 def _validate_omp_store(sessions_dir: Path, blobs_dir: Path) -> None:
     """Fail closed unless both declared roots are real, link-free directories."""
     for root in (sessions_dir, blobs_dir):
-        if not root.is_dir() or root.is_symlink():
+        if root.is_symlink():
+            raise CapabilityUnavailable("PERSISTENCE_STORE_SYMLINK") from None
+        if not root.is_dir():
             raise CapabilityUnavailable("PERSISTENCE_STORE_NOT_READY")
         try:
             resolved = root.resolve(strict=True)

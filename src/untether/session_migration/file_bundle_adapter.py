@@ -41,7 +41,7 @@ import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -49,11 +49,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from .native_adapter import (
     CapabilityUnavailable,
     RestoreProof,
-    register_persistence_adapter,
-    registered_adapter_engines,
 )
 from .native_archive import NativeArchive, _safe_name
-from .omp_adapter import OmpPersistenceAdapter
 from .pi_output_assets import (
     MANIFEST_RECORD as _PI_OUTPUT_MANIFEST_RECORD,
 )
@@ -69,8 +66,20 @@ from .pi_output_assets import (
 from .pi_output_assets import (
     manifest_record as _pi_output_manifest_record,
 )
+from .pi_output_assets import (
+    preflight_assets as _pi_output_preflight,
+)
+from .pi_output_assets import (
+    reclaim_asset_plan as _pi_output_reclaim_plan,
+)
+from .pi_output_assets import (
+    restore_assets as _pi_output_restore,
+)
+from .pi_output_assets import (
+    validate_asset_manifest as _pi_output_validate_manifest,
+)
+from .project_path import _project_path_key
 from .settings import EnginePersistenceProfile, SessionMigrationSettings
-from .subprocess_adapter import ExecutablePersistenceAdapter
 
 _MAX_RECORDS = 64
 _MAX_RECORD_BYTES = 64 * 1024 * 1024
@@ -298,7 +307,9 @@ def _validate_profile(
     sessions_dir: Path,
 ) -> None:
     """Fail closed unless the real store matches the declared layout."""
-    if not sessions_dir.is_dir() or sessions_dir.is_symlink():
+    if sessions_dir.is_symlink():
+        raise CapabilityUnavailable("PERSISTENCE_STORE_SYMLINK") from None
+    if not sessions_dir.is_dir():
         raise CapabilityUnavailable("PERSISTENCE_STORE_NOT_READY")
     try:
         resolved = sessions_dir.resolve(strict=True)
@@ -323,39 +334,6 @@ def _header_matches_session(header: object, native_id: str) -> bool:
         and header["version"] == 3
         and header.get("id") == native_id
     )
-
-
-def _project_path_key(value: object) -> tuple[str, ...] | None:
-    """Compare absolute paths lexically, without consulting this host's filesystem."""
-    if (
-        not isinstance(value, str)
-        or not value
-        or any(ord(char) < 32 or ord(char) == 127 for char in value)
-    ):
-        return None
-    windows = PureWindowsPath(value)
-    if windows.drive:
-        # Only drive-rooted paths: reject UNC/device namespaces and drive-relative paths.
-        if (
-            len(windows.drive) != 2
-            or windows.drive[1] != ":"
-            or not windows.is_absolute()
-        ):
-            return None
-        parts = windows.parts
-        if (
-            ".." in parts
-            or not windows.drive[0].isascii()
-            or not windows.drive[0].isalpha()
-        ):
-            return None
-        return ("windows", windows.drive.lower(), *parts[1:])
-    if not value.startswith("/") or value.startswith("//") or "\\" in value:
-        return None
-    path = PurePosixPath(value)
-    if ".." in path.parts:
-        return None
-    return ("posix", *path.parts)
 
 
 def _record_name_for(profile: EnginePersistenceProfile, native_id: str) -> str:
@@ -698,14 +676,18 @@ class FileBundlePersistenceAdapter:
         allowed = {"session.jsonl", _LAYOUT_RECORD, _PARENTS_RECORD} | {
             f"parent-{index}.jsonl" for index in range(1, _MAX_PARENTS + 1)
         }
-        # Asset-carrying archives refuse before ANY store write: spill bytes
-        # are carried faithfully but their restore-to-tmp semantics are not
-        # implemented, and a silent drop would falsely certify fidelity.
-        if _PI_OUTPUT_MANIFEST_RECORD in archive.records:
-            raise CapabilityUnavailable("PI_OUTPUT_IMPORT_NOT_IMPLEMENTED")
-        if set(archive.records) - allowed - {_PI_OUTPUT_MANIFEST_RECORD}:
+        manifest_present = _PI_OUTPUT_MANIFEST_RECORD in archive.records
+        asset_names = {
+            name for name in archive.records if name.startswith("pi-output/")
+        }
+        # Spill asset records ride along only with a validated manifest; the
+        # exact asset record set is checked against the manifest below.
+        if asset_names and not manifest_present:
             raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
-        if not {"session.jsonl"} <= set(archive.records) <= allowed:
+        extra = set(archive.records) - allowed - asset_names
+        if extra - ({_PI_OUTPUT_MANIFEST_RECORD} if manifest_present else set()):
+            raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
+        if "session.jsonl" not in archive.records:
             raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
         layout_name = (
             _layout_root_journal(archive.records[_LAYOUT_RECORD])
@@ -727,6 +709,22 @@ class FileBundlePersistenceAdapter:
         parents = validate_parent_records(
             archive.records, record_path.name, archive.native_id
         )
+        journals = [data, *(payload for _, payload in parents)]
+        if _pi_output_refs(journals) and not manifest_present:
+            # A journal references spilled output: a validated manifest is
+            # mandatory for import.
+            raise CapabilityUnavailable("PI_OUTPUT_REFUSED")
+        if manifest_present:
+            listing = _pi_output_validate_manifest(archive.records, journals)
+            # Strict record set: only manifest-validated asset records may
+            # ride along; an orphan pi-output record refuses before any write.
+            if asset_names != set(listing.values()):
+                raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
+            plan = _pi_output_preflight(
+                archive.records, journals, Path(tempfile.gettempdir())
+            )
+        else:
+            plan = []
         metadata_path = _metadata_path(self.sessions_dir, archive.native_id)
         metadata = _metadata_decode(
             json.dumps(
@@ -758,6 +756,10 @@ class FileBundlePersistenceAdapter:
         owned: list[Path] = []  # only files this import created may be removed
         metadata_owned = False
         try:
+            # Spilled output assets first: the restored journals reference
+            # them the moment the engine resumes. Created paths join the
+            # owned rollback set.
+            owned.extend(_pi_output_restore(plan))
             for basename, payload in parents:
                 destination = self.sessions_dir / basename
                 if destination.exists():
@@ -795,6 +797,12 @@ class FileBundlePersistenceAdapter:
             self._run_restart_probe(archive.native_id, record_path)
             # 3) record still intact after the restart probe
             stored = _read_record_strict(self.profile, record_path, archive.native_id)
+            # 4) independently reread every asset after the restart probe: a
+            # nonempty re-preflight means a spill file went missing or mutated.
+            if manifest_present and _pi_output_preflight(
+                archive.records, journals, Path(tempfile.gettempdir())
+            ):
+                raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
             # 4) every parent re-read: hashes only for parents that survived.
             for basename, payload in parents:
                 parent_path = self.sessions_dir / basename
@@ -869,14 +877,15 @@ class FileBundlePersistenceAdapter:
             {_LAYOUT_RECORD} if layout_name is not None else set()
         )
         record_names |= allowed_parents & set(records)
-        # Reclaim carries only journal records; a spill-manifest archive is
-        # refused before any overwrite exactly like import_exact.
-        if _PI_OUTPUT_MANIFEST_RECORD in records or any(
-            name.startswith("pi-output/") for name in records
-        ):
-            raise CapabilityUnavailable("PI_OUTPUT_IMPORT_NOT_IMPLEMENTED")
-        if set(records) != record_names or set(expected_prior_records) != record_names:
-            raise CapabilityUnavailable("RECORD_LAYOUT_REFUSED")
+        # Reclaim restores spill assets: manifest mandatory for spill refs.
+        # Each side's exact record shape (journals + that side's manifest
+        # assets) is validated strictly inside reclaim_asset_plan.
+        journal_names = {"session.jsonl"} | (allowed_parents & set(records))
+        if layout_name is not None:
+            journal_names.add(_LAYOUT_RECORD)
+        plan, _ = _pi_output_reclaim_plan(
+            records, expected_prior_records, journal_names
+        )
         data = records["session.jsonl"]
         prior = expected_prior_records["session.jsonl"]
         if len(data) > _MAX_RECORD_BYTES or not data.count(b"\n"):
@@ -911,11 +920,14 @@ class FileBundlePersistenceAdapter:
         current = record_path.read_bytes()
         if current not in (prior, data):
             raise CapabilityUnavailable("OVERWRITE_PRIOR_MISMATCH")
-        # Shared-parent preflight before ANY store write; re-run as postprobe.
+        # Pure, byte-only preflight before ANY store write; re-run as postprobe.
         from .pi_parent_reclaim import validate_reclaim_parents
 
         parent_args = (self.sessions_dir, records, expected_prior_records)
         validate_reclaim_parents(*parent_args, record_path.name, native_id)
+        # Spilled output assets next: the replaced journals reference them the
+        # moment the engine resumes; a retry reuses identical files unchanged.
+        _pi_output_restore(plan)
         tmp_name: str | None = None
         try:
             fd, tmp_name = tempfile.mkstemp(
@@ -955,6 +967,13 @@ class FileBundlePersistenceAdapter:
         self._run_restart_probe(native_id, record_path)
         # A restart that mutated a shared parent must refuse the same way.
         validate_reclaim_parents(*parent_args, record_path.name, native_id)
+        # Post-probe asset exactness: a nonempty plan means a spill file
+        # went missing or mutated after the restore.
+        post_plan, _ = _pi_output_reclaim_plan(
+            records, expected_prior_records, journal_names
+        )
+        if post_plan:
+            raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
         stored = _read_record_strict(self.profile, record_path, native_id)
         if _metadata_decode(metadata_path.read_bytes(), native_id) != metadata:
             raise CapabilityUnavailable("EXACT_RESTORE_UNVERIFIED")
@@ -970,72 +989,11 @@ def register_from_settings(settings: SessionMigrationSettings, *, engine: str) -
 
     No-op when the engine has no persistence profile (plugin entry points stay
     authoritative) or when another registration already claims the engine.
+
+    Thin wrapper: the profile-routing implementation lives in
+    :mod:`profile_registration` so file persistence stays separate from
+    profile factories; the public import path is unchanged.
     """
-    from .session_gate import configure_session_gate
+    from .profile_registration import register_from_settings as _register
 
-    configure_session_gate(settings)
-    profile = settings.persistence.engines.get(engine)
-    if profile is None:
-        return
-    if profile.format == "omp-v1":
-        # Route before file-layout math: OMP owns its realdir validation.
-        if engine in registered_adapter_engines():
-            return
-        register_persistence_adapter(
-            engine,
-            lambda: OmpPersistenceAdapter(engine=engine, profile=profile),
-        )
-        return
-    if profile.format == "executable-v1":
-        # Route before file-layout math: the executable adapter owns its own
-        # realdir/executable validation at call time.
-        if engine in registered_adapter_engines():
-            return
-        register_persistence_adapter(
-            engine,
-            lambda: ExecutablePersistenceAdapter(
-                engine=engine,
-                executable=Path(profile.executable),
-                store=Path(profile.store),
-                timeout=profile.timeout,
-                interpreter=profile.interpreter,
-            ),
-        )
-        return
-    if profile.format == "codex-rollout-v1":
-        # Codex rollout journals: the dedicated adapter owns store validation
-        # and the app-server resume proof.
-        if engine in registered_adapter_engines():
-            return
-        from .codex_rollout_adapter import CodexRolloutPersistenceAdapter
-
-        register_persistence_adapter(
-            engine,
-            lambda: CodexRolloutPersistenceAdapter(
-                engine=engine,
-                sessions_root=Path(profile.sessions_root),
-                app_server_executable=Path(profile.app_server_executable),
-                resume_timeout_s=profile.resume_timeout_s,
-            ),
-        )
-        return
-    if profile.format == "opencode-sync-v1":
-        # OpenCode sync events: the adapter owns isolation and serve/replay proof.
-        if engine in registered_adapter_engines():
-            return
-        from .opencode_sync_adapter import OpenCodeSyncAdapter
-
-        register_persistence_adapter(
-            engine,
-            lambda: OpenCodeSyncAdapter(engine=engine, profile=profile),
-        )
-        return
-    sessions_dir = Path(profile.sessions_dir)
-    if engine in registered_adapter_engines():
-        return
-    register_persistence_adapter(
-        engine,
-        lambda: FileBundlePersistenceAdapter(
-            engine=engine, profile=profile, sessions_dir=sessions_dir
-        ),
-    )
+    _register(settings, engine=engine)

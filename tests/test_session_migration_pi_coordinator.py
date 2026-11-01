@@ -542,7 +542,8 @@ def test_pi_coordinator_push_pull_roundtrip(tmp_path: Path, monkeypatch) -> None
                     root=ops,
                     config_path=tmp_path / "untether.toml",
                     receiver_call=pull_call,
-                    **destination,
+                    destination_chat=destination["destination_chat"],
+                    destination_topic=destination["destination_topic"],
                 )
                 for sid, destination in zip(ids, pull_destinations, strict=True)
             ]
