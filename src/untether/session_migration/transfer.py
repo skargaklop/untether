@@ -596,7 +596,12 @@ def _complete_remote_export(
         action="export-complete",
         session_id=session_id,
     )
+    # The transport (``remote.receiver_request``) requires ``protocol: 1``
+    # on every reply it returns, and ``handle_receiver`` includes it; the
+    # completion ACK must accept the real wire shape — not a stripped dict
+    # that only hand-rolled test fakes produced.
     if reply != {
+        "protocol": 1,
         "status": "export_completed",
         "operation_id": export_op,
         "engine": engine,

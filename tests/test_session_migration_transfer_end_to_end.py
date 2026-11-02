@@ -112,6 +112,7 @@ def _receiver_call(store: Path, tmp_path: Path, *, authorized_peer="local"):
             assert exported[operation_id] == (engine, session_id, digest)
             completed.add(operation_id)
             return {
+                "protocol": 1,
                 "status": "export_completed",
                 "operation_id": operation_id,
                 "engine": engine,
@@ -680,6 +681,7 @@ def test_pull_completion_retry_without_duplicate_import(
         completions.append(op)
         completed = True
         reply = {
+            "protocol": 1,
             "status": "export_completed",
             "operation_id": op,
             "engine": engine,
@@ -944,7 +946,11 @@ def test_second_push_after_return_pull_reclaims_real_receiver(tmp_path, monkeypa
                 peer_name="local",
                 project="demo",
             )
-        return {**result, "endpoint_id": kwargs["peer"].expected_endpoint_id}
+        return {
+            "protocol": 1,
+            **result,
+            "endpoint_id": kwargs["peer"].expected_endpoint_id,
+        }
 
     def move(direction):
         return transfer.perform(

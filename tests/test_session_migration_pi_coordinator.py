@@ -369,6 +369,7 @@ def _receiver_call(
             digest = json.loads(package)["package_sha256"]
             assert exported[operation_id] == (engine, session_id, digest)
             return {
+                "protocol": 1,
                 "status": "export_completed",
                 "operation_id": operation_id,
                 "engine": engine,
