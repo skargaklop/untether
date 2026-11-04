@@ -113,7 +113,7 @@ def _assert_store_records(store: Path, sids: list[str], *, generation: int) -> N
             )
 
 
-def _receiver_rpc(store: Path, tmp_path: Path):
+def _receiver_rpc(store: Path, tmp_path: Path, *, engine: str = ENGINE):
     """Receiver RPC for one remote endpoint, run in-process (both legs).
 
     The remote side of an SSH transfer is a separate process with its own
@@ -130,7 +130,7 @@ def _receiver_rpc(store: Path, tmp_path: Path):
     including the ``protocol: 1`` marker the coordinator must accept.
     """
     remote_adapter = ExecutablePersistenceAdapter(
-        ENGINE, FIXTURE, store, interpreter=sys.executable
+        engine, FIXTURE, store, interpreter=sys.executable
     )
     gate = str(tmp_path / "receiver-gate")
 
@@ -173,8 +173,8 @@ def _receiver_rpc(store: Path, tmp_path: Path):
         frame = json.dumps(fields).encode() + b"\n" + package
         from untether.session_migration import native_adapter
 
-        previous = native_adapter._ADAPTERS.get(ENGINE)
-        native_adapter._ADAPTERS[ENGINE] = lambda: remote_adapter
+        previous = native_adapter._ADAPTERS.get(engine)
+        native_adapter._ADAPTERS[engine] = lambda: remote_adapter
         saved_gate = os.environ.get("UNTETHER_SESSION_GATE_ROOT")
         os.environ["UNTETHER_SESSION_GATE_ROOT"] = gate
         try:
@@ -185,9 +185,9 @@ def _receiver_rpc(store: Path, tmp_path: Path):
             else:
                 os.environ["UNTETHER_SESSION_GATE_ROOT"] = saved_gate
             if previous is None:
-                native_adapter._ADAPTERS.pop(ENGINE, None)
+                native_adapter._ADAPTERS.pop(engine, None)
             else:
-                native_adapter._ADAPTERS[ENGINE] = previous
+                native_adapter._ADAPTERS[engine] = previous
         reply = json.loads(raw)
         if action == "export-complete":
             assert reply["status"] == "export_completed", reply
