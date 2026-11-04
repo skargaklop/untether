@@ -270,6 +270,9 @@ def build_runtime_spec(
     default_engine_override: str | None = None,
     reserved: Iterable[str] = RESERVED_CHAT_COMMANDS,
 ) -> RuntimeSpec:
+    from .session_migration.session_gate import configure_session_gate
+
+    configure_session_gate(settings.session_migration)
     allowlist = resolve_plugins_allowlist(settings)
     static_ids = list_backend_ids(allowlist=allowlist)
     backends = load_backends(
