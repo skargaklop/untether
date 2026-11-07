@@ -112,6 +112,11 @@ class Message(msgspec.Struct, forbid_unknown_fields=False):
 class CallbackQueryMessage(msgspec.Struct, forbid_unknown_fields=False):
     message_id: int
     chat: Chat
+    # Topic context for confirm callbacks: Telegram includes this on forum
+    # topic messages, and claim_pending_confirm matches the callback's
+    # thread against the record's thread. Undeclared = silently dropped at
+    # decode, breaking every topic confirm (live failure 2026-11-07).
+    message_thread_id: int | None = None
 
 
 class CallbackQuery(msgspec.Struct, forbid_unknown_fields=False):

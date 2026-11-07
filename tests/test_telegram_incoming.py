@@ -318,3 +318,41 @@ def test_parse_incoming_update_topic_fields() -> None:
     assert msg.is_topic_message is True
     assert msg.chat_type == "supergroup"
     assert msg.is_forum is True
+
+
+def test_callback_query_thread_id_survives_decode() -> None:
+    """Regression: forum-topic confirm callbacks must keep message_thread_id.
+
+    Telegram sends callback queries whose ``message`` carries
+    ``message_thread_id`` for topic messages. The handler claims the pending
+    confirmation only when the callback's thread matches the record's thread;
+    if the schema drops the field at decode, every topic confirm silently
+    fails (observed live 2026-11-07 00:17/00:19).
+    """
+    import msgspec
+
+    from untether.telegram.api_schemas import Update
+
+    payload = {
+        "update_id": 2,
+        "callback_query": {
+            "id": "cbq-2",
+            "from": {"id": 321},
+            "message": {
+                "message_id": 56,
+                "chat": {"id": -1003932376071, "type": "supergroup"},
+                "message_thread_id": 121,
+                "is_topic_message": True,
+            },
+            "data": "compact:tok:confirm",
+        },
+    }
+    update = msgspec.convert(payload, type=Update)
+    msg = parse_incoming_update(update, chat_id=-1003932376071)
+    assert isinstance(msg, TelegramCallbackQuery)
+    assert msg.raw is not None
+    cb_msg = msg.raw.get("message") or {}
+    assert cb_msg.get("message_thread_id") == 121, (
+        "message_thread_id dropped at decode — topic confirm callbacks cannot "
+        "match their pending record"
+    )
