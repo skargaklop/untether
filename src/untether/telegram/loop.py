@@ -537,8 +537,15 @@ def _dispatch_builtin_command(
                 context=ambient_context,
                 chat_id=msg.chat_id,
                 timeout_s=cfg.shell_timeout_s,
+                stream_interval_s=cfg.shell_stream_interval_s,
+                render_min_interval_s=cfg.shell_render_min_interval_s,
+                stream_lines=cfg.shell_stream_lines,
                 max_output_bytes=cfg.shell_max_output_bytes,
+                max_output_messages=cfg.shell_max_output_messages,
                 reply=reply,
+                transport=cfg.exec_cfg.transport,
+                user_msg_id=msg.message_id,
+                thread_id=msg.thread_id,
             )
         )
         return True
@@ -1883,6 +1890,62 @@ async def _notify_drain_timeout(
                 )
 
 
+async def _run_compact_with_card(
+    *,
+    transport: Transport,
+    chat_id: int,
+    progress_ref: MessageRef | None,
+    resume_token: ResumeToken,
+    instructions: str | None,
+    resolve_runner: Callable[..., Any],
+    interval_s: float,
+) -> str:
+    """Run one compact operation behind a mutating OperationCard.
+
+    Returns the terminal status text (already rendered onto the card) so
+    callers (run_compact_job / tests) can log or assert it.
+    """
+    from ..compact import get_compact_support
+    from ..model import CompletedEvent
+    from .commands.operation_card import OperationCard
+
+    card = OperationCard(
+        transport=transport,
+        chat_id=chat_id,
+        ref=progress_ref,
+        label="running summary…",
+        interval_s=interval_s,
+    )
+    async with anyio.create_task_group() as card_tg:
+        card_tg.start_soon(card.run)
+        entry = resolve_runner(
+            resume_token=resume_token, engine_override=resume_token.engine
+        )
+        final_event: CompletedEvent | None = None
+        async for event in entry.runner.compact(resume_token, instructions):
+            if isinstance(event, CompletedEvent):
+                final_event = event
+        if final_event is None or not final_event.ok:
+            await card.fail(
+                final_event.error
+                if final_event is not None
+                else "compaction did not complete"
+            )
+            raise RuntimeError(
+                final_event.error
+                if final_event is not None
+                else "compaction did not complete"
+            )
+        support = get_compact_support(entry.runner)
+        status = (
+            "completed — compaction finished."
+            if support.true_compaction
+            else "completed — handoff summary finished."
+        )
+        await card.finish(status)
+    return status
+
+
 async def run_main_loop(
     cfg: TelegramBridgeConfig,
     poller: Callable[
@@ -2453,105 +2516,139 @@ async def run_main_loop(
                     ),
                 )
 
+            def _new_operation_card(job: ThreadJob, label: str):
+                from .commands.operation_card import OperationCard
+
+                return OperationCard(
+                    transport=cfg.exec_cfg.transport,
+                    chat_id=cast(int, job.chat_id),
+                    ref=job.progress_ref,
+                    label=label,
+                    interval_s=cfg.exec_cfg.min_render_interval,
+                )
+
+            async def _job_run_options(job: ThreadJob) -> EngineRunOptions | None:
+                """Resolve source-engine preferences using the normal topic scope."""
+                topic_thread_id = (
+                    cast(int, job.thread_id)
+                    if state.topic_store is not None
+                    and job.thread_id is not None
+                    and _topics_chat_allowed(
+                        cfg,
+                        cast(int, job.chat_id),
+                        scope_chat_ids=state.topics_chat_ids,
+                    )
+                    else None
+                )
+                options = await _resolve_engine_run_options(
+                    cast(int, job.chat_id),
+                    topic_thread_id,
+                    job.resume_token.engine,
+                    chat_prefs=state.chat_prefs,
+                    topic_store=state.topic_store,
+                )
+                if options is None:
+                    return None
+                # Preserve engine preferences, not prompt-changing workflow modes:
+                # a soft-plan prefix would turn a native /compact into prose.
+                return EngineRunOptions(
+                    model=options.model,
+                    reasoning=options.reasoning,
+                    permission_mode=options.permission_mode,
+                )
+
             async def run_compact_job(job: ThreadJob) -> None:
                 """Run native compaction while retaining one operation card."""
-                from ..compact import get_compact_support
-                from ..model import CompletedEvent
+                from ..runners.run_options import apply_run_options
 
-                await _edit_operation_card(job, "running summary…")
-                entry = cfg.runtime.resolve_runner(
-                    resume_token=job.resume_token,
-                    engine_override=job.resume_token.engine,
-                )
-                final_event: CompletedEvent | None = None
-                async for event in entry.runner.compact(
-                    job.resume_token, job.compact_instructions
-                ):
-                    if isinstance(event, CompletedEvent):
-                        final_event = event
-                if final_event is None or not final_event.ok:
-                    raise RuntimeError(
-                        final_event.error
-                        if final_event is not None
-                        else "compaction did not complete"
+                with apply_run_options(await _job_run_options(job)):
+                    await _run_compact_with_card(
+                        transport=cfg.exec_cfg.transport,
+                        chat_id=cast(int, job.chat_id),
+                        progress_ref=job.progress_ref,
+                        resume_token=job.resume_token,
+                        instructions=job.compact_instructions,
+                        resolve_runner=cfg.runtime.resolve_runner,
+                        interval_s=cfg.exec_cfg.min_render_interval,
                     )
-                support = get_compact_support(entry.runner)
-                status = (
-                    "completed — compaction finished."
-                    if support.true_compaction
-                    else "completed — handoff summary finished."
-                )
-                await _edit_operation_card(job, status)
 
             async def run_handoff_job(job: ThreadJob) -> None:
                 """Create a source summary then seed a new destination session."""
                 from ..compact import handoff_seed_prompt
                 from ..markdown import MarkdownParts
                 from ..model import CompletedEvent
+                from ..runners.run_options import apply_run_options
                 from .render import MAX_BODY_CHARS, prepare_telegram_multi
 
                 chat_id = cast(int, job.chat_id)
                 user_msg_id = cast(int, job.user_msg_id)
                 thread_id = cast(int | None, job.thread_id)
-                await _edit_operation_card(job, "running summary…")
-                entry = cfg.runtime.resolve_runner(
-                    resume_token=job.resume_token,
-                    engine_override=job.resume_token.engine,
-                )
-                final_event: CompletedEvent | None = None
-                async for event in entry.runner.compact(
-                    job.resume_token, job.compact_instructions
-                ):
-                    if isinstance(event, CompletedEvent):
-                        final_event = event
-                if final_event is None or not final_event.ok:
-                    raise RuntimeError(
-                        final_event.error
-                        if final_event is not None
-                        else "summary failed"
-                    )
-                summary = (final_event.answer or "").strip()
-                if not summary:
-                    raise RuntimeError("summary was empty")
 
-                target_engine = job.handoff_target or job.resume_token.engine
-                await _edit_operation_card(
-                    job, f"seeding destination — new {target_engine} session…"
-                )
-                destination = await run_job(
-                    chat_id,
-                    user_msg_id,
-                    handoff_seed_prompt(summary),
-                    None,
-                    None,
-                    thread_id=thread_id,
-                    engine_override=target_engine,
-                    persist_sessions=False,
-                )
-                if (
-                    destination is None
-                    or destination.cancelled
-                    or destination.completed is None
-                    or not destination.completed.ok
-                    or destination.resume is None
-                    or destination.resume.engine != target_engine
-                ):
-                    raise RuntimeError("destination session did not start")
-                await _commit_handoff_routing(
-                    topic_store=state.topic_store,
-                    topic_key=(chat_id, cast(int, job.thread_id))
-                    if state.topic_store is not None and job.thread_id is not None
-                    else None,
-                    chat_session_store=state.chat_session_store,
-                    chat_session_key=job.session_key,
-                    destination=destination.resume,
-                )
-                await _edit_operation_card(
-                    job,
-                    "completed — new session started with the summary.\n"
-                    "Send your next message to continue; old-message replies retain "
-                    "their old session.",
-                )
+                job_run_options = await _job_run_options(job)
+                card = _new_operation_card(job, "running summary…")
+                async with anyio.create_task_group() as card_tg:
+                    card_tg.start_soon(card.run)
+                    entry = cfg.runtime.resolve_runner(
+                        resume_token=job.resume_token,
+                        engine_override=job.resume_token.engine,
+                    )
+                    final_event: CompletedEvent | None = None
+                    with apply_run_options(job_run_options):
+                        async for event in entry.runner.compact(
+                            job.resume_token, job.compact_instructions
+                        ):
+                            if isinstance(event, CompletedEvent):
+                                final_event = event
+                    if final_event is None or not final_event.ok:
+                        await card.fail(
+                            final_event.error
+                            if final_event is not None
+                            else "summary failed"
+                        )
+                        return
+                    summary = (final_event.answer or "").strip()
+                    if not summary:
+                        await card.fail("summary was empty")
+                        return
+
+                    target_engine = job.handoff_target or job.resume_token.engine
+                    await card.set_label(
+                        f"seeding destination — new {target_engine} session…"
+                    )
+                    destination = await run_job(
+                        chat_id,
+                        user_msg_id,
+                        handoff_seed_prompt(summary),
+                        None,
+                        None,
+                        thread_id=thread_id,
+                        engine_override=target_engine,
+                        persist_sessions=False,
+                    )
+                    if (
+                        destination is None
+                        or destination.cancelled
+                        or destination.completed is None
+                        or not destination.completed.ok
+                        or destination.resume is None
+                        or destination.resume.engine != target_engine
+                    ):
+                        await card.fail("destination session did not start")
+                        return
+                    await _commit_handoff_routing(
+                        topic_store=state.topic_store,
+                        topic_key=(chat_id, cast(int, job.thread_id))
+                        if state.topic_store is not None and job.thread_id is not None
+                        else None,
+                        chat_session_store=state.chat_session_store,
+                        chat_session_key=job.session_key,
+                        destination=destination.resume,
+                    )
+                    await card.finish(
+                        "completed — new session started with the summary.\n"
+                        "Send your next message to continue; old-message replies retain "
+                        "their old session.",
+                    )
 
                 parts = MarkdownParts(header="handoff summary", body=summary)
                 for rendered_text, entities in prepare_telegram_multi(

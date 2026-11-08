@@ -473,3 +473,133 @@ async def test_handoff_route_commit_rolls_back_first_store_on_second_failure() -
 
     assert topic_store.current == old_topic
     assert chat_store.current == old_chat
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("handoff", [False, True])
+@pytest.mark.parametrize("topic", [False, True])
+async def test_compact_job_applies_chat_model_override(
+    tmp_path, handoff, topic
+) -> None:
+    """Compact and confirmed handoff retain the source model preference."""
+    from untether.config import ProjectsConfig
+    from untether.router import AutoRouter, RunnerEntry
+    from untether.runners.run_options import EngineRunOptions, get_run_options
+    from untether.settings import TelegramTopicsSettings
+    from untether.telegram.chat_prefs import ChatPrefsStore, resolve_prefs_path
+    from untether.telegram.engine_overrides import EngineOverrides
+    from untether.telegram.topic_state import TopicStateStore, resolve_state_path
+    from untether.telegram.types import TelegramCallbackQuery
+    from untether.transport_runtime import TransportRuntime
+
+    observed_options: list[EngineRunOptions | None] = []
+    destination_models: list[str | None] = []
+    source_model = "topic-model" if topic else "chat-model"
+
+    class _OptionsObservingRunner(_CompactRunner):
+        async def compact(
+            self, resume: ResumeToken, instructions: str | None = None
+        ) -> AsyncIterator[UntetherEvent]:
+            opts = get_run_options()
+            observed_options.append(opts)
+            yield EventFactory(self.engine).completed_ok(
+                answer="summary", resume=resume
+            )
+
+    class _DestinationRunner(ScriptRunner):
+        async def run(self, prompt, resume):
+            opts = get_run_options()
+            destination_models.append(opts.model if opts else None)
+            async for event in super().run(prompt, resume):
+                yield event
+
+    runner = _OptionsObservingRunner([Return(answer="unused")], engine="codex")
+    destination_runner = _DestinationRunner([Return(answer="continued")], engine="pi")
+    runtime = TransportRuntime(
+        router=AutoRouter(
+            entries=[
+                RunnerEntry(engine=runner.engine, runner=runner),
+                RunnerEntry(engine="pi", runner=destination_runner),
+            ],
+            default_engine=runner.engine,
+        ),
+        projects=ProjectsConfig(projects={}, default_project=None),
+        config_path=tmp_path / "untether.toml",
+    )
+    transport = FakeTransport()
+    cfg = replace(
+        make_cfg(transport, runner),
+        allowed_user_ids=(123,),
+        runtime=runtime,
+        topics=TelegramTopicsSettings(enabled=topic, scope="main"),
+    )
+    prefs = ChatPrefsStore(resolve_prefs_path(tmp_path / "untether.toml"))
+    await prefs.set_engine_override(
+        123, "codex", EngineOverrides(model="chat-model", reasoning="low")
+    )
+    await prefs.set_engine_override(
+        123, "pi", EngineOverrides(model="destination-model")
+    )
+    await prefs.set_plan_mode(123, True)
+    await prefs.set_subagent(123, "not-for-summary")
+    if topic:
+        store = TopicStateStore(resolve_state_path(tmp_path / "untether.toml"))
+        await store.set_engine_override(
+            123, 77, "codex", EngineOverrides(model="topic-model", reasoning="low")
+        )
+
+    session_id = "model-override-compact-source"
+
+    async def poller(_cfg: TelegramBridgeConfig) -> Any:
+        yield replace(
+            _compact_message(
+                "/handoff to pi" if handoff else "/compact",
+                message_id=2,
+                reply_to_message_id=99,
+                reply_to_text=f"done\n↩️ `codex resume {session_id}`",
+            ),
+            thread_id=77 if topic else None,
+        )
+        if handoff:
+            with anyio.fail_after(5):
+                while not any(
+                    "reply_markup" in call["message"].extra
+                    for call in transport.send_calls
+                ):
+                    await anyio.sleep(0.01)
+            call = next(
+                call
+                for call in transport.send_calls
+                if "reply_markup" in call["message"].extra
+            )
+            data = call["message"].extra["reply_markup"]["inline_keyboard"][0][0][
+                "callback_data"
+            ]
+            yield TelegramCallbackQuery(
+                transport="telegram",
+                chat_id=123,
+                message_id=call["ref"].message_id,
+                callback_query_id="query",
+                data=data,
+                sender_id=123,
+                raw={"message": {"message_thread_id": 77 if topic else None}},
+            )
+        with anyio.fail_after(5):
+            while not observed_options:
+                await anyio.sleep(0.01)
+            if handoff:
+                while not any(
+                    "completed — new session started" in call["message"].text
+                    for call in transport.edit_calls
+                ):
+                    await anyio.sleep(0.01)
+
+    await run_main_loop(cfg, poller)
+
+    assert observed_options == [EngineRunOptions(model=source_model, reasoning="low")]
+    assert destination_models == (["destination-model"] if handoff else [])
+    if handoff:
+        assert any(
+            "completed — new session started" in call["message"].text
+            for call in transport.edit_calls
+        )
