@@ -137,8 +137,22 @@ class SessionLockMixin:
             return
         lock = self.lock_for(resume_token)
         async with lock:
-            async for evt in run_fn(prompt, resume_token):
-                yield evt
+            with contextlib.ExitStack() as gates:
+                gate_root = os.environ.get("UNTETHER_SESSION_GATE_ROOT")
+                if gate_root:
+                    from pathlib import Path
+
+                    from .session_migration.session_gate import session_gate
+
+                    gates.enter_context(
+                        session_gate(
+                            root=Path(gate_root),
+                            engine_id=self.engine,
+                            native_id=resume_token.value,
+                        )
+                    )
+                async for evt in run_fn(prompt, resume_token):
+                    yield evt
 
 
 def _format_delay(seconds: float) -> str:
@@ -350,12 +364,26 @@ class BaseRunner(SessionLockMixin):
 
         lock: anyio.Semaphore | None = None
         acquired = False
+        gates = contextlib.ExitStack()
         try:
             async for evt in self.run_impl(prompt, None):
                 if lock is None and isinstance(evt, StartedEvent):
                     lock = self.lock_for(evt.resume)
                     await lock.acquire()
                     acquired = True
+                    gate_root = os.environ.get("UNTETHER_SESSION_GATE_ROOT")
+                    if gate_root:
+                        from pathlib import Path
+
+                        from .session_migration.session_gate import session_gate
+
+                        gates.enter_context(
+                            session_gate(
+                                root=Path(gate_root),
+                                engine_id=self.engine,
+                                native_id=evt.resume.value,
+                            )
+                        )
                     _lock_logger.debug(
                         "session_lock.acquired",
                         session_id=evt.resume.value,
@@ -363,6 +391,7 @@ class BaseRunner(SessionLockMixin):
                     )
                 yield evt
         finally:
+            gates.close()
             if acquired and lock is not None:
                 lock.release()
                 _lock_logger.debug("session_lock.released", engine=str(self.engine))

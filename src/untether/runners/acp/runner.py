@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from collections.abc import AsyncIterator, Callable
-from contextlib import suppress
+from contextlib import ExitStack, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -12,7 +13,7 @@ import anyio
 from structlog import get_logger
 
 from ...events import EventFactory
-from ...model import EngineId, ResumeToken
+from ...model import EngineId, ResumeToken, StartedEvent
 from ...runner import ResumeTokenMixin
 from ..run_options import get_run_options
 from .facilities import AcpClientFacilities
@@ -76,14 +77,36 @@ class AcpRunner(ResumeTokenMixin):
 
     async def run(self, prompt: str, resume: ResumeToken | None) -> Any:
         agen = self._run(prompt, resume)
-        try:
-            async for event in agen:
-                yield event
-        finally:
-            # Forward aclose() to the inner generator so its teardown
-            # (owner-cancel + peer close) runs even when this wrapper is
-            # closed mid-yield.
-            await agen.aclose()
+        with ExitStack() as gates:
+            gate_root = os.environ.get("UNTETHER_SESSION_GATE_ROOT")
+            gated = False
+
+            def acquire(token: ResumeToken) -> None:
+                from ...session_migration.session_gate import session_gate
+
+                if gate_root is None:
+                    raise RuntimeError("SOURCE_GATE_UNCONFIGURED")
+
+                gates.enter_context(
+                    session_gate(
+                        root=Path(gate_root),
+                        engine_id=self.engine,
+                        native_id=token.value,
+                    )
+                )
+
+            try:
+                if gate_root and resume is not None:
+                    acquire(resume)
+                    gated = True
+                async for event in agen:
+                    if gate_root and not gated and isinstance(event, StartedEvent):
+                        acquire(event.resume)
+                        gated = True
+                    yield event
+            finally:
+                # Teardown the peer before releasing migration admission.
+                await agen.aclose()
 
     async def _stream_turn(
         self,
